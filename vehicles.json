@@ -1,0 +1,17 @@
+[
+  {
+    "name": "Манипулятор Next",
+    "capacity_ton": 9.5,
+    "tag": "manipulator"
+  },
+  {
+    "name": "MAN TGS длиномер",
+    "capacity_ton": 39.5,
+    "tag": "long_haul"
+  },
+  {
+    "name": "DAF XF",
+    "capacity_ton": 54.5,
+    "tag": "long_haul"
+  }
+]

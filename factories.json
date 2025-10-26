@@ -1,0 +1,132 @@
+[
+  {
+    "name": "Завод БетонПром",
+    "lat": 55.812,
+    "lon": 37.45,
+    "products": [
+      {
+        "category": "Бордюр",
+        "subtype": "Б1",
+        "weight_ton": 0.05,
+        "price": 400.0
+      },
+      {
+        "category": "Тротуарная плитка",
+        "subtype": "Классик",
+        "weight_ton": 0.005,
+        "price": 274.0
+      },
+      {
+        "category": "Дорожные плиты",
+        "subtype": "ПДН-30",
+        "weight_ton": 1.0,
+        "price": 9500.0
+      }
+    ]
+  },
+  {
+    "name": "Завод Монолит",
+    "lat": 55.925,
+    "lon": 37.61,
+    "products": [
+      {
+        "category": "Бордюр",
+        "subtype": "Б1",
+        "weight_ton": 0.05,
+        "price": 420.0
+      },
+      {
+        "category": "Тротуарная плитка",
+        "subtype": "Классик",
+        "weight_ton": 0.005,
+        "price": 275.0
+      },
+      {
+        "category": "Бордюр",
+        "subtype": "Б2",
+        "weight_ton": 0.07,
+        "price": 470.0
+      },
+      {
+        "category": "Кольца колодцев",
+        "subtype": "КС10",
+        "weight_ton": 0.4,
+        "price": 6000.0
+      },
+      {
+        "category": "Дорожные плиты",
+        "subtype": "ПДН-36",
+        "weight_ton": 1.4,
+        "price": 15000.0
+      }
+    ]
+  },
+  {
+    "name": "Завод СтройБлок",
+    "lat": 55.71,
+    "lon": 37.88,
+    "products": [
+      {
+        "category": "Бордюр",
+        "subtype": "Б1",
+        "weight_ton": 0.05,
+        "price": 480.0
+      },
+      {
+        "category": "Тротуарная плитка",
+        "subtype": "Классик",
+        "weight_ton": 0.005,
+        "price": 270.0
+      },
+      {
+        "category": "Бордюр",
+        "subtype": "Б2",
+        "weight_ton": 0.07,
+        "price": 450.0
+      },
+      {
+        "category": "Блоки ФБС",
+        "subtype": "ФБС 24-6-6",
+        "weight_ton": 1.05,
+        "price": 2350.0
+      }
+    ]
+  },
+  {
+    "name": "Завод ДорИнвест",
+    "lat": 55.98,
+    "lon": 37.32,
+    "products": [
+      {
+        "category": "Бордюр",
+        "subtype": "Б1",
+        "weight_ton": 0.05,
+        "price": 450.0
+      },
+      {
+        "category": "Тротуарная плитка",
+        "subtype": "Классик",
+        "weight_ton": 0.005,
+        "price": 250.0
+      },
+      {
+        "category": "Дорожные плиты",
+        "subtype": "ПДН-14",
+        "weight_ton": 0.6,
+        "price": 6300.0
+      },
+      {
+        "category": "Кольца колодцев",
+        "subtype": "КС15",
+        "weight_ton": 0.65,
+        "price": 9300.0
+      },
+      {
+        "category": "Бордюр",
+        "subtype": "Б3",
+        "weight_ton": 0.055,
+        "price": 300
+      }
+    ]
+  }
+]

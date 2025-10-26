@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Калькулятор цены и доставки</title>
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      background-color: #f5f7fb;
+      margin: 0;
+      padding: 0;
+      color: #222;
+    }
+    h1 {
+      text-align: center;
+      font-size: 26px;
+      margin: 25px 0;
+    }
+    .container {
+      width: 90%;
+      max-width: 850px;
+      margin: 0 auto;
+      background: white;
+      padding: 25px;
+      border-radius: 16px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    label {
+      font-weight: 500;
+      display: block;
+      margin-top: 12px;
+    }
+    input, select, button {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      margin-top: 5px;
+      font-size: 15px;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+      margin-top: 15px;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .product-block {
+      background-color: #f1f5ff;
+      border-radius: 10px;
+      padding: 15px;
+      margin-top: 10px;
+    }
+    .result-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.4);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    .result-content {
+      background: white;
+      border-radius: 16px;
+      padding: 25px;
+      width: 90%;
+      max-width: 900px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    .result-content h2 {
+      margin-top: 0;
+      color: #333;
+      font-size: 22px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+    th {
+      background-color: #f2f2f2;
+    }
+    .close-btn {
+      float: right;
+      cursor: pointer;
+      font-size: 18px;
+      color: #777;
+    }
+    .close-btn:hover {
+      color: black;
+    }
+    .summary {
+      margin-top: 15px;
+      font-weight: 500;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <div style="margin: 20px;">
+    <button onclick="window.location.href='/static/index.html'" 
+            style="background-color:#2980b9; color:white; border:none; padding:10px 16px;
+                   border-radius:8px; cursor:pointer;">
+      ← Назад на главную
+    </button>
+  </div>
+
+  <h1>📦 Калькулятор цены и доставки</h1>
+  <div class="container">
+    <label>Координаты выгрузки (широта):</label>
+    <input type="number" id="upload_lat" step="0.0001" placeholder="Например: 55.85">
+
+    <label>Координаты выгрузки (долгота):</label>
+    <input type="number" id="upload_lon" step="0.0001" placeholder="Например: 37.60">
+
+    <label>Тип транспорта:</label>
+    <select id="transport_type">
+      <option value="auto">Автоматически выбрать</option>
+      <option value="manipulator">Манипулятор</option>
+      <option value="truck">Длинномер</option>
+    </select>
+
+    <label>Запрещённые типы машин (через запятую):</label>
+    <input type="text" id="forbidden_types" placeholder="например: манипулятор">
+
+    <h3>Товары для расчёта</h3>
+    <div id="products"></div>
+    <button onclick="addProduct()">➕ Добавить ещё товар</button>
+    <button onclick="calculate()">Рассчитать</button>
+  </div>
+
+  <div class="result-modal" id="resultModal">
+    <div class="result-content">
+      <span class="close-btn" onclick="closeModal()">×</span>
+      <div id="results">Загрузка...</div>
+    </div>
+  </div>
+    <script>
+  let productIndex = 0;
+
+  // ====== ➕ Добавление товара ======
+  function addProduct() {
+    const container = document.getElementById("products");
+    const block = document.createElement("div");
+    block.className = "product-block";
+    block.innerHTML = `
+      <label>Категория:</label>
+      <select id="category_${productIndex}" onchange="loadSubtypes(${productIndex})">
+        <option value="">Выберите категорию</option>
+      </select>
+
+      <label>Подтип:</label>
+      <select id="subtype_${productIndex}">
+        <option value="">Сначала выберите категорию</option>
+      </select>
+
+      <label>Количество:</label>
+      <input type="number" id="quantity_${productIndex}" placeholder="Введите количество" step="1" min="1">
+
+      <button onclick="this.parentElement.remove()">Удалить товар</button>
+    `;
+
+    container.appendChild(block);
+    loadCategories(productIndex); // загружаем категории для нового блока
+    productIndex++;
+  }
+
+  // ======== 📦 Загрузка категорий и подтипов ========
+  let categoryData = {};
+
+  async function loadCategories(index = null) {
+    if (Object.keys(categoryData).length === 0) {
+      const res = await fetch("/api/categories");
+      categoryData = await res.json();
+    }
+
+    const categorySelect = index
+      ? document.getElementById(`category_${index}`)
+      : document.getElementById("category");
+
+    if (!categorySelect) return;
+    categorySelect.innerHTML = '<option value="">Выберите категорию</option>';
+
+    for (const cat of Object.keys(categoryData)) {
+      const opt = document.createElement("option");
+      opt.value = cat;
+      opt.textContent = cat;
+      categorySelect.appendChild(opt);
+    }
+  }
+
+  function loadSubtypes(index) {
+    const cat = document.getElementById(`category_${index}`).value;
+    const subtypeSelect = document.getElementById(`subtype_${index}`);
+    subtypeSelect.innerHTML = '<option value="">Выберите подтип</option>';
+
+    if (cat && categoryData[cat]) {
+      for (const sub of categoryData[cat]) {
+        const opt = document.createElement("option");
+        opt.value = sub;
+        opt.textContent = sub;
+        subtypeSelect.appendChild(opt);
+      }
+    }
+  }
+
+  // ======== 🧮 Расчёт ========
+  async function calculate() {
+    const uploadLat = parseFloat(document.getElementById("upload_lat").value);
+    const uploadLon = parseFloat(document.getElementById("upload_lon").value);
+    const transportType = document.getElementById("transport_type").value;
+    const forbidden = document.getElementById("forbidden_types").value
+      .split(",")
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    const items = [];
+    for (let i = 0; i < productIndex; i++) {
+      const category = document.getElementById(`category_${i}`);
+      const subtype = document.getElementById(`subtype_${i}`);
+      const quantity = document.getElementById(`quantity_${i}`);
+
+      if (category && subtype && quantity && category.value && subtype.value && quantity.value) {
+        items.push({
+          category: category.value,
+          subtype: subtype.value,
+          quantity: parseInt(quantity.value)
+        });
+      }
+    }
+
+    if (!uploadLat || !uploadLon || items.length === 0) {
+      alert("❗ Заполните координаты и добавьте хотя бы один товар");
+      return;
+    }
+
+    document.getElementById("resultModal").style.display = "flex";
+    document.getElementById("results").innerHTML = "Загрузка...";
+
+    try {
+      const res = await fetch("/quote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          upload_lat: uploadLat,
+          upload_lon: uploadLon,
+          transport_type: transportType,
+          forbidden_types: forbidden,
+          items: items
+        })
+      });
+
+      if (!res.ok) throw new Error(`Ошибка: ${res.status}`);
+
+      const data = await res.json();
+      renderResults(data);
+    } catch (err) {
+      console.error(err);
+      document.getElementById("results").innerHTML =
+        `<p style="color:red;">Ошибка при расчёте</p>`;
+    }
+  }
+
+  // ======== 📊 Отображение результатов ========
+  function renderResults(data) {
+    if (!data || !data.детали || data.детали.length === 0) {
+      document.getElementById("results").innerHTML = `<p>Нет данных для отображения.</p>`;
+      return;
+    }
+
+    let html = `<h2>📊 Результаты расчёта</h2>`;
+
+    if (data["тип_транспорта"]) {
+      const transportNames = {
+        manipulator: "Манипулятор",
+        long_haul: "Длинномер"
+      };
+      html += `<p><b>🚛 Тип транспорта:</b> ${transportNames[data["тип_транспорта"]] || data["тип_транспорта"]}</p>`;
+    }
+
+    if (data["общий_вес"]) html += `<p><b>⚖️ Общий вес:</b> ${data["общий_вес"]} т</p>`;
+    if (data["количество_рейсов"]) html += `<p><b>📦 Количество рейсов:</b> ${data["количество_рейсов"]}</p>`;
+
+    html += `
+      <table>
+        <thead>
+          <tr>
+            <th>Производство</th>
+            <th>Товар</th>
+            <th>Машина</th>
+            <th>Расстояние (км)</th>
+            <th>Материал (₽)</th>
+            <th>Доставка (₽)</th>
+            <th>Итого (₽)</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    for (const item of data.детали) {
+      html += `
+        <tr>
+          <td>${item.завод || "—"}</td>
+          <td>${item.товар || "—"}</td>
+          <td>${item.машина || "—"}</td>
+          <td>${item.расстояние_км?.toFixed(2) || 0}</td>
+          <td>${item.стоимость_материала?.toLocaleString("ru-RU") || 0}</td>
+          <td>${item.стоимость_доставки?.toLocaleString("ru-RU") || 0}</td>
+          <td>${item.итого?.toLocaleString("ru-RU") || 0}</td>
+        </tr>
+      `;
+    }
+
+    html += `
+        </tbody>
+      </table>
+      <div class="summary">
+        💰 <strong>Материалы:</strong> ${data.общая_стоимость_материала?.toLocaleString("ru-RU") || 0} ₽<br>
+        🚚 <strong>Доставка:</strong> ${data.общая_стоимость_доставки?.toLocaleString("ru-RU") || 0} ₽<br>
+        🔥 <strong>Итого:</strong> ${data.итого?.toLocaleString("ru-RU") || 0} ₽
+      </div>
+    `;
+
+    document.getElementById("results").innerHTML = html;
+  }
+
+  function closeModal() {
+    document.getElementById("resultModal").style.display = "none";
+  }
+</script>
+
+</body>
+</html>
