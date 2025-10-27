@@ -132,7 +132,7 @@
     <select id="transport_type">
       <option value="auto">Автоматически выбрать</option>
       <option value="manipulator">Манипулятор</option>
-      <option value="truck">Длинномер</option>
+      <option value="long_haul">Длинномер</option>
     </select>
 
     <label>Запрещённые типы машин (через запятую):</label>
@@ -306,6 +306,7 @@
             <th>Расстояние (км)</th>
             <th>Материал (₽)</th>
             <th>Доставка (₽)</th>
+            <th>Тариф</th>
             <th>Итого (₽)</th>
           </tr>
         </thead>
@@ -321,6 +322,7 @@
           <td>${item.расстояние_км?.toFixed(2) || 0}</td>
           <td>${item.стоимость_материала?.toLocaleString("ru-RU") || 0}</td>
           <td>${item.стоимость_доставки?.toLocaleString("ru-RU") || 0}</td>
+          <td>${item.тариф || "—"}</td>
           <td>${item.итого?.toLocaleString("ru-RU") || 0}</td>
         </tr>
       `;

@@ -6,6 +6,8 @@ from pydantic import BaseModel
 import json
 import math
 import os
+import requests
+from functools import lru_cache
 
 app = FastAPI()
 
@@ -13,6 +15,7 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -177,7 +180,24 @@ async def delete_product(factory_name: str, subtype: str):
             return {"message": f"Товар {subtype} удалён из {factory_name}"}
     return JSONResponse(status_code=404, content={"detail": "Производство не найдено"})
 # ===== Геометрия: расстояние по координатам (Haversine) =====
+import math
+import requests
+
+# 🔑 Твой персональный API-ключ OpenRouteService
+ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjZmNDMwM2U5NWY1NDQ1N2ZiMmZkZGY5YmUyNWFkZDAyIiwiaCI6Im11cm11cjY0In0="
+
+from functools import lru_cache
+
+@lru_cache(maxsize=1000)
+def get_cached_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Кэшированное получение дистанции между точками."""
+    return calculate_road_distance(lat1, lon1, lat2, lon2)
+
+
 def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """
+    Расстояние по прямой (Haversine)
+    """
     R = 6371.0
     p1, p2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
@@ -186,50 +206,97 @@ def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-def get_delivery_cost(transport_type: str, distance_km: float) -> float:
+def calculate_road_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """
-    Возвращает стоимость перевозки за 1 рейс
-    на основе типа машины и расстояния.
+    Возвращает расстояние по дорогам (в км)
+    с использованием OpenRouteService.
+    Если API недоступен, возвращает Haversine-дистанцию.
     """
+    try:
+        url = "https://api.openrouteservice.org/v2/directions/driving-car"
+        headers = {
+            "Authorization": ORS_API_KEY,
+            "Content-Type": "application/json",
+        }
+        body = {
+            "coordinates": [[lon1, lat1], [lon2, lat2]]
+        }
 
-    # Тарифы для манипулятора (пример — из таблицы)
-    manipulator_tariffs = [
-        (30, 16000),
-        (60, 18000),
-        (80, 20000),
-        (100, 22000),
-        (120, 24000),
-    ]
-    manipulator_per_km = 200  # после 120 км
+        response = requests.post(url, json=body, headers=headers, timeout=10)
+        print("🔍 Ответ ORS:", response.text)  # для проверки
+        if response.status_code == 200:
+            data = response.json()
+            # 🔧 Новая структура
+            if "routes" in data and len(data["routes"]) > 0:
+                dist_m = data["routes"][0]["segments"][0]["distance"]
+                return round(dist_m / 1000, 2)
+            else:
+                print("⚠️ Неожиданная структура ответа ORS")
+                return calculate_distance(lat1, lon1, lat2, lon2)
+        else:
+            print("⚠️ Ошибка OpenRouteService:", response.text)
+            return calculate_distance(lat1, lon1, lat2, lon2)
+    except Exception as e:
+        print("⚠️ Ошибка при обращении к ORS:", e)
+        return calculate_distance(lat1, lon1, lat2, lon2)
 
-    # Тарифы для длинномера MAN / DAF
-    long_haul_tariffs = [
-        (30, 19000),
-        (60, 22000),
-        (80, 24000),
-        (100, 25000),
-        (120, 28000),
-    ]
-    long_haul_per_km = 230  # после 120 км
 
-    if "манипулятор" in transport_type.lower():
-        for limit, price in manipulator_tariffs:
-            if distance_km <= limit:
-                return price
-        # дальше 120 км
-        return manipulator_tariffs[-1][1] + (distance_km - 120) * manipulator_per_km
+def get_delivery_cost(transport_type: str, distance_km: float, weight_ton: float = 0) -> tuple[float, str]:
+    """
+    Возвращает (стоимость_за_1_рейс, описание_тарифа)
+    transport_type: "manipulator" | "long_haul"
+    """
+    # === Манипулятор ===
+    if transport_type == "manipulator":
+        if distance_km <= 30:
+            return 16000, "0–30 км / Манипулятор"
+        elif distance_km <= 60:
+            return 18000, "30–60 км / Манипулятор"
+        elif distance_km <= 80:
+            return 20000, "60–80 км / Манипулятор"
+        elif distance_km <= 100:
+            return 22000, "80–100 км / Манипулятор"
+        elif distance_km <= 120:
+            return 24000, "100–120 км / Манипулятор"
+        else:
+            cost = 24000 + (distance_km - 120) * 200
+            return cost, f"{distance_km:.0f} км / Манипулятор (+200₽/км)"
 
-    elif "man" in transport_type.lower() or "daf" in transport_type.lower() or "long" in transport_type.lower():
-        for limit, price in long_haul_tariffs:
-            if distance_km <= limit:
-                return price
-        return long_haul_tariffs[-1][1] + (distance_km - 120) * long_haul_per_km
+    # === Длинномер ===
+    if transport_type == "long_haul":
+        if weight_ton < 20:
+            if distance_km <= 30:
+                return 19000, "0–30 км / ≤20т / Длинномер"
+            elif distance_km <= 60:
+                return 22000, "30–60 км / ≤20т / Длинномер"
+            elif distance_km <= 80:
+                return 24000, "60–80 км / ≤20т / Длинномер"
+            elif distance_km <= 100:
+                return 25000, "80–100 км / ≤20т / Длинномер"
+            elif distance_km <= 120:
+                return 28000, "100–120 км / ≤20т / Длинномер"
+            else:
+                cost = 28000 + (distance_km - 120) * 200
+                return cost, f"{distance_km:.0f} км / ≤20т / Длинномер (+200₽/км)"
+        else:
+            if distance_km <= 30:
+                return 23000, "0–30 км / >20т / Длинномер"
+            elif distance_km <= 60:
+                return 26000, "30–60 км / >20т / Длинномер"
+            elif distance_km <= 80:
+                return 28000, "60–80 км / >20т / Длинномер"
+            elif distance_km <= 100:
+                return 30000, "80–100 км / >20т / Длинномер"
+            elif distance_km <= 120:
+                return 33000, "100–120 км / >20т / Длинномер"
+            else:
+                cost = 33000 + (distance_km - 120) * 230
+                return cost, f"{distance_km:.0f} км / >20т / Длинномер (+230₽/км)"
 
-    # По умолчанию — как манипулятор
-    for limit, price in manipulator_tariffs:
-        if distance_km <= limit:
-            return price
-    return manipulator_tariffs[-1][1] + (distance_km - 120) * manipulator_per_km
+    # fallback (если вдруг пришёл другой тег)
+    base = 18000 + distance_km * 150
+    return base, "Стандартный расчёт"
+
 
 # ===== Калькулятор =====
 class QuoteItem(BaseModel):
@@ -263,44 +330,56 @@ async def quote(req: QuoteRequest):
                 if p["category"] == item.category and p["subtype"] == item.subtype:
                     total_weight += p["weight_ton"] * item.quantity
 
+
+    # ===== вспомогательная: максимальная грузоподъёмность по тегу =====
+    def type_capacity(t: str) -> float:
+        caps = [v.get("capacity_ton", v.get("capacity", 0)) for v in vehicles if v.get("tag") == t]
+        if not caps:
+            return max(v.get("capacity_ton", v.get("capacity", 0)) for v in vehicles)
+        return max(caps)
+
     # ===== 3. Определяем тип транспорта =====
     if req.transport_type == "auto":
-        # получаем список тегов всех машин
-        available_tags = {v.get("tag") for v in vehicles}
-
-        # если вес ≤ 20 т и есть манипулятор — выбираем его
-        if total_weight <= 20 and "manipulator" in available_tags:
-            transport_type = "manipulator"
-
-        # если вес > 20 т и есть длинномер — выбираем его
-        elif total_weight > 20 and "long_haul" in available_tags:
-            transport_type = "long_haul"
-
-        # если нет машин нужного типа — выбираем максимальную грузоподъёмность
+        possible_types = sorted({v.get("tag") for v in vehicles if v.get("tag") in ("manipulator", "long_haul")})
+        if not possible_types:
+            largest = max(vehicles, key=lambda v: v.get("capacity_ton", 0))
+            transport_type = largest.get("tag", "long_haul")
         else:
-            largest_vehicle = max(vehicles, key=lambda v: v.get("capacity_ton", 0))
-            transport_type = largest_vehicle.get("tag", "long_haul")
+            best_type, best_total_delivery = None, float("inf")
+            # возьмём первую фабрику для прикидки дистанции
+            first_factory = factories[0]
+            sample_dist = get_cached_distance(first_factory["lat"], first_factory["lon"],
+                                              req.upload_lat, req.upload_lon)
+            for t in possible_types:
+                cap = type_capacity(t)
+                if cap <= 0:
+                    continue
+                cost_per_trip, _ = get_delivery_cost(t, sample_dist, total_weight)
+                trips = math.ceil(total_weight / cap)
+                total_delivery = cost_per_trip * trips
+                if total_delivery < best_total_delivery:
+                    best_total_delivery = total_delivery
+                    best_type = t
+            transport_type = best_type or "manipulator"
     else:
-        # пользователь выбрал вручную
         transport_type = req.transport_type
 
-
-    # ===== 3. Собираем детали перевозок =====
+    # ===== 4. Выбираем лучший завод по каждой позиции (стоимость 1 рейса) =====
     shipment_details = []
     for item in req.items:
-        best = None
+        best = None  # (total, factory, prod, dist, mat_cost, del_cost, tariff)
         for f in factories:
             for p in f.get("products", []):
                 if p["category"] == item.category and p["subtype"] == item.subtype:
-                    dist = calculate_distance(f["lat"], f["lon"], req.upload_lat, req.upload_lon)
+                    dist = get_cached_distance(f["lat"], f["lon"], req.upload_lat, req.upload_lon)
                     mat_cost = p["price"] * item.quantity
-                    del_cost = get_delivery_cost(transport_type, dist)
-                    total = mat_cost + del_cost
-                    if (best is None) or (total < best[0]):
-                        best = (total, f, p, dist, mat_cost, del_cost)
-
+                    weight_here = p["weight_ton"] * item.quantity
+                    del_cost_per_trip, tariff_info = get_delivery_cost(transport_type, dist, weight_here)
+                    total = mat_cost + del_cost_per_trip
+                    if best is None or total < best[0]:
+                        best = (total, f, p, dist, mat_cost, del_cost_per_trip, tariff_info)
         if best:
-            total, f, p, dist, mat_cost, del_cost = best
+            total, f, p, dist, mat_cost, del_cost_per_trip, tariff_info = best
             shipment_details.append({
                 "товар": f"{p['category']} ({p['subtype']})",
                 "завод": f["name"],
@@ -309,31 +388,13 @@ async def quote(req: QuoteRequest):
                 "вес_тонн": round(p["weight_ton"] * item.quantity, 2),
                 "расстояние_км": round(dist, 2),
                 "стоимость_материала": mat_cost,
-                "стоимость_доставки": round(del_cost, 2),
+                "стоимость_доставки": round(del_cost_per_trip, 2),  # пока за 1 рейс
+                "тариф": tariff_info,
                 "итого": round(total, 2),
             })
 
-    # ===== 4. Определяем грузоподъёмность по тегу =====
-    def type_capacity(t: str) -> float:
-        """
-        Возвращает максимальную грузоподъёмность среди машин заданного типа.
-        Тип берётся из поля 'tag' (manipulator / long_haul).
-        """
-        caps = []
-
-        for v in vehicles:
-            tag = v.get("tag")
-            if tag == t:
-                caps.append(v.get("capacity_ton", v.get("capacity", 0)))
-
-        # если машин такого типа нет — берём максимальную среди всех
-        if not caps:
-            return max(v.get("capacity_ton", v.get("capacity", 0)) for v in vehicles)
-
-        return max(caps)
-
+    # ===== 5. Рейсы по заводам (по грузоподъёмности выбранного типа) =====
     cap = type_capacity(transport_type)
-
     factory_ship = {}
     for d in shipment_details:
         f = d["завод"]
@@ -343,21 +404,18 @@ async def quote(req: QuoteRequest):
     total_trips = 0
     for f, info in factory_ship.items():
         trips = math.ceil(info["weight"] / cap) if cap > 0 else 0
-        factory_ship[f]["trips"] = trips
+        info["trips"] = trips
         total_trips += trips
 
-    # ===== 6. Пересчитываем доставку с учётом рейсов =====
+    # ===== 6. Пересчёт доставки и итогов с учётом числа рейсов =====
     for d in shipment_details:
-        factory_name = d["завод"]
-        trips = factory_ship.get(factory_name, {}).get("trips", 1)
+        trips = factory_ship.get(d["завод"], {}).get("trips", 1)
         d["стоимость_доставки"] = round(d["стоимость_доставки"] * trips, 2)
         d["итого"] = round(d["стоимость_материала"] + d["стоимость_доставки"], 2)
 
-    # ===== 7. Итоговые суммы =====
     total_material_cost = sum(d["стоимость_материала"] for d in shipment_details)
     total_delivery_cost = sum(d["стоимость_доставки"] for d in shipment_details)
 
-    # ===== 8. Ответ =====
     return {
         "детали": shipment_details,
         "общий_вес": round(total_weight, 2),
@@ -367,13 +425,11 @@ async def quote(req: QuoteRequest):
         "общая_стоимость_доставки": round(total_delivery_cost, 2),
         "итого": round(total_material_cost + total_delivery_cost, 2),
         "factories_info": {
-            f: {
-                "вес_тонн": round(info["weight"], 2),
-                "рейсы": info["trips"]
-            }
+            f: {"вес_тонн": round(info["weight"], 2), "рейсы": info["trips"]}
             for f, info in factory_ship.items()
         }
     }
+
 
 
 # Корень
