@@ -46,7 +46,8 @@ def load_factories_from_google() -> list[dict]:
     Категория может быть указана один раз – ниже берём её как «текущую».
     """
     try:
-        creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+        import json, os
+        creds = Credentials.from_service_account_info(json.loads(os.getenv("GOOGLE_CREDENTIALS")), scopes=SCOPES)
         client = gspread.authorize(creds)
         sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet(SHEET_NAME)
         rows = sheet.get_all_records()  # список dict по заголовкам 1-й строки
