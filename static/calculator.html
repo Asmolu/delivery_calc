@@ -122,11 +122,9 @@
 
   <h1>📦 Калькулятор цены и доставки</h1>
   <div class="container">
-    <label>Координаты выгрузки (широта):</label>
-    <input type="number" id="upload_lat" step="0.0001" placeholder="Например: 55.85">
-
-    <label>Координаты выгрузки (долгота):</label>
-    <input type="number" id="upload_lon" step="0.0001" placeholder="Например: 37.60">
+    <label>Координаты выгрузки:</label>
+    <input id="upload_coords" type="text" placeholder="55.616000, 37.387000" style="width: 100%;">
+    <small>Введите через запятую: широта, долгота</small>
 
     <label>Тип транспорта:</label>
     <select id="transport_type">
@@ -221,8 +219,15 @@
 
   // ======== 🧮 Расчёт ========
   async function calculate() {
-    const uploadLat = parseFloat(document.getElementById("upload_lat").value);
-    const uploadLon = parseFloat(document.getElementById("upload_lon").value);
+    const coordsInput = document.getElementById("upload_coords").value.trim();
+    let uploadLat = 0, uploadLon = 0;
+
+    if (coordsInput.includes(",")) {
+      const [latStr, lonStr] = coordsInput.split(",").map(s => s.trim());
+      uploadLat = parseFloat(latStr);
+      uploadLon = parseFloat(lonStr);
+    }
+
     const transportType = document.getElementById("transport_type").value;
     const forbidden = document.getElementById("forbidden_types").value
       .split(",")

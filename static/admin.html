@@ -83,6 +83,13 @@
   </style>
 </head>
 
+<!-- 🔄 Кнопка обновления заводов -->
+<button id="reloadBtn" style="margin: 10px; padding: 8px 16px; background: #2e7d32; color: white; border: none; border-radius: 6px; cursor: pointer;">
+  🔄 Обновить из Google Sheets
+</button>
+<span id="reloadMsg" style="margin-left: 10px; font-weight: bold;"></span>
+
+
 <body>
   <div style="margin: 20px;">
     <button onclick="window.location.href='/static/index.html'" 
@@ -424,5 +431,30 @@ async function addVehicle() {
     // 🚀 Автозагрузка
     window.onload = refreshDropdowns;
   </script>
+
+<script>
+document.getElementById('reloadBtn').addEventListener('click', async () => {
+  const msg = document.getElementById('reloadMsg');
+  msg.textContent = '⏳ Загружаю данные...';
+  
+  try {
+    const response = await fetch('/admin/reload', { method: 'POST' });
+    const data = await response.json();
+
+    if (response.ok) {
+      msg.textContent = `✅ ${data.message} (загружено ${data.count} заводов)`;
+      msg.style.color = 'green';
+    } else {
+      msg.textContent = `⚠️ Ошибка: ${data.detail || 'не удалось обновить'}`;
+      msg.style.color = 'red';
+    }
+  } catch (err) {
+    console.error(err);
+    msg.textContent = '⚠️ Ошибка сети при обновлении';
+    msg.style.color = 'red';
+  }
+});
+</script>
+
 </body>
 </html>

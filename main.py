@@ -8,6 +8,15 @@ import math
 import os
 import requests
 from functools import lru_cache
+import gspread
+from google.oauth2.service_account import Credentials
+
+# Список API доступов
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+
+GOOGLE_SHEET_ID = "1TECrfLG4qGJDo3l9MQava7SMJpPKnhK3RId8wcnEgm8"  # твой ID таблицы
+SHEET_NAME = "Factories"  # название листа
+
 
 app = FastAPI()
 
@@ -27,6 +36,155 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 FACTORIES_FILE = "factories.json"
 VEHICLES_FILE = "vehicles.json"
 
+import threading, time
+
+# --- Загрузка из Google Sheets ---
+def load_factories_from_google() -> list[dict]:
+    """
+    Загружает все производства и их номенклатуру из Google Sheets.
+    Ожидаемые столбцы (регистр неважен): название | координаты | категория | подтип | вес | цена
+    Категория может быть указана один раз – ниже берём её как «текущую».
+    """
+    try:
+        creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+        client = gspread.authorize(creds)
+        sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet(SHEET_NAME)
+        rows = sheet.get_all_records()  # список dict по заголовкам 1-й строки
+
+        def cell(row: dict, *names: str):
+            # безопасно берём значение по любому из вариантов названия столбца
+            for n in names:
+                if n in row: 
+                    return row[n]
+                # пробуем без учета регистра/лишних пробелов
+                for k in row.keys():
+                    if k.strip().lower() == n.strip().lower():
+                        return row[k]
+            return None
+
+        def to_float(x):
+            if x is None or x == "":
+                return 0.0
+            return float(str(x).replace(",", ".").strip())
+
+        factories_map: dict[str, dict] = {}
+
+        current_factory: str | None = None
+        current_coords: str | None = None
+        current_category: str | None = None
+
+        for row in rows:
+            # берём значения из строки
+            name      = cell(row, "название")
+            coords    = cell(row, "координаты")
+            category  = cell(row, "категория")
+            subtype   = cell(row, "подтип")
+            weight    = cell(row, "вес")
+            price     = cell(row, "цена", "Цена")
+
+            # если указали новое название/координаты/категорию — запоминаем, чтобы использовать ниже
+            if isinstance(name, str) and name.strip():
+                current_factory = name.strip()
+            if isinstance(coords, str) and coords.strip():
+                current_coords = coords.strip()
+            if isinstance(category, str) and category.strip():
+                current_category = category.strip()
+
+            # если это «заголовочная» строка (только категория) — идём дальше
+            if not subtype or not current_factory or not current_category:
+                continue
+
+            # создаём запись завода при первом попадании
+            if current_factory not in factories_map:
+                try:
+                    lat_str, lon_str = (current_coords or "0,0").split(",")
+                    lat, lon = float(lat_str), float(lon_str)
+                except Exception:
+                    lat, lon = 0.0, 0.0
+
+                factories_map[current_factory] = {
+                    "name": current_factory,
+                    "lat": lat,
+                    "lon": lon,
+                    "products": []
+                }
+
+            factories_map[current_factory]["products"].append({
+                "category": current_category,
+                "subtype": str(subtype).strip(),
+                "weight_ton": to_float(weight),
+                "price": to_float(price),
+            })
+
+        return list(factories_map.values())
+
+    except Exception as e:
+        import traceback
+        print("⚠️ Ошибка при загрузке таблицы:")
+        traceback.print_exc()
+        return []
+
+
+# --- Инициализируем данные при старте ---
+factories = load_factories_from_google()
+if not factories:
+    # подстраховка — читаем локальный кэш, если гугл недоступен
+    def load_json(filename):
+        if not os.path.exists(filename):
+            return []
+        try:
+            with open(filename, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            return []
+    factories = load_json(FACTORIES_FILE)
+
+# --- Фоновое периодическое обновление ---
+def refresh_factories_periodically():
+    global factories
+    while True:
+        try:
+            new_factories = load_factories_from_google()
+            if new_factories:
+                factories = new_factories
+                # при желании — кэшируем локально
+                try:
+                    with open(FACTORIES_FILE, "w", encoding="utf-8") as f:
+                        json.dump(factories, f, ensure_ascii=False, indent=2)
+                except Exception as e:
+                    print(f"⚠️ Не удалось сохранить кэш factories.json: {e}")
+                print("✅ Заводы обновлены из Google Sheets")
+        except Exception as e:
+            print(f"⚠️ Ошибка обновления (поток): {e}")
+        time.sleep(600)  # каждые 10 минут
+
+threading.Thread(target=refresh_factories_periodically, daemon=True).start()
+
+@app.post("/admin/reload")
+async def admin_reload():
+    
+    """
+    🔄 Ручная перезагрузка данных из Google Sheets.
+    Возвращает количество загруженных производств и статус.
+    """
+    global factories
+    try:
+        new_factories = load_factories_from_google()
+        if not new_factories:
+            return JSONResponse(status_code=500, content={"detail": "Не удалось загрузить данные из Google Sheets"})
+
+        factories = new_factories
+        # сохраняем локально (чтобы API мог использовать их при следующем старте)
+        with open(FACTORIES_FILE, "w", encoding="utf-8") as f:
+            json.dump(factories, f, ensure_ascii=False, indent=2)
+
+        print("✅ Заводы обновлены вручную через /admin/reload")
+        return {"status": "ok", "count": len(factories), "message": "Заводы успешно обновлены"}
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(status_code=500, content={"detail": f"Ошибка при обновлении: {e}"})
 
 # ===== Вспомогательные функции =====
 def load_json(filename):
@@ -45,7 +203,7 @@ def save_json(filename, data):
 
 
 # ===== Загрузка данных =====
-factories = load_json(FACTORIES_FILE)
+factories = load_factories_from_google()
 vehicles = load_json(VEHICLES_FILE)
 
 
@@ -75,7 +233,7 @@ async def get_factories():
 
 @app.post("/api/factories")
 async def add_factory(factory: Factory):
-    factories = load_json(FACTORIES_FILE)
+    factories = load_factories_from_google()
     if any(f["name"] == factory.name for f in factories):
         return JSONResponse(status_code=400, content={"detail": "Такое производство уже существует"})
     factories.append(factory.dict() | {"products": []})
@@ -431,7 +589,6 @@ async def quote(req: QuoteRequest):
     }
 
 
-
 # Корень
 @app.get("/")
 def root():
@@ -445,4 +602,17 @@ if __name__ == "__main__":
 
 from fastapi.staticfiles import StaticFiles
 
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+from fastapi.responses import FileResponse
+
+@app.get("/")
+def index():
+    return FileResponse("static/index.html")
+
+@app.get("/admin")
+def admin_page():
+    return FileResponse("static/admin.html")
+
+@app.get("/calculator")
+def calculator_page():
+    return FileResponse("static/calculator.html")
+
