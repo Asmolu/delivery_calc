@@ -10,6 +10,9 @@ import requests
 from functools import lru_cache
 import gspread
 from google.oauth2.service_account import Credentials
+from dotenv import load_dotenv
+load_dotenv(dotenv_path="/root/delivery_calc/.env")
+
 
 # Список API доступов
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
