@@ -49,11 +49,33 @@ def load_factories_from_google() -> list[dict]:
     Категория может быть указана один раз – ниже берём её как «текущую».
     """
     try:
-        import json, os
-        creds = Credentials.from_service_account_info(json.loads(os.getenv("GOOGLE_CREDENTIALS")), scopes=SCOPES)
+        import os, json, gspread
+        from google.oauth2.service_account import Credentials
+
+        def load_credentials():
+            """
+            Возвращает объект Credentials, используя либо GOOGLE_CREDENTIALS (JSON-строку),
+            либо GOOGLE_APPLICATION_CREDENTIALS (путь к файлу).
+            """
+            path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+            raw = os.getenv("GOOGLE_CREDENTIALS")
+
+            if path and os.path.exists(path):
+                print(f"✅ Используем ключ из файла: {path}")
+                return Credentials.from_service_account_file(path, scopes=SCOPES)
+            elif raw:
+                print("✅ Используем ключ из переменной окружения GOOGLE_CREDENTIALS")
+                raw = raw.replace("\\n", "\n").replace("\\\\n", "\n")
+                return Credentials.from_service_account_info(json.loads(raw), scopes=SCOPES)
+            else:
+                raise RuntimeError("Не удалось найти ключ Google (нет GOOGLE_CREDENTIALS или GOOGLE_APPLICATION_CREDENTIALS)")
+
+        # === Авторизация ===
+        creds = load_credentials()
         client = gspread.authorize(creds)
         sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet(SHEET_NAME)
         rows = sheet.get_all_records()  # список dict по заголовкам 1-й строки
+
 
         def cell(row: dict, *names: str):
             # безопасно берём значение по любому из вариантов названия столбца
