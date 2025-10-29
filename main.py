@@ -45,18 +45,12 @@ import threading, time
 def load_factories_from_google() -> list[dict]:
     """
     Загружает все производства и их номенклатуру из Google Sheets.
-    Ожидаемые столбцы (регистр неважен): название | координаты | категория | подтип | вес | цена
-    Категория может быть указана один раз – ниже берём её как «текущую».
     """
     try:
         import os, json, gspread
         from google.oauth2.service_account import Credentials
 
         def load_credentials():
-            """
-            Возвращает объект Credentials, используя либо GOOGLE_CREDENTIALS (JSON-строку),
-            либо GOOGLE_APPLICATION_CREDENTIALS (путь к файлу).
-            """
             path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
             raw = os.getenv("GOOGLE_CREDENTIALS")
 
@@ -70,19 +64,15 @@ def load_factories_from_google() -> list[dict]:
             else:
                 raise RuntimeError("Не удалось найти ключ Google (нет GOOGLE_CREDENTIALS или GOOGLE_APPLICATION_CREDENTIALS)")
 
-        # === Авторизация ===
         creds = load_credentials()
         client = gspread.authorize(creds)
         sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet(SHEET_NAME)
-        rows = sheet.get_all_records()  # список dict по заголовкам 1-й строки
-
+        rows = sheet.get_all_records()
 
         def cell(row: dict, *names: str):
-            # безопасно берём значение по любому из вариантов названия столбца
             for n in names:
-                if n in row: 
+                if n in row:
                     return row[n]
-                # пробуем без учета регистра/лишних пробелов
                 for k in row.keys():
                     if k.strip().lower() == n.strip().lower():
                         return row[k]
@@ -100,15 +90,13 @@ def load_factories_from_google() -> list[dict]:
         current_category: str | None = None
 
         for row in rows:
-            # берём значения из строки
-            name      = cell(row, "название")
-            coords    = cell(row, "координаты")
-            category  = cell(row, "категория")
-            subtype   = cell(row, "подтип")
-            weight    = cell(row, "вес")
-            price     = cell(row, "цена", "Цена")
+            name = cell(row, "название")
+            coords = cell(row, "координаты")
+            category = cell(row, "категория")
+            subtype = cell(row, "подтип")
+            weight = cell(row, "вес")
+            price = cell(row, "цена", "Цена")
 
-            # если указали новое название/координаты/категорию — запоминаем, чтобы использовать ниже
             if isinstance(name, str) and name.strip():
                 current_factory = name.strip()
             if isinstance(coords, str) and coords.strip():
@@ -116,11 +104,9 @@ def load_factories_from_google() -> list[dict]:
             if isinstance(category, str) and category.strip():
                 current_category = category.strip()
 
-            # если это «заголовочная» строка (только категория) — идём дальше
             if not subtype or not current_factory or not current_category:
                 continue
 
-            # создаём запись завода при первом попадании
             if current_factory not in factories_map:
                 try:
                     lat_str, lon_str = (current_coords or "0,0").split(",")
