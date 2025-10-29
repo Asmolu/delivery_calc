@@ -11,15 +11,14 @@ from functools import lru_cache
 import gspread
 from google.oauth2.service_account import Credentials
 from dotenv import load_dotenv
-load_dotenv(dotenv_path="/root/delivery_calc/.env")
 
+load_dotenv(dotenv_path="/root/delivery_calc/.env")
 
 # Список API доступов
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
 GOOGLE_SHEET_ID = "1TECrfLG4qGJDo3l9MQava7SMJpPKnhK3RId8wcnEgm8"  # твой ID таблицы
 SHEET_NAME = "Factories"  # название листа
-
 
 app = FastAPI()
 
@@ -68,7 +67,6 @@ def load_factories_from_google() -> list[dict]:
         client = gspread.authorize(creds)
         sheet = client.open_by_key(GOOGLE_SHEET_ID).worksheet(SHEET_NAME)
         rows = sheet.get_all_records()
-
         def cell(row: dict, *names: str):
             for n in names:
                 if n in row:
@@ -135,8 +133,6 @@ def load_factories_from_google() -> list[dict]:
         print("⚠️ Ошибка при загрузке таблицы:")
         traceback.print_exc()
         return []
-
-
 # --- Инициализируем данные при старте ---
 factories = load_factories_from_google()
 if not factories:
@@ -172,9 +168,9 @@ def refresh_factories_periodically():
 
 threading.Thread(target=refresh_factories_periodically, daemon=True).start()
 
+
 @app.post("/admin/reload")
 async def admin_reload():
-    
     """
     🔄 Ручная перезагрузка данных из Google Sheets.
     Возвращает количество загруженных производств и статус.
@@ -183,7 +179,10 @@ async def admin_reload():
     try:
         new_factories = load_factories_from_google()
         if not new_factories:
-            return JSONResponse(status_code=500, content={"detail": "Не удалось загрузить данные из Google Sheets"})
+            return JSONResponse(
+                status_code=500,
+                content={"detail": "Не удалось загрузить данные из Google Sheets"}
+            )
 
         factories = new_factories
         # сохраняем локально (чтобы API мог использовать их при следующем старте)
@@ -197,7 +196,6 @@ async def admin_reload():
         import traceback
         traceback.print_exc()
         return JSONResponse(status_code=500, content={"detail": f"Ошибка при обновлении: {e}"})
-
 # ===== Вспомогательные функции =====
 def load_json(filename):
     if not os.path.exists(filename):
@@ -236,6 +234,7 @@ class Vehicle(BaseModel):
     name: str
     capacity_ton: float
 
+
 # ===== API: Работа с производствами =====
 @app.get("/api/factories")
 async def get_factories():
@@ -244,6 +243,7 @@ async def get_factories():
 
 @app.post("/api/factories")
 async def add_factory(factory: Factory):
+    factories = load_json(FACTORIES_FILE)
     if any(f["name"] == factory.name for f in factories):
         return JSONResponse(status_code=400, content={"detail": "Такое производство уже существует"})
     factories.append(factory.dict() | {"products": []})
@@ -267,7 +267,6 @@ async def delete_factory(factory_name: str):
 def get_vehicles():
     """Возвращает список всех машин"""
     return load_json(VEHICLES_FILE)
-
 @app.get("/api/categories")
 def get_categories():
     factories = load_json(FACTORIES_FILE)
@@ -326,27 +325,7 @@ def delete_vehicle(name: str):
     save_json(VEHICLES_FILE, new_list)
     return {"message": f"Машина '{name}' удалена."}
 
-# ===== API: Товары производства =====
-@app.post("/api/factories/{factory_name}/product")
-async def add_product(factory_name: str, product: Product):
-    factories = load_json(FACTORIES_FILE)
-    for f in factories:
-        if f["name"] == factory_name:
-            f["products"].append(product.dict())
-            save_json(FACTORIES_FILE, factories)
-            return {"message": f"Товар добавлен к {factory_name}"}
-    return JSONResponse(status_code=404, content={"detail": "Производство не найдено"})
 
-
-@app.delete("/api/factories/{factory_name}/product/{subtype}")
-async def delete_product(factory_name: str, subtype: str):
-    factories = load_json(FACTORIES_FILE)
-    for f in factories:
-        if f["name"] == factory_name:
-            f["products"] = [p for p in f.get("products", []) if p["subtype"] != subtype]
-            save_json(FACTORIES_FILE, factories)
-            return {"message": f"Товар {subtype} удалён из {factory_name}"}
-    return JSONResponse(status_code=404, content={"detail": "Производство не найдено"})
 # ===== Геометрия: расстояние по координатам (Haversine) =====
 import math
 import requests
@@ -356,12 +335,11 @@ ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjZmNDMwM2U5N
 
 from functools import lru_cache
 
+
 @lru_cache(maxsize=1000)
 def get_cached_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Кэшированное получение дистанции между точками."""
     return calculate_road_distance(lat1, lon1, lat2, lon2)
-
-
 def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """
     Расстояние по прямой (Haversine)
@@ -391,10 +369,9 @@ def calculate_road_distance(lat1: float, lon1: float, lat2: float, lon2: float) 
         }
 
         response = requests.post(url, json=body, headers=headers, timeout=10)
-        print("🔍 Ответ ORS:", response.text)  # для проверки
+        print("🔍 Ответ ORS:", response.text)
         if response.status_code == 200:
             data = response.json()
-            # 🔧 Новая структура
             if "routes" in data and len(data["routes"]) > 0:
                 dist_m = data["routes"][0]["segments"][0]["distance"]
                 return round(dist_m / 1000, 2)
@@ -412,9 +389,7 @@ def calculate_road_distance(lat1: float, lon1: float, lat2: float, lon2: float) 
 def get_delivery_cost(transport_type: str, distance_km: float, weight_ton: float = 0) -> tuple[float, str]:
     """
     Возвращает (стоимость_за_1_рейс, описание_тарифа)
-    transport_type: "manipulator" | "long_haul"
     """
-    # === Манипулятор ===
     if transport_type == "manipulator":
         if distance_km <= 30:
             return 16000, "0–30 км / Манипулятор"
@@ -430,7 +405,6 @@ def get_delivery_cost(transport_type: str, distance_km: float, weight_ton: float
             cost = 24000 + (distance_km - 120) * 200
             return cost, f"{distance_km:.0f} км / Манипулятор (+200₽/км)"
 
-    # === Длинномер ===
     if transport_type == "long_haul":
         if weight_ton < 20:
             if distance_km <= 30:
@@ -461,12 +435,9 @@ def get_delivery_cost(transport_type: str, distance_km: float, weight_ton: float
                 cost = 33000 + (distance_km - 120) * 230
                 return cost, f"{distance_km:.0f} км / >20т / Длинномер (+230₽/км)"
 
-    # fallback (если вдруг пришёл другой тег)
     base = 18000 + distance_km * 150
     return base, "Стандартный расчёт"
-
-
-# ===== Калькулятор =====
+# ===== Калькулятор стоимости доставки =====
 class QuoteItem(BaseModel):
     category: str
     subtype: str
@@ -476,7 +447,7 @@ class QuoteItem(BaseModel):
 class QuoteRequest(BaseModel):
     upload_lat: float
     upload_lon: float
-    transport_type: str  # "auto" | "manipulator" | "truck"
+    transport_type: str  # "auto" | "manipulator" | "long_haul"
     forbidden_types: list[str] = []
     items: list[QuoteItem]
 
@@ -485,12 +456,13 @@ class QuoteRequest(BaseModel):
 async def quote(req: QuoteRequest):
     factories = load_json(FACTORIES_FILE)
     vehicles = load_json(VEHICLES_FILE)
+
     if not factories:
         return JSONResponse(status_code=400, content={"detail": "Нет данных о производствах"})
     if not vehicles:
         return JSONResponse(status_code=400, content={"detail": "Нет данных о машинах"})
 
-    # ===== 1. Считаем общий вес =====
+    # === 1. Общий вес ===
     total_weight = 0.0
     for item in req.items:
         for f in factories:
@@ -498,15 +470,14 @@ async def quote(req: QuoteRequest):
                 if p["category"] == item.category and p["subtype"] == item.subtype:
                     total_weight += p["weight_ton"] * item.quantity
 
-
-    # ===== вспомогательная: максимальная грузоподъёмность по тегу =====
-    def type_capacity(t: str) -> float:
-        caps = [v.get("capacity_ton", v.get("capacity", 0)) for v in vehicles if v.get("tag") == t]
+    # === 2. Максимальная грузоподъёмность по тегу ===
+    def type_capacity(tag: str) -> float:
+        caps = [v.get("capacity_ton", v.get("capacity", 0)) for v in vehicles if v.get("tag") == tag]
         if not caps:
             return max(v.get("capacity_ton", v.get("capacity", 0)) for v in vehicles)
         return max(caps)
 
-    # ===== 3. Определяем тип транспорта =====
+    # === 3. Определяем тип транспорта ===
     if req.transport_type == "auto":
         possible_types = sorted({v.get("tag") for v in vehicles if v.get("tag") in ("manipulator", "long_haul")})
         if not possible_types:
@@ -514,7 +485,6 @@ async def quote(req: QuoteRequest):
             transport_type = largest.get("tag", "long_haul")
         else:
             best_type, best_total_delivery = None, float("inf")
-            # возьмём первую фабрику для прикидки дистанции
             first_factory = factories[0]
             sample_dist = get_cached_distance(first_factory["lat"], first_factory["lon"],
                                               req.upload_lat, req.upload_lon)
@@ -532,10 +502,10 @@ async def quote(req: QuoteRequest):
     else:
         transport_type = req.transport_type
 
-    # ===== 4. Выбираем лучший завод по каждой позиции (стоимость 1 рейса) =====
+    # === 4. Подбор лучших заводов по каждому товару ===
     shipment_details = []
     for item in req.items:
-        best = None  # (total, factory, prod, dist, mat_cost, del_cost, tariff)
+        best = None
         for f in factories:
             for p in f.get("products", []):
                 if p["category"] == item.category and p["subtype"] == item.subtype:
@@ -546,6 +516,7 @@ async def quote(req: QuoteRequest):
                     total = mat_cost + del_cost_per_trip
                     if best is None or total < best[0]:
                         best = (total, f, p, dist, mat_cost, del_cost_per_trip, tariff_info)
+
         if best:
             total, f, p, dist, mat_cost, del_cost_per_trip, tariff_info = best
             shipment_details.append({
@@ -556,12 +527,12 @@ async def quote(req: QuoteRequest):
                 "вес_тонн": round(p["weight_ton"] * item.quantity, 2),
                 "расстояние_км": round(dist, 2),
                 "стоимость_материала": mat_cost,
-                "стоимость_доставки": round(del_cost_per_trip, 2),  # пока за 1 рейс
+                "стоимость_доставки": round(del_cost_per_trip, 2),
                 "тариф": tariff_info,
                 "итого": round(total, 2),
             })
 
-    # ===== 5. Рейсы по заводам (по грузоподъёмности выбранного типа) =====
+    # === 5. Расчёт количества рейсов по каждому заводу ===
     cap = type_capacity(transport_type)
     factory_ship = {}
     for d in shipment_details:
@@ -575,7 +546,7 @@ async def quote(req: QuoteRequest):
         info["trips"] = trips
         total_trips += trips
 
-    # ===== 6. Пересчёт доставки и итогов с учётом числа рейсов =====
+    # === 6. Пересчёт доставки с учётом количества рейсов ===
     for d in shipment_details:
         trips = factory_ship.get(d["завод"], {}).get("trips", 1)
         d["стоимость_доставки"] = round(d["стоимость_доставки"] * trips, 2)
@@ -599,12 +570,7 @@ async def quote(req: QuoteRequest):
     }
 
 
-# Локальный запуск
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
-
-
+# ===== HTML маршруты =====
 @app.get("/")
 def index():
     return FileResponse("static/index.html")
@@ -617,3 +583,8 @@ def admin_page():
 def calculator_page():
     return FileResponse("static/calculator.html")
 
+
+# ===== Локальный запуск =====
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
