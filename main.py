@@ -229,7 +229,6 @@ def save_json(filename, data):
 
 
 # ===== Загрузка данных =====
-factories = load_factories_from_google()
 vehicles = load_json(VEHICLES_FILE)
 
 
@@ -259,7 +258,6 @@ async def get_factories():
 
 @app.post("/api/factories")
 async def add_factory(factory: Factory):
-    factories = load_factories_from_google()
     if any(f["name"] == factory.name for f in factories):
         return JSONResponse(status_code=400, content={"detail": "Такое производство уже существует"})
     factories.append(factory.dict() | {"products": []})
@@ -615,20 +613,11 @@ async def quote(req: QuoteRequest):
     }
 
 
-# Корень
-@app.get("/")
-def root():
-    return {"message": "Сервис расчёта цены работает!"}
-
-
 # Локальный запуск
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
 
-from fastapi.staticfiles import StaticFiles
-
-from fastapi.responses import FileResponse
 
 @app.get("/")
 def index():
