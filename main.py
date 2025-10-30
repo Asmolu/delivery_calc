@@ -14,6 +14,8 @@ from dotenv import load_dotenv
 
 load_dotenv(dotenv_path="/root/delivery_calc/.env")
 
+load_dotenv(dotenv_path="C:\Project\delivery_calc\.env")
+
 # Список API доступов
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
@@ -126,7 +128,18 @@ def load_factories_from_google() -> list[dict]:
                 "price": to_float(price),
             })
 
-        return list(factories_map.values())
+    
+        # --- Сохраняем локально, чтобы админка могла использовать ---
+        factories_data = list(factories_map.values())
+        try:
+            with open(FACTORIES_FILE, "w", encoding="utf-8-sig") as f:
+                json.dump(factories_data, f, ensure_ascii=False, indent=2)
+            print(f"💾 factories.json обновлён ({len(factories_data)} записей)")
+        except Exception as e:
+            print("⚠️ Не удалось сохранить factories.json:", e)
+
+        return factories_data
+
 
     except Exception as e:
         import traceback
@@ -157,7 +170,7 @@ def refresh_factories_periodically():
                 factories = new_factories
                 # при желании — кэшируем локально
                 try:
-                    with open(FACTORIES_FILE, "w", encoding="utf-8") as f:
+                    with open(FACTORIES_FILE, "w", encoding="utf-8-sig") as f:
                         json.dump(factories, f, ensure_ascii=False, indent=2)
                 except Exception as e:
                     print(f"⚠️ Не удалось сохранить кэш factories.json: {e}")
@@ -186,7 +199,7 @@ async def admin_reload():
 
         factories = new_factories
         # сохраняем локально (чтобы API мог использовать их при следующем старте)
-        with open(FACTORIES_FILE, "w", encoding="utf-8") as f:
+        with open(FACTORIES_FILE, "w", encoding="utf-8-sig") as f:
             json.dump(factories, f, ensure_ascii=False, indent=2)
 
         print("✅ Заводы обновлены вручную через /admin/reload")
@@ -200,7 +213,7 @@ async def admin_reload():
 def load_json(filename):
     if not os.path.exists(filename):
         return []
-    with open(filename, "r", encoding="utf-8") as f:
+    with open(filename, "r", encoding="utf-8-sig") as f:
         try:
             return json.load(f)
         except json.JSONDecodeError:
@@ -208,7 +221,7 @@ def load_json(filename):
 
 
 def save_json(filename, data):
-    with open(filename, "w", encoding="utf-8") as f:
+    with open(filename, "w", encoding="utf-8-sig") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
@@ -243,12 +256,8 @@ async def get_factories():
 
 @app.post("/api/factories")
 async def add_factory(factory: Factory):
-    factories = load_json(FACTORIES_FILE)
-    if any(f["name"] == factory.name for f in factories):
-        return JSONResponse(status_code=400, content={"detail": "Такое производство уже существует"})
-    factories.append(factory.dict() | {"products": []})
-    save_json(FACTORIES_FILE, factories)
-    return {"message": f"Производство {factory.name} добавлено"}
+    return JSONResponse(status_code=403, content={"detail": "Добавление производств отключено. Используйте Google Sheets."})
+
 
 
 @app.delete("/api/factories/{factory_name}")
@@ -331,7 +340,7 @@ import math
 import requests
 
 # 🔑 Твой персональный API-ключ OpenRouteService
-ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjZmNDMwM2U5NWY1NDQ1N2ZiMmZkZGY5YmUyNWFkZDAyIiwiaCI6Im11cm11cjY0In0="
+# OSRM в новой версии
 
 from functools import lru_cache
 
@@ -355,35 +364,23 @@ def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
 def calculate_road_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """
     Возвращает расстояние по дорогам (в км)
-    с использованием OpenRouteService.
-    Если API недоступен, возвращает Haversine-дистанцию.
+    с использованием OSRM (Open Source Routing Machine).
     """
     try:
-        url = "https://api.openrouteservice.org/v2/directions/driving-car"
-        headers = {
-            "Authorization": ORS_API_KEY,
-            "Content-Type": "application/json",
-        }
-        body = {
-            "coordinates": [[lon1, lat1], [lon2, lat2]]
-        }
+        url = f"http://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}?overview=false"
+        response = requests.get(url, timeout=10)
+        data = response.json()
 
-        response = requests.post(url, json=body, headers=headers, timeout=10)
-        print("🔍 Ответ ORS:", response.text)
-        if response.status_code == 200:
-            data = response.json()
-            if "routes" in data and len(data["routes"]) > 0:
-                dist_m = data["routes"][0]["segments"][0]["distance"]
-                return round(dist_m / 1000, 2)
-            else:
-                print("⚠️ Неожиданная структура ответа ORS")
-                return calculate_distance(lat1, lon1, lat2, lon2)
+        if "routes" in data and len(data["routes"]) > 0:
+            dist_m = data["routes"][0]["distance"]
+            return round(dist_m / 1000, 2)
         else:
-            print("⚠️ Ошибка OpenRouteService:", response.text)
+            print("⚠️ Неожиданный ответ OSRM:", data)
             return calculate_distance(lat1, lon1, lat2, lon2)
     except Exception as e:
-        print("⚠️ Ошибка при обращении к ORS:", e)
+        print("⚠️ Ошибка при обращении к OSRM:", e)
         return calculate_distance(lat1, lon1, lat2, lon2)
+
 
 
 def get_delivery_cost(transport_type: str, distance_km: float, weight_ton: float = 0) -> tuple[float, str]:
