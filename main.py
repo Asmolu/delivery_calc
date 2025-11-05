@@ -11,6 +11,20 @@ from functools import lru_cache
 import gspread
 from google.oauth2.service_account import Credentials
 from dotenv import load_dotenv
+from fastapi import FastAPI
+import json
+from fastapi import FastAPI, Request, HTTPException
+
+app = FastAPI()
+
+# Разрешаем запросы с фронтенда (можно указать конкретно адрес)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # или ["http://localhost:5173"]
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 load_dotenv(dotenv_path="/root/delivery_calc/.env")
 
@@ -210,6 +224,7 @@ async def admin_reload():
         traceback.print_exc()
         return JSONResponse(status_code=500, content={"detail": f"Ошибка при обновлении: {e}"})
 # ===== Вспомогательные функции =====
+# Функция для загрузки данных из JSON
 def load_json(filename):
     if not os.path.exists(filename):
         return []
@@ -218,6 +233,12 @@ def load_json(filename):
             return json.load(f)
         except json.JSONDecodeError:
             return []
+
+# Функция для сохранения данных в JSON
+def save_json(filename, data):
+    with open(filename, "w", encoding="utf-8-sig") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
 
 
 def save_json(filename, data):
@@ -251,7 +272,14 @@ class Vehicle(BaseModel):
 # ===== API: Работа с производствами =====
 @app.get("/api/factories")
 async def get_factories():
-    return load_json(FACTORIES_FILE)
+    try:
+        factories = load_json(FACTORIES_FILE)
+        if not factories:
+            raise Exception("Не удалось загрузить данные из factories.json")
+        return factories
+    except Exception as e:
+        print(f"⚠️ Ошибка при загрузке данных о производствах: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка при загрузке данных о производствах")
 
 
 @app.post("/api/factories")
@@ -269,30 +297,37 @@ async def delete_factory(factory_name: str):
     save_json(FACTORIES_FILE, updated)
     return {"message": f"Производство {factory_name} удалено"}
 
+# ======== КАТЕГОРИИ (categories) ========
+@app.get("/api/categories")
+def get_categories():
+    try:
+        factories = load_json(FACTORIES_FILE)
+        categories = {}
+        for f in factories:
+            for p in f.get("products", []):
+                cat = p.get("category")
+                sub = p.get("subtype")
+                if not cat or not sub:
+                    continue
+                categories.setdefault(cat, set()).add(sub)
+        return {cat: sorted(list(subs)) for cat, subs in categories.items()}
+    except Exception as e:
+        print("⚠️ Ошибка при генерации категорий:", e)
+        return {"detail": f"Ошибка при генерации категорий: {e}"}
 
 # ======== МАШИНЫ (vehicles) ========
 
 @app.get("/api/vehicles")
 def get_vehicles():
-    """Возвращает список всех машин"""
-    return load_json(VEHICLES_FILE)
-@app.get("/api/categories")
-def get_categories():
-    factories = load_json(FACTORIES_FILE)
-    categories = {}
-
-    for f in factories:
-        for p in f.get("products", []):
-            cat = p["category"]
-            sub = p["subtype"]
-            if cat not in categories:
-                categories[cat] = set()
-            categories[cat].add(sub)
-
-    # Преобразуем множества в списки
-    result = {cat: sorted(list(subs)) for cat, subs in categories.items()}
-    return result
-
+    try:
+        vehicles = load_json(VEHICLES_FILE)
+        if not vehicles:
+            raise Exception("Не удалось загрузить данные из vehicles.json")
+        return vehicles
+    except Exception as e:
+        print(f"⚠️ Ошибка при загрузке данных о машинах: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка при загрузке данных о машинах")
+    
 
 @app.post("/api/vehicles")
 async def add_vehicle(request: Request):
@@ -300,7 +335,7 @@ async def add_vehicle(request: Request):
     data = await request.json()
     name = data.get("name")
     capacity = data.get("capacity_ton") or data.get("capacity")
-    tag = data.get("tag")  # может быть "manipulator" или "long_haul"
+    tag = data.get("tag")
 
     if not name or not capacity:
         return JSONResponse(status_code=400, content={"detail": "Укажите название и грузоподъёмность"})
@@ -308,7 +343,6 @@ async def add_vehicle(request: Request):
         return JSONResponse(status_code=400, content={"detail": "Неверный тег. Допустимо: manipulator / long_haul"})
 
     vehicles = load_json(VEHICLES_FILE)
-    # проверяем на дубликат
     if any(v["name"].lower() == name.lower() for v in vehicles):
         return JSONResponse(status_code=400, content={"detail": "Такая машина уже существует"})
 
@@ -320,7 +354,6 @@ async def add_vehicle(request: Request):
     save_json(VEHICLES_FILE, vehicles)
 
     return {"message": f"Машина '{name}' добавлена с тегом '{tag}'"}
-
 
 @app.delete("/api/vehicles/{name}")
 def delete_vehicle(name: str):
