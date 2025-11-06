@@ -6,11 +6,13 @@ export async function fetchFactories() {
   return await res.json();
 }
 
-export async function fetchVehicles() {
-  const res = await fetch(`${API_BASE}/api/vehicles`);
-  if (!res.ok) throw new Error("Ошибка при загрузке vehicles");
+export async function fetchTariffs() {
+  const res = await fetch("http://localhost:8000/api/tariffs");
+  if (!res.ok) throw new Error("Не удалось загрузить тарифы");
   return await res.json();
 }
+
+
 
 export async function reloadFactories() {
   const res = await fetch(`${API_BASE}/admin/reload`, { method: "POST" });

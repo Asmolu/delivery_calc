@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { reloadFactories, fetchFactories, fetchVehicles } from "../api";
+import { reloadFactories, fetchFactories, fetchTariffs } from "../api";
 import { motion } from "framer-motion";
 
 export default function Admin() {
@@ -11,11 +11,14 @@ export default function Admin() {
   useEffect(() => {
     async function load() {
       try {
-        const [f, v] = await Promise.all([fetchFactories(), fetchVehicles()]);
+        setMessage("📦 Загружаем текущие данные...");
+        const [f, t] = await Promise.all([fetchFactories(), fetchTariffs()]);
         setFactories(f);
-        setVehicles(v);
+        setVehicles(t);
+        setMessage("✅ Данные успешно загружены");
       } catch (err) {
         console.error("Ошибка при загрузке данных:", err);
+        setMessage("❌ Ошибка при загрузке данных");
       }
     }
     load();
@@ -24,11 +27,15 @@ export default function Admin() {
   const handleReload = async () => {
     try {
       setLoading(true);
-      setMessage("⏳ Обновление данных из Google Sheets...");
-      const res = await reloadFactories();
-      setMessage(`✅ ${res.message}`);
-      const f = await fetchFactories();
+      setMessage("⏳ Обновление данных (заводы + тарифы) из Google Sheets...");
+      const res = await fetch("http://localhost:8000/admin/reload", { method: "POST" });
+      const data = await res.json();
+      setMessage(`✅ ${data.message} (${data.factories} заводов, ${data.tariffs} тарифов)`);
+
+      // Обновляем список данных
+      const [f, t] = await Promise.all([fetchFactories(), fetchTariffs()]);
       setFactories(f);
+      setVehicles(t);
     } catch (err) {
       console.error("Ошибка обновления:", err);
       setMessage("❌ Ошибка при обновлении данных");
@@ -36,6 +43,7 @@ export default function Admin() {
       setLoading(false);
     }
   };
+
 
   return (
     <motion.div
@@ -58,10 +66,10 @@ export default function Admin() {
               : "bg-green-600 hover:bg-green-500 shadow-lg shadow-green-500/30"
           }`}
         >
-          {loading ? "🔄 Обновление..." : "Обновить из Google Sheets"}
+          {loading ? "🔄 Обновление..." : "🔁 Обновить данные (заводы + тарифы)"}
         </button>
       </div>
-
+        
       {/* Сообщения */}
       {message && (
         <div className="mb-8 p-4 bg-gray-800/60 border border-gray-700 rounded-xl text-sm text-gray-300">
@@ -126,7 +134,7 @@ export default function Admin() {
         )}
       </motion.div>
 
-      {/* Машины */}
+      {/* Машины и тарифы перевозки */}
       <motion.div
         className="card-glass p-6 rounded-2xl hover:shadow-green-500/20 transition-shadow duration-300"
         initial={{ opacity: 0, y: 15 }}
@@ -134,18 +142,23 @@ export default function Admin() {
         transition={{ delay: 0.2 }}
       >
         <h2 className="text-2xl font-semibold mb-4 flex items-center gap-2">
-          🚛 Машины
+          🚛 Машины и тарифы перевозки
         </h2>
+
         {vehicles.length === 0 ? (
-          <p className="text-gray-400">Нет данных о машинах</p>
+          <p className="text-gray-400">Нет данных о тарифах</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
-              <thead className="text-gray-400 border-b border-gray-700">
+            <table className="w-full text-sm text-left text-gray-300 border border-gray-700 rounded-lg">
+              <thead className="bg-gray-800 text-gray-200">
                 <tr>
-                  <th className="p-2 text-left">Название</th>
-                  <th className="p-2 text-left">Грузоподъёмность (т)</th>
-                  <th className="p-2 text-left">Тип</th>
+                  <th className="px-4 py-2">Название</th>
+                  <th className="px-4 py-2">Грузоподъёмность (т)</th>
+                  <th className="px-4 py-2">Тип</th>
+                  <th className="px-4 py-2">Мин. дистанция (км)</th>
+                  <th className="px-4 py-2">Макс. дистанция (км)</th>
+                  <th className="px-4 py-2">Цена (₽)</th>
+                  <th className="px-4 py-2">За км (₽/км)</th>
                 </tr>
               </thead>
               <tbody>
@@ -153,11 +166,15 @@ export default function Admin() {
                   <motion.tr
                     key={idx}
                     whileHover={{ scale: 1.01 }}
-                    className="border-b border-gray-800 hover:bg-green-900/30 transition-colors duration-200"
+                    className="border-t border-gray-700 hover:bg-green-900/20 transition-colors duration-200"
                   >
-                    <td className="p-2 font-semibold text-white">{v.name}</td>
-                    <td className="p-2 text-gray-300">{v.capacity_ton}</td>
-                    <td className="p-2 text-gray-400">{v.tag}</td>
+                    <td className="px-4 py-2 font-semibold text-white">{v.name}</td>
+                    <td className="px-4 py-2 text-gray-300">{v.capacity_ton}</td>
+                    <td className="px-4 py-2 text-gray-400">{v.tag}</td>
+                    <td className="px-4 py-2">{v.distance_min ?? "-"}</td>
+                    <td className="px-4 py-2">{v.distance_max ?? "-"}</td>
+                    <td className="px-4 py-2">{v.price ?? "-"}</td>
+                    <td className="px-4 py-2">{v.per_km ?? "-"}</td>
                   </motion.tr>
                 ))}
               </tbody>
