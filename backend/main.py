@@ -15,7 +15,12 @@ from fastapi import FastAPI
 import json
 from fastapi import FastAPI, Request, HTTPException
 from pathlib import Path
+from google.oauth2 import service_account
+import threading, time
+from gspread.exceptions import APIError
+
 app = FastAPI()
+
 
 
 # Разрешаем запросы с фронтенда (можно указать конкретно адрес)
@@ -88,9 +93,34 @@ FACTORIES_FILE = "factories.json"
 TARIFFS_FILE = "tariffs.json"
 
 
-import threading, time
 
 def load_factories_from_google():
+    try:
+        creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "google_credentials.json")
+
+        if not os.path.exists(creds_path):
+            print(f"❌ Ключ не найден: {creds_path}")
+            return {}
+
+        print("✅ Используем ключ для Google Sheets")
+        creds = service_account.Credentials.from_service_account_file(creds_path, scopes=[
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive",
+        ])
+        client = gspread.authorize(creds)
+
+    except Exception as e:
+        print(f"❌ Ошибка авторизации Google Sheets: {e}")
+        return {}  # <<< важно — сразу выйти, если client не создан
+
+    # если дошли сюда — client есть, можно безопасно открывать
+    try:
+        sheet = client.open_by_key(GOOGLE_SHEET_ID)
+        ...
+    except APIError as e:
+        print(f"⚠️ Ошибка Google API: {e}")
+        return {}
+
     """
     Загружает данные с заводами и товарами из Google Sheets.
     Структура листа:
@@ -336,6 +366,7 @@ def pick_special_by_name(tariffs: list, name: str):
 
 # --- Инициализируем данные при старте ---
 factories = load_factories_from_google()
+
 if not factories:
     # подстраховка — читаем локальный кэш, если гугл недоступен
     def load_json(filename):
