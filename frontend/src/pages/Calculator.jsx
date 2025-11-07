@@ -10,19 +10,55 @@ export default function Calculator() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  // 🔹 новые состояния
+  const [addManipulator, setAddManipulator] = useState(false);
+  const [selectedSpecial, setSelectedSpecial] = useState("");
+  const [specialVehicles, setSpecialVehicles] = useState([]); // <-- добавили
+
   useEffect(() => {
     async function load() {
       const data = await getCategories();
       setCategories(data || {});
-        // 👇 проверяем, есть ли демо координаты
-    const demo = sessionStorage.getItem("demo_coords");
-    if (demo) {
-      setCoords(demo);
-      sessionStorage.removeItem("demo_coords"); // очищаем после подстановки
+
+      // подгружаем тарифы, чтобы достать список машин с тегом 'special'
+      try {
+        const res = await fetch("http://127.0.0.1:8000/api/tariffs");
+        const tariffs = await res.json();
+
+        // поддержка русских и английских ключей
+        const specials = (tariffs || []).filter(
+          t => t.tag === "special" || t["тег"] === "special"
+        );
+
+        const uniqueSpecials = [];
+        const seenNames = new Set();
+
+        for (const t of specials) {
+          const name = t.name || t["название"];
+          if (!seenNames.has(name)) {
+            seenNames.add(name);
+            uniqueSpecials.push({
+              name,
+              tag: t.tag || t["тег"],
+            });
+          }
+        }
+
+        setSpecialVehicles(uniqueSpecials);
+
+
+      } catch (err) {
+        console.error("Ошибка загрузки тарифов:", err);
+      }
+
+      const demo = sessionStorage.getItem("demo_coords");
+      if (demo) {
+        setCoords(demo);
+        sessionStorage.removeItem("demo_coords");
+      }
     }
-  }
-  load();
-}, []);
+    load();
+  }, []);
 
   const handleAddItem = () => {
     setItems([...items, { category: "", subtype: "", quantity: 1 }]);
@@ -51,6 +87,8 @@ export default function Calculator() {
         upload_lat: lat,
         upload_lon: lon,
         transport_type: transportType,
+        addManipulator,
+        selectedSpecial,
         items: items.map((it) => ({
           category: it.category,
           subtype: it.subtype,
@@ -126,6 +164,35 @@ export default function Calculator() {
           <option value="long_haul">Длинномер</option>
         </select>
       </div>
+
+      <label className="flex items-center gap-2 mt-2">
+        <input
+          type="checkbox"
+          checked={addManipulator}
+          onChange={(e) => setAddManipulator(e.target.checked)}
+          className="w-4 h-4 accent-green-500"
+        />
+        <span>+1 манипулятор</span>
+      </label>
+
+      <div className="mt-2">
+        <label className="text-sm text-gray-300">🛠 Спецтранспорт:</label>
+        <select
+          value={selectedSpecial}
+          onChange={(e) => setSelectedSpecial(e.target.value)}
+          className="bg-gray-800 text-white rounded-lg px-3 py-2 ml-2"
+        >
+          <option value="">Не выбирать</option>
+          {/* опции подгрузи из /api/tariffs (фильтр по тегу 'special') если у тебя есть эти данные на фронте; 
+            если не хранишь — просто отправь выбранное имя строкой, а на бэке найдём */}
+          {specialVehicles.map((v) => (
+            <option key={v.name} value={v.name}>
+              {v.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
 
       {/* === Выбор товаров === */}
       <div className="space-y-4">
@@ -231,7 +298,7 @@ export default function Calculator() {
                 >
                   <td className="p-2">{d["завод"]}</td>
                   <td className="p-2">{d["товар"]}</td>
-                  <td className="p-2">{d["машина"]}</td>
+                  <td className="p-2">{d["реальное_имя_машины"] || d["машина"]}</td>
                   <td className="p-2">{d["расстояние_км"]}</td>
                   <td className="p-2">{d["стоимость_материала"].toLocaleString()}</td>
                   <td className="p-2">{d["стоимость_доставки"].toLocaleString()}</td>
@@ -250,6 +317,61 @@ export default function Calculator() {
             <p className="text-blue-400 text-xl mt-2">
               💰 Итого: {result["итого"].toLocaleString()} ₽
             </p>
+
+            {/* Транспорт (сводка + детали) */}
+            {result["транспорт"] && (
+              <div className="mt-4">
+                <p className="text-gray-300 text-sm">
+                  <span className="font-semibold">🚚 Транспорт:</span>{" "}
+                  {result["транспорт"]}
+                </p>
+
+                {result["транспорт_детали"] && (
+                  <div className="mt-2">
+                    <table className="text-sm">
+                      <tbody>
+                        {/* Базовый транспорт */}
+                        <tr>
+                          <td className="pr-3 text-gray-400">Базовый:</td>
+                          <td>
+                            {(() => {
+                              const base = result["транспорт_детали"]?.базовый || {};
+                              // Используем реальное имя, если есть
+                              const human =
+                                base.реальное_имя ||
+                                (base.тип === "manipulator"
+                                  ? "Манипулятор"
+                                  : base.тип === "long_haul"
+                                  ? "Длинномер"
+                                  : base.тип || "—");
+                              const trips = base.рейсы ?? 0;
+                              return `${human} × ${trips}`;
+                            })()}
+                          </td>
+                        </tr>
+
+                        {/* Доп. рейсы (манипулятор/спец) */}
+                        {Array.isArray(result["транспорт_детали"]?.доп) &&
+                          result["транспорт_детали"].доп.length > 0 && (
+                            <>
+                              {result["транспорт_детали"].доп.map((e, i) => (
+                                <tr key={i}>
+                                  <td className="pr-3 text-gray-400">
+                                    {i === 0 ? "Доп. рейсы:" : ""}
+                                  </td>
+                                  <td>
+                                    {e.реальное_имя || e.название} × {e.рейсы}
+                                  </td>
+                                </tr>
+                              ))}
+                            </>
+                          )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </motion.div>
       )}

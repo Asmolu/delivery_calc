@@ -302,7 +302,30 @@ def load_tariffs_from_google():
         print(f"❌ Ошибка загрузки тарифов: {e}")
         return {"status": "error", "message": str(e)}
 
-    
+# Вспомогалки для тарифов #
+def capacity_to_ton(x) -> float:
+    """ '39.5 Т' -> 39.5 """
+    if x is None:
+        return 0.0
+    s = str(x).lower().replace("т", "").replace(" ", "").replace(",", ".")
+    try:
+        return float(s)
+    except Exception:
+        return 0.0
+
+def max_capacity_by_tag(tariffs: list, tag: str) -> float:
+    caps = [capacity_to_ton(t.get("грузоподъёмность")) for t in tariffs if t.get("тег") == tag]
+    return max(caps) if caps else 0.0
+
+def pick_special_by_name(tariffs: list, name: str):
+    if not name:
+        return None
+    for t in tariffs:
+        if str(t.get("название", "")).strip().lower() == str(name).strip().lower():
+            return t
+    return None
+
+
 # --- Инициализируем данные при старте ---
 factories = load_factories_from_google()
 if not factories:
@@ -646,12 +669,43 @@ class QuoteItem(BaseModel):
     quantity: int
 
 
+from pydantic import BaseModel, Field
+from typing import Optional
+
 class QuoteRequest(BaseModel):
     upload_lat: float
     upload_lon: float
     transport_type: str  # "auto" | "manipulator" | "long_haul"
     forbidden_types: list[str] = []
     items: list[QuoteItem]
+
+    # новые поля (с алиасами под camelCase с фронта)
+    add_manipulator: bool = Field(False, alias="addManipulator")
+    selected_special: Optional[str] = Field(None, alias="selectedSpecial")
+
+
+def cheapest_factory_for(tag: str, factory_ship: dict, shipment_details: list):
+    """
+    Возвращает завод, где доп.рейс (по данному тегу транспорта)
+    выйдет дешевле всего по суммарной стоимости доставки.
+    """
+    best_factory = None
+    best_cost = float("inf")
+
+    for factory_name, info in factory_ship.items():
+        # возьмём первую позицию от этого завода, чтобы оценить дистанцию
+        positions = [d for d in shipment_details if d["завод"] == factory_name]
+        if not positions:
+            continue
+
+        # возьмём среднюю дистанцию (если разные товары с разных координат)
+        avg_distance = sum(d["расстояние_км"] for d in positions) / len(positions)
+        cost_per_trip, _ = calculate_tariff_cost(tag, avg_distance, sum(d["вес_тонн"] for d in positions))
+        if cost_per_trip and cost_per_trip < best_cost:
+            best_cost = cost_per_trip
+            best_factory = factory_name
+
+    return best_factory, best_cost if best_factory else (None, None)
 
 
 @app.post("/quote")
@@ -670,20 +724,22 @@ async def quote(req: QuoteRequest):
     if not tariffs:
         return JSONResponse(status_code=400, content={"detail": "Нет данных о тарифах"})
 
-    # === 1. Общий вес ===
-    total_weight = 0.0
-    for item in req.items:
-        print(f"🔍 Ищу товар: категория='{item.category}', подтип='{item.subtype}'")
-        found = False
+    # === 1. Общий вес (по одному совпадению на товар) ===
+    def find_weight_ton(category: str, subtype: str) -> float:
+        cat = category.strip().lower()
+        sub = subtype.strip().lower()
         for f in factories:
             for p in f.get("products", []):
-                if p["category"].strip().lower() == item.category.strip().lower() and \
-                   p["subtype"].strip().lower() == item.subtype.strip().lower():
-                    found = True
-                    total_weight += p["weight_ton"] * item.quantity
-                    print(f"✅ Найдено совпадение! Вес: {p['weight_ton']} т × {item.quantity}")
-        if not found:
-            print(f"❌ Не найден товар '{item.category}' / '{item.subtype}' ни в одном заводе.")
+                if p["category"].strip().lower() == cat and p["subtype"].strip().lower() == sub:
+                    return float(p.get("weight_ton", 0.0))
+        return 0.0
+
+    total_weight = 0.0
+    for item in req.items:
+        w = find_weight_ton(item.category, item.subtype)
+        if w <= 0:
+            print(f"❌ Не найден вес для {item.category} / {item.subtype}")
+        total_weight += w * item.quantity
 
     # === 2. Максимальная грузоподъёмность по тегу ===
     def type_capacity(tag: str) -> float:
@@ -747,10 +803,20 @@ async def quote(req: QuoteRequest):
 
         if best:
             total, f, p, dist, mat_cost, del_cost_per_trip, tariff_info = best
+
+            # получаем человеко-читаемое имя машины (делаем это ДО append)
+            real_name = next(
+                (t.get("название") or t.get("name")
+                 for t in tariffs
+                 if (t.get("тег") == transport_type or t.get("tag") == transport_type)),
+                transport_type
+            )
+
             shipment_details.append({
                 "товар": f"{p['category']} ({p['subtype']})",
                 "завод": f["name"],
-                "машина": transport_type,
+                "машина": real_name,
+                "tag": transport_type,
                 "кол-во": item.quantity,
                 "вес_тонн": round(p["weight_ton"] * item.quantity, 2),
                 "расстояние_км": round(dist, 2),
@@ -759,30 +825,203 @@ async def quote(req: QuoteRequest):
                 "тариф": tariff_info,
                 "итого": round(total, 2),
             })
+    # Пересчёт общего веса по реально выбранным позициям (чтобы точно не было дублей)
+    total_weight = sum(d["вес_тонн"] for d in shipment_details)
 
-    # === 5. Расчёт количества рейсов по каждому заводу ===
-    cap = type_capacity(transport_type)
-    factory_ship = {}
+    # === 5. Распределение веса по заводам ===
+    base_cap = type_capacity(transport_type)
+    factory_ship = {}  # { factory_name: {"weight": float, "extra_trips": [], "base_trips": 0} }
     for d in shipment_details:
         f = d["завод"]
-        factory_ship.setdefault(f, {"weight": 0.0, "trips": 0})
+        factory_ship.setdefault(f, {"weight": 0.0, "extra_trips": [], "base_trips": 0})
         factory_ship[f]["weight"] += d["вес_тонн"]
 
+    # --- 5.0.5 Определяем обязательные дополнительные рейсы ---
+    extra_trip_specs = []
+
+    # Если пользователь включил флаг "добавить манипулятор"
+    if req.add_manipulator:
+        cap = type_capacity("manipulator")
+        manip_real_name = next(
+            (
+                t.get("название") or t.get("name")
+                for t in tariffs
+                if (t.get("тег") == "manipulator" or t.get("tag") == "manipulator")
+            ),
+            "Манипулятор"
+        )
+        extra_trip_specs.append(("manipulator", cap, f"{manip_real_name} (принудительно)"))
+
+    # Если пользователь выбрал спецтранспорт (selectedSpecial)
+    if req.selected_special:
+        special = pick_special_by_name(tariffs, req.selected_special)
+        if special:
+            cap = capacity_to_ton(special.get("грузоподъёмность"))
+            extra_trip_specs.append(("special", cap, special.get("название")))
+
+
+    # --- 5.1 Дополнительные принудительные рейсы ---
+    for tag, cap_single, title in extra_trip_specs:
+        if not factory_ship:
+            continue
+
+        # выбираем самый дешёвый завод для данного рейса
+        target_factory, trip_cost = cheapest_factory_for(tag, factory_ship, shipment_details)
+        if not target_factory:
+            continue
+
+        alloc = min(cap_single, factory_ship[target_factory]["weight"])
+        if alloc <= 0:
+            continue
+
+        factory_ship[target_factory]["weight"] -= alloc
+        factory_ship[target_factory]["extra_trips"].append({
+            "tag": tag,
+            "capacity_used": alloc,
+            "title": title,
+            "стоимость_рейса": round(trip_cost or 0, 2)
+        })
+
+    # --- 5.2 Базовые рейсы по уменьшенному весу (после доп.рейсов) ---
     total_trips = 0
     for f, info in factory_ship.items():
-        trips = math.ceil(info["weight"] / cap) if cap > 0 else 0
-        info["trips"] = trips
+        remain = max(info["weight"], 0.0)
+        trips = math.ceil(remain / base_cap) if base_cap > 0 else 0
+        info["base_trips"] = trips
         total_trips += trips
+    # плюс считаем доп.рейсы как тоже рейсы
+    total_trips += sum(len(info["extra_trips"]) for info in factory_ship.values())
 
-    # === 6. Пересчёт доставки с учётом количества рейсов ===
+    # === 6. Пересчёт стоимости доставки (база + доп.рейсы) ===
+    # Сначала обнулим доставку, потом пересчитаем
     for d in shipment_details:
-        trips = factory_ship.get(d["завод"], {}).get("trips", 1)
-        d["стоимость_доставки"] = round(d["стоимость_доставки"] * trips, 2)
+        d["стоимость_доставки"] = 0.0
+        d["итого"] = d["стоимость_материала"]  # временно
+
+    # Для корректности распределим “базовые” рейсы пропорционально весу позиций от завода
+    # (как и раньше, но с новым числом base_trips)
+    per_factory_dist = {}  # сохраним дистанции для нужды доп.рейсов
+    for f, info in factory_ship.items():
+        # найдём любую позицию с этим заводом — у всех позиций от завода одинаковая дистанция до объекта разная!
+        # В твоей логике distance берётся для каждой позиции заново. Для надбавок по типу тарифа это ок.
+        # Мы будем считать стоимость рейса по фактической дистанции каждой позиции и суммировать пропорционально.
+        # Пропорция: доля веса позиции / общий вес завода.
+        weight_sum = sum(d["вес_тонн"] for d in shipment_details if d["завод"] == f)
+        if weight_sum <= 0:
+            continue
+
+        # --- базовые рейсы выбранного транспорта ---
+        base_trips = info["base_trips"]
+        if base_trips > 0:
+            for d in shipment_details:
+                if d["завод"] != f:
+                    continue
+                share = d["вес_тонн"] / weight_sum
+                # стоимость одного рейса для этой позиции (старым способом)
+                # d["стоимость_доставки"] у нас сейчас обнулена — получим ставку:
+                _, tariff_info = calculate_tariff_cost(transport_type, d["расстояние_км"], d["вес_тонн"])
+                one_trip_cost, _ = calculate_tariff_cost(transport_type, d["расстояние_км"], d["вес_тонн"])
+                if one_trip_cost is None:
+                    one_trip_cost = 0
+                d["стоимость_доставки"] += round(one_trip_cost * share * base_trips, 2)
+                d["тариф"] = tariff_info
+
+        # --- доп.рейсы (манипулятор/спец) ---
+        for extra in info["extra_trips"]:
+            tag = extra["tag"]
+            # распределим один доп.рейс по позициям завода пропорционально весу
+            for d in shipment_details:
+                if d["завод"] != f:
+                    continue
+                share = d["вес_тонн"] / weight_sum
+                one_trip_cost, tariff_info = calculate_tariff_cost(tag, d["расстояние_км"], d["вес_тонн"])
+                if one_trip_cost is None:
+                    one_trip_cost = 0
+                d["стоимость_доставки"] += round(one_trip_cost * share, 2)  # один рейс
+                # важно не перетирать тариф целиком — он может отличаться по строкам, поэтому не меняем d["тариф"]
+
+    # Итоги по позициям
+    for d in shipment_details:
         d["итого"] = round(d["стоимость_материала"] + d["стоимость_доставки"], 2)
 
     total_material_cost = sum(d["стоимость_материала"] for d in shipment_details)
     total_delivery_cost = sum(d["стоимость_доставки"] for d in shipment_details)
 
+
+    # === 8. Формируем сводку по использованным типам транспорта ===
+    transport_summary = []
+    transport_count = {}
+
+    # Подсчёт по всем заводам
+    for f_name, info in factory_ship.items():
+        for trip in info.get("extra_trips", []):
+            tag = trip["tag"]
+            transport_count[tag] = transport_count.get(tag, 0) + 1
+
+    # Карта эмодзи
+    tag_to_emoji = {
+        "long_haul": "🚛",
+        "manipulator": "🦾",
+        "special": "⚙️",
+        "auto": "🚚"
+    }
+
+    # Формируем список с реальными именами
+    for tag, count in transport_count.items():
+        # ищем реальное имя по тегу
+        real_name = next(
+            (
+                t.get("название") or t.get("name")
+                for t in tariffs
+                if (t.get("тег") == tag or t.get("tag") == tag)
+            ),
+            tag
+        )
+        emoji = tag_to_emoji.get(tag, "🚚")
+        if count > 1:
+            transport_summary.append(f"{emoji} {real_name} × {count}")
+        else:
+            transport_summary.append(f"{emoji} {real_name}")
+
+    # строка для поля 🚚 Транспорт:
+    summary_text = ", ".join(transport_summary) if transport_summary else "Без дополнительного транспорта"
+
+    # Сводка по транспорту: базовый + доп.рейсы
+    transport_summary_parts = []
+    base_total_trips = sum(info.get("base_trips", 0) for info in factory_ship.values())
+    if base_total_trips > 0:
+        base_real_name = next(
+            (
+                t.get("название") or t.get("name")
+                for t in tariffs
+                if (t.get("тег") == transport_type or t.get("tag") == transport_type)
+            ),
+            transport_type
+        )
+        transport_summary_parts.append(f"{base_real_name} × {base_total_trips}")
+
+    extra_counts = {}
+    for f, info in factory_ship.items():
+        for e in info.get("extra_trips", []):
+            key = e.get("title") or e.get("tag")
+            extra_counts[key] = extra_counts.get(key, 0) + 1
+
+    for title, cnt in extra_counts.items():
+        # подставляем реальное имя, если находим
+        real_name = next(
+            (
+                t.get("название") or t.get("name")
+                for t in tariffs
+                if t.get("название") == title or t.get("name") == title
+            ),
+            title
+        )
+        transport_summary_parts.append(f"{real_name} × {cnt}")
+
+    transport_summary = "Без дополнительного транспорта" if not transport_summary_parts else ", ".join(transport_summary_parts)
+
+
+    # === 9. Формируем итоговый ответ ===
     return {
         "детали": shipment_details,
         "общий_вес": round(total_weight, 2),
@@ -792,12 +1031,43 @@ async def quote(req: QuoteRequest):
         "общая_стоимость_доставки": round(total_delivery_cost, 2),
         "итого": round(total_material_cost + total_delivery_cost, 2),
         "factories_info": {
-            f: {"вес_тонн": round(info["weight"], 2), "рейсы": info["trips"]}
+            f: {
+                "вес_тонн": round(info["weight"], 2),
+                "базовые_рейсы": info["base_trips"],
+                "доп_рейсы": [
+                    {"tag": e["tag"], "capacity_used": e["capacity_used"]}
+                    for e in info["extra_trips"]
+                ],
+            }
             for f, info in factory_ship.items()
-        }
+        },
+        "транспорт": transport_summary,
+        "транспорт_детали": {
+            "базовый": {
+                "тип": transport_type,
+                "рейсы": base_total_trips,
+                "реальное_имя": next(
+                    (t.get("название") or t.get("name")
+                    for t in tariffs
+                    if (t.get("тег") == transport_type or t.get("tag") == transport_type)),
+                    transport_type
+                ),
+            },
+            "доп": [
+                {
+                    "название": k,
+                    "рейсы": v,
+                    "реальное_имя": next(
+                        (t.get("название") or t.get("name")
+                        for t in tariffs
+                        if t.get("название") == k or t.get("name") == k),
+                        k
+                    ),
+                }
+                for (k, v) in extra_counts.items()
+            ],
+        },
     }
-
-
 
 # ===== HTML маршруты =====
 @app.get("/")
