@@ -6,7 +6,7 @@
     "tailwindcss": "^4.1.16"
   },
   "scripts": {
-    "dev": "concurrently \"npm run dev:frontend\" \"uvicorn main:app --reload\"",
+    "dev": "concurrently \"npm run dev:frontend\" \"uvicorn backend.main:app --reload\"",
     "dev:frontend": "vite"
   },
   "dependencies": {

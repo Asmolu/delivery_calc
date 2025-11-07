@@ -188,10 +188,10 @@ def load_factories_from_google():
 
 
         # Сохраняем JSON локально
-        with open("factories.json", "w", encoding="utf-8-sig") as f:
+        with open("backend/factories.json", "w", encoding="utf-8-sig") as f:
             json.dump(factories_data, f, ensure_ascii=False, indent=2)
 
-        print(f"💾 factories.json обновлён ({len(factories_data)} заводов, {sum(len(f['products']) for f in factories_data)} товаров)")
+        print(f"💾 backend/factories.json обновлён ({len(factories_data)} заводов, {sum(len(f['products']) for f in factories_data)} товаров)")
         return factories_data
 
     except Exception as e:
@@ -204,7 +204,7 @@ def load_factories_from_google():
     
 def load_tariffs_from_google():
     """
-    Читает лист 'Vehicles' и сохраняет tariffs.json (устойчиво к различиям в заголовках).
+    Читает лист 'Vehicles' и сохраняет backend/tariffs.json (устойчиво к различиям в заголовках).
     """
     try:
         import re
@@ -292,7 +292,7 @@ def load_tariffs_from_google():
                 "заметки": str(note).strip(),
             })
 
-        with open("tariffs.json", "w", encoding="utf-8-sig") as f:
+        with open("backend/tariffs.json", "w", encoding="utf-8-sig") as f:
             json.dump(tariffs, f, ensure_ascii=False, indent=2)
 
         print(f"✅ Тарифы обновлены ({len(tariffs)} записей)")
@@ -353,7 +353,7 @@ def refresh_factories_periodically():
                     with open(FACTORIES_FILE, "w", encoding="utf-8-sig") as f:
                         json.dump(factories, f, ensure_ascii=False, indent=2)
                 except Exception as e:
-                    print(f"⚠️ Не удалось сохранить кэш factories.json: {e}")
+                    print(f"⚠️ Не удалось сохранить кэш backend/factories.json: {e}")
                 print("✅ Заводы обновлены из Google Sheets")
         except Exception as e:
             print(f"⚠️ Ошибка обновления (поток): {e}")
@@ -475,7 +475,7 @@ async def get_factories():
     try:
         factories = load_json(FACTORIES_FILE)
         if not factories:
-            raise Exception("Не удалось загрузить данные из factories.json")
+            raise Exception("Не удалось загрузить данные из backend/factories.json")
         return factories
     except Exception as e:
         print(f"⚠️ Ошибка при загрузке данных о производствах: {e}")
@@ -499,17 +499,17 @@ async def delete_factory(factory_name: str):
 
 @app.get("/api/tariffs")
 def get_tariffs():
-    path = Path("tariffs.json")
+    path = Path("backend/tariffs.json")
 
     if not path.exists():
-        raise HTTPException(status_code=404, detail="Файл tariffs.json не найден")
+        raise HTTPException(status_code=404, detail="Файл backend/tariffs.json не найден")
 
     try:
         with open(path, "r", encoding="utf-8-sig") as f:
             content = f.read().strip()
 
         if not content:
-            raise HTTPException(status_code=500, detail="Файл tariffs.json пуст")
+            raise HTTPException(status_code=500, detail="Файл backend/tariffs.json пуст")
 
         data = json.loads(content)
         print(f"✅ API /api/tariffs: отправлено {len(data)} тарифов")
@@ -531,10 +531,10 @@ def get_tariffs():
         return normalized
 
     except json.JSONDecodeError as e:
-        print(f"❌ Ошибка JSON в tariffs.json: {e}")
-        raise HTTPException(status_code=500, detail=f"Ошибка в структуре tariffs.json: {e}")
+        print(f"❌ Ошибка JSON в backend/tariffs.json: {e}")
+        raise HTTPException(status_code=500, detail=f"Ошибка в структуре backend/tariffs.json: {e}")
     except Exception as e:
-        print(f"❌ Ошибка при чтении tariffs.json: {e}")
+        print(f"❌ Ошибка при чтении backend/tariffs.json: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -611,14 +611,14 @@ def calculate_road_distance(lat1: float, lon1: float, lat2: float, lon2: float) 
 # ======= Расчёт стоимости по тарифам =======
 def calculate_tariff_cost(transport_tag: str, distance_km: float, weight_ton: float | None = None):
     """
-    Рассчитывает стоимость доставки по тарифам из tariffs.json.
+    Рассчитывает стоимость доставки по тарифам из backend/tariffs.json.
     Учитывает надбавку за км при dmin == dmax.
     """
     try:
-        with open("tariffs.json", "r", encoding="utf-8-sig") as f:
+        with open("backend/tariffs.json", "r", encoding="utf-8-sig") as f:
             tariffs = json.load(f)
     except Exception as e:
-        print(f"⚠️ Не удалось загрузить tariffs.json: {e}")
+        print(f"⚠️ Не удалось загрузить backend/tariffs.json: {e}")
         return None, "Ошибка загрузки тарифов"
 
     # фильтруем по тегу транспорта
@@ -717,7 +717,7 @@ async def quote(req: QuoteRequest):
             print(f"⚠️ ВНИМАНИЕ: битая кириллица в запросе — {item.category} / {item.subtype}")
 
     factories = load_json(FACTORIES_FILE)
-    tariffs = load_json("tariffs.json")
+    tariffs = load_json("backend/tariffs.json")
 
     if not factories:
         return JSONResponse(status_code=400, content={"detail": "Нет данных о производствах"})
@@ -1072,15 +1072,15 @@ async def quote(req: QuoteRequest):
 # ===== HTML маршруты =====
 @app.get("/")
 def index():
-    return FileResponse("static/index.html")
+    return FileResponse("../static/index.html")
 
 @app.get("/admin")
 def admin_page():
-    return FileResponse("static/admin.html")
+    return FileResponse("../static/admin.html")
 
 @app.get("/calculator")
 def calculator_page():
-    return FileResponse("static/calculator.html")
+    return FileResponse("../static/calculator.html")
 
 
 # ===== Локальный запуск =====
