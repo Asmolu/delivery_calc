@@ -468,8 +468,13 @@ async def admin_reload():
 
     except Exception as e:
         import traceback
-        traceback.print_exc()
-        return JSONResponse(status_code=500, content={"detail": f"Ошибка при обновлении: {e}"})
+        error_text = traceback.format_exc()
+        print(f"❌ Ошибка при обновлении данных:\n{error_text}")
+        # сохраняем в отдельный лог для диагностики
+        with open("/var/log/delivery_calc_update_error.log", "a") as f:
+            f.write(error_text + "\n")
+        return JSONResponse(status_code=500, content={"detail": f"Ошибка при обновлении данных: {e}"})
+
 
     
 @app.post("/admin/reload_tariffs")
