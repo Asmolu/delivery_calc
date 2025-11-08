@@ -1,4 +1,6 @@
-const API_BASE = "";
+// Автоматически определяем базовый адрес API
+const API_BASE = window.location.origin;
+console.log("🌍 API_BASE =", API_BASE);
 
 export async function fetchFactories() {
   const res = await fetch(`${API_BASE}/api/factories`);
@@ -7,12 +9,10 @@ export async function fetchFactories() {
 }
 
 export async function fetchTariffs() {
-  const res = await fetch("/api/factories");   
+  const res = await fetch(`${API_BASE}/api/tariffs`);
   if (!res.ok) throw new Error("Не удалось загрузить тарифы");
   return await res.json();
 }
-
-
 
 export async function reloadFactories() {
   const res = await fetch(`${API_BASE}/admin/reload`, { method: "POST" });
@@ -20,6 +20,7 @@ export async function reloadFactories() {
   if (!res.ok) throw new Error(data.detail || "Ошибка при обновлении");
   return data;
 }
+
 
 export async function fetchCategories() {
   const res = await fetch(`${API_BASE}/api/categories`);
