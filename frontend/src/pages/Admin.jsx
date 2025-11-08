@@ -28,7 +28,7 @@ export default function Admin() {
     try {
       setLoading(true);
       setMessage("⏳ Обновление данных (заводы + тарифы) из Google Sheets...");
-      const res = await fetch("http://localhost:8000/admin/reload", { method: "POST" });
+      const res = await fetch("/admin/reload", { method: "POST" });
       const data = await res.json();
       setMessage(`✅ ${data.message} (${data.factories} заводов, ${data.tariffs} тарифов)`);
 
