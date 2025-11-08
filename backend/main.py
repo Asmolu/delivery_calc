@@ -21,6 +21,22 @@ from gspread.exceptions import APIError
 
 app = FastAPI()
 
+# Путь к новой сборке фронта
+FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "../frontend/dist")
+app.mount("/assets", StaticFiles(directory=os.path.join(FRONTEND_DIR, "assets")), name="assets")
+
+# Главная страница (index.html)
+@app.get("/")
+def serve_root():
+    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+
+# Для React-маршрутов (например, /admin, /calculator и т.д.)
+@app.get("/{full_path:path}")
+def serve_frontend(full_path: str):
+    file_path = os.path.join(FRONTEND_DIR, full_path)
+    if os.path.exists(file_path) and os.path.isfile(file_path):
+        return FileResponse(file_path)
+    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
 
 
 # Разрешаем запросы с фронтенда (можно указать конкретно адрес)
@@ -32,50 +48,64 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# На Linux/WSL — свой путь, на Windows используем raw-string:
+load_dotenv(dotenv_path="/root/delivery_calc/.env")
+load_dotenv(dotenv_path=r"C:\Project\delivery_calc\.env")
+
+# Список API доступов
+ 
+
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 GOOGLE_SHEET_ID = "1TECrfLG4qGJDo3l9MQava7SMJpPKnhK3RId8wcnEgm8"
 IGNORE_SHEETS = {"factories", "тест", "справочник", "сводная"}    #игнорируем эти листы
 
-FACTORIES_FILE = "factories.json"
-TARIFFS_FILE = "tariffs.json"
-
-import os
-import random
-import gspread
-from google.oauth2 import service_account
-
 def get_gspread_client():
     """
-    Авторизация с поддержкой двух ключей Google (Linux + Windows):
-    - выбирает случайно один ключ из двух;
-    - автоматически подбирает пути под ОС.
+    Универсальная авторизация:
+    - если есть GOOGLE_APPLICATION_CREDENTIALS (путь к файлу) — используем его;
+    - иначе, если есть GOOGLE_CREDENTIALS (json-строка) — используем её;
+    - иначе — бросаем понятную ошибку.
     """
+    from google.oauth2.service_account import Credentials
+    import json, os, gspread
 
-    SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+    GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS")
 
-    if os.name == "nt":  # Windows
-        GOOGLE_KEYS = [
-            r"C:\Project\delivery_calc\google_credentials.json",
-            r"C:\Project\delivery_calc\delivery_bot_2_credentials.json",
-        ]
-    else:  # Linux / сервер
-        GOOGLE_KEYS = [
-            "/root/delivery_calc/google_credentials.json",
-            "/root/delivery_calc/delivery_bot_2_credentials.json",
-        ]
+    if GOOGLE_CREDENTIALS_PATH and os.path.exists(GOOGLE_CREDENTIALS_PATH):
+        print("✅ Используем ключ из файла:", GOOGLE_CREDENTIALS_PATH)
+        creds = Credentials.from_service_account_file(GOOGLE_CREDENTIALS_PATH, scopes=SCOPES)
+    elif GOOGLE_CREDENTIALS_JSON:
+        print("✅ Используем ключ из переменной окружения GOOGLE_CREDENTIALS")
+        raw = GOOGLE_CREDENTIALS_JSON.replace("\\n", "\n").replace("\\\\n", "\n")
+        creds = Credentials.from_service_account_info(json.loads(raw), scopes=SCOPES)
+    else:
+        raise RuntimeError("❌ Нет ключа Google: задайте GOOGLE_APPLICATION_CREDENTIALS (путь) или GOOGLE_CREDENTIALS (json).")
 
-    for key_file in random.sample(GOOGLE_KEYS, len(GOOGLE_KEYS)):  # случайный порядок
-        try:
-            print(f"✅ Используем ключ: {key_file}")
-            creds = service_account.Credentials.from_service_account_file(
-                key_file, scopes=SCOPES
-            )
-            return gspread.authorize(creds)
-        except Exception as e:
-            print(f"⚠️ Ошибка при авторизации через {key_file}: {e}")
+    return gspread.authorize(creds)
 
-    raise RuntimeError("❌ Не удалось авторизоваться ни одним ключом Google.")
 
+# Разрешаем запросы из любого источника (чтобы HTML мог обращаться к API)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Подключаем папку static для HTML файлов
+import os
+from fastapi.staticfiles import StaticFiles
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, "..", "static")
+
+
+
+# Пути к JSON файлам
+FACTORIES_FILE = "factories.json"
+TARIFFS_FILE = "tariffs.json"
 
 
 
@@ -279,7 +309,8 @@ def load_tariffs_from_google():
             return None
 
         # --- читаем таблицу ---
-        client = get_gspread_client()
+        creds = load_credentials()
+        client = gspread.authorize(creds)
         sheet = client.open_by_key(GOOGLE_SHEET_ID)
         ws = sheet.worksheet("Vehicles")
         rows = ws.get_all_records()  # список dict, ключи — оригинальные заголовки
@@ -1093,17 +1124,35 @@ async def quote(req: QuoteRequest):
     }
 
 # ===== HTML маршруты =====
-@app.get("/")
-def index():
-    return FileResponse("../static/index.html")
 
-@app.get("/admin")
-def admin_page():
-    return FileResponse("../static/admin.html")
+#app.get("/")
+#def index():
+#    return FileResponse("../static/index.html")
 
-@app.get("/calculator")
-def calculator_page():
-    return FileResponse("../static/calculator.html")
+#@app.get("/admin")
+#def admin_page():
+#    return FileResponse("../static/admin.html")
+
+#@app.get("/calculator")
+#def calculator_page():
+#    return FileResponse("../static/calculator.html")
+
+
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
+
+# Путь к собранному фронтенду
+frontend_dir = os.path.join(os.path.dirname(__file__), "../frontend/dist")
+
+# Проверим, что папка есть
+if os.path.isdir(frontend_dir):
+    app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+
+    @app.get("/{full_path:path}")
+    async def serve_react_app(full_path: str):
+        """Отдаёт index.html для всех маршрутов React"""
+        return FileResponse(os.path.join(frontend_dir, "index.html"))
 
 
 # ===== Локальный запуск =====
