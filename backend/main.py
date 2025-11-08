@@ -32,65 +32,50 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# На Linux/WSL — свой путь, на Windows используем raw-string:
-load_dotenv(dotenv_path="/root/delivery_calc/.env")
-load_dotenv(dotenv_path=r"C:\Project\delivery_calc\.env")
-
-# Список API доступов
- 
-
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 GOOGLE_SHEET_ID = "1TECrfLG4qGJDo3l9MQava7SMJpPKnhK3RId8wcnEgm8"
 IGNORE_SHEETS = {"factories", "тест", "справочник", "сводная"}    #игнорируем эти листы
 
-def get_gspread_client():
-    """
-    Универсальная авторизация:
-    - если есть GOOGLE_APPLICATION_CREDENTIALS (путь к файлу) — используем его;
-    - иначе, если есть GOOGLE_CREDENTIALS (json-строка) — используем её;
-    - иначе — бросаем понятную ошибку.
-    """
-    from google.oauth2.service_account import Credentials
-    import json, os, gspread
-
-    GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-    GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS")
-
-    if GOOGLE_CREDENTIALS_PATH and os.path.exists(GOOGLE_CREDENTIALS_PATH):
-        print("✅ Используем ключ из файла:", GOOGLE_CREDENTIALS_PATH)
-        creds = Credentials.from_service_account_file(GOOGLE_CREDENTIALS_PATH, scopes=SCOPES)
-    elif GOOGLE_CREDENTIALS_JSON:
-        print("✅ Используем ключ из переменной окружения GOOGLE_CREDENTIALS")
-        raw = GOOGLE_CREDENTIALS_JSON.replace("\\n", "\n").replace("\\\\n", "\n")
-        creds = Credentials.from_service_account_info(json.loads(raw), scopes=SCOPES)
-    else:
-        raise RuntimeError("❌ Нет ключа Google: задайте GOOGLE_APPLICATION_CREDENTIALS (путь) или GOOGLE_CREDENTIALS (json).")
-
-    return gspread.authorize(creds)
-
-
-# Разрешаем запросы из любого источника (чтобы HTML мог обращаться к API)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Подключаем папку static для HTML файлов
-import os
-from fastapi.staticfiles import StaticFiles
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-STATIC_DIR = os.path.join(BASE_DIR, "..", "static")
-
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-
-
-# Пути к JSON файлам
 FACTORIES_FILE = "factories.json"
 TARIFFS_FILE = "tariffs.json"
+
+import os
+import random
+import gspread
+from google.oauth2 import service_account
+
+def get_gspread_client():
+    """
+    Авторизация с поддержкой двух ключей Google (Linux + Windows):
+    - выбирает случайно один ключ из двух;
+    - автоматически подбирает пути под ОС.
+    """
+
+    SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+
+    if os.name == "nt":  # Windows
+        GOOGLE_KEYS = [
+            r"C:\Project\delivery_calc\google_credentials.json",
+            r"C:\Project\delivery_calc\delivery_bot_2_credentials.json",
+        ]
+    else:  # Linux / сервер
+        GOOGLE_KEYS = [
+            "/root/delivery_calc/google_credentials.json",
+            "/root/delivery_calc/delivery_bot_2_credentials.json",
+        ]
+
+    for key_file in random.sample(GOOGLE_KEYS, len(GOOGLE_KEYS)):  # случайный порядок
+        try:
+            print(f"✅ Используем ключ: {key_file}")
+            creds = service_account.Credentials.from_service_account_file(
+                key_file, scopes=SCOPES
+            )
+            return gspread.authorize(creds)
+        except Exception as e:
+            print(f"⚠️ Ошибка при авторизации через {key_file}: {e}")
+
+    raise RuntimeError("❌ Не удалось авторизоваться ни одним ключом Google.")
+
 
 
 
@@ -294,8 +279,7 @@ def load_tariffs_from_google():
             return None
 
         # --- читаем таблицу ---
-        creds = load_credentials()
-        client = gspread.authorize(creds)
+        client = get_gspread_client()
         sheet = client.open_by_key(GOOGLE_SHEET_ID)
         ws = sheet.worksheet("Vehicles")
         rows = ws.get_all_records()  # список dict, ключи — оригинальные заголовки
