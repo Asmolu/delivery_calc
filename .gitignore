@@ -52,7 +52,7 @@ frontend/.DS_Store
 google_credentials.json
 google_credentials/
 credentials.json
-
+delivery_bot_2_credentials.json
 # === OTHER ===
 # OS
 .DS_Store
