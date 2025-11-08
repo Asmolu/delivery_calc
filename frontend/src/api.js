@@ -7,7 +7,7 @@ export async function fetchFactories() {
 }
 
 export async function fetchTariffs() {
-  const res = await fetch("/api/factories");
+  const res = await fetch("/api/factories");   
   if (!res.ok) throw new Error("Не удалось загрузить тарифы");
   return await res.json();
 }
