@@ -21,10 +21,6 @@ from gspread.exceptions import APIError
 
 app = FastAPI()
 
-# Путь к новой сборке фронта
-FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "../frontend/dist")
-app.mount("/assets", StaticFiles(directory=os.path.join(FRONTEND_DIR, "assets")), name="assets")
-
 
 # Разрешаем запросы с фронтенда (можно указать конкретно адрес)
 app.add_middleware(
@@ -1129,17 +1125,23 @@ async def quote(req: QuoteRequest):
 #def calculator_page():
 #    return FileResponse("../static/calculator.html")
 
-# Путь к собранному фронтенду
+# ===== Путь к фронтенду =====
 frontend_dir = os.path.join(os.path.dirname(__file__), "../frontend/dist")
 
-# Проверим, что папка есть
+# Смонтировать фронтенд после всех API-маршрутов
 if os.path.isdir(frontend_dir):
-    app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dir, "assets")), name="assets")
 
     @app.get("/{full_path:path}")
     async def serve_react_app(full_path: str):
-        """Отдаёт index.html для всех маршрутов React"""
-        return FileResponse(os.path.join(frontend_dir, "index.html"))
+        """
+        Возвращает index.html для всех React-маршрутов.
+        Работает для /, /admin, /calculator и т.д.
+        """
+        index_path = os.path.join(frontend_dir, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        return JSONResponse(status_code=404, content={"detail": "Frontend not built"})
 
 
 # ===== Локальный запуск =====
