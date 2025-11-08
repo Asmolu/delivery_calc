@@ -25,19 +25,6 @@ app = FastAPI()
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "../frontend/dist")
 app.mount("/assets", StaticFiles(directory=os.path.join(FRONTEND_DIR, "assets")), name="assets")
 
-# Главная страница (index.html)
-@app.get("/")
-def serve_root():
-    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
-
-# Для React-маршрутов (например, /admin, /calculator и т.д.)
-@app.get("/{full_path:path}")
-def serve_frontend(full_path: str):
-    file_path = os.path.join(FRONTEND_DIR, full_path)
-    if os.path.exists(file_path) and os.path.isfile(file_path):
-        return FileResponse(file_path)
-    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
-
 
 # Разрешаем запросы с фронтенда (можно указать конкретно адрес)
 app.add_middleware(
@@ -1141,11 +1128,6 @@ async def quote(req: QuoteRequest):
 #@app.get("/calculator")
 #def calculator_page():
 #    return FileResponse("../static/calculator.html")
-
-
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-import os
 
 # Путь к собранному фронтенду
 frontend_dir = os.path.join(os.path.dirname(__file__), "../frontend/dist")
