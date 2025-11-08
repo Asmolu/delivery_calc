@@ -22,7 +22,7 @@ export default function Calculator() {
 
       // подгружаем тарифы, чтобы достать список машин с тегом 'special'
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/tariffs");
+        const res = await fetch(`${window.location.origin}/api/tariffs`);
         const tariffs = await res.json();
 
         // поддержка русских и английских ключей
