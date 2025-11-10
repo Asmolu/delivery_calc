@@ -291,36 +291,7 @@ def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_t
     if not best_plan:
         return None, None
 
- 
-    # 🧩 Если включён флаг "+1 манипулятор" — добавляем один рейс вручную
-    if allow_mani and "manipulator" in {t.get("tag") or t.get("тег") for t in tariffs}:
-        # ищем подходящий тариф для манипулятора
-        mani_cap = 0.0
-        for t in tariffs:
-            if (t.get("tag") or t.get("тег")) == "manipulator":
-                mani_cap = _to_float(t.get("capacity_ton") or t.get("грузоподъёмность"))
-                break
-
-        if mani_cap > 0:
-            # грузим его "по полной", независимо от остатка
-            mani_cost, mani_desc = calculate_tariff_cost("manipulator", distance_km, mani_cap)
-            if mani_cost:
-                real_name = next(
-                    (t.get("название") or t.get("name")
-                     for t in tariffs
-                     if (t.get("тег") == "manipulator" or t.get("tag") == "manipulator")),
-                    "Манипулятор"
-                )
-                best_plan.append({
-                    "тип": "manipulator",
-                    "реальное_имя": real_name,
-                    "рейсы": 1,
-                    "вес_перевезено": round(mani_cap, 2),
-                    "стоимость": round(float(mani_cost), 2),
-                    "описание": mani_desc or "Принудительно добавлен манипулятор",
-                })
-                best_total += float(mani_cost)
-
+    return best_total, {"транспорт_детали": {"доп": best_plan}, "транспорт": best_human}
 
 
 def load_factories_from_google():
