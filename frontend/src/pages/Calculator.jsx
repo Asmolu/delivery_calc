@@ -292,7 +292,7 @@ export default function Calculator() {
               </tr>
             </thead>
             <tbody>
-              {result.детали.map((d, idx) => (
+              {result.детали?.map((d, idx) => (
                 <tr
                   key={idx}
                   className="border-b border-gray-800 hover:bg-gray-800/30 transition"

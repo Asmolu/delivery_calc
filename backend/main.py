@@ -1058,12 +1058,21 @@ async def quote(req: QuoteRequest):
 
     response = {
         "total_weight_t": round(total_weight, 2),
-        "sum_price": round(best_cost, 2),
+        "trips": len(best_plan),
+        "sum_price": round(best_cost + material_sum, 2),
         "transport_rows": trips_rows,
     }
-
-    print("✅ Успешный расчёт маршрута:", response)
-    return JSONResponse(response)
+    # Добавляем старое поле "детали" для совместимости со старым фронтом
+    response["детали"] = response["transport_rows"]
+    
+    # --- Отладка ошибок при возврате ответа ---
+    import traceback
+    try:
+        return JSONResponse(response)
+    except Exception as e:
+        print("❌ Ошибка при формировании ответа /quote():", e)
+        traceback.print_exc()
+        raise
 
 
 
