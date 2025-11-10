@@ -362,6 +362,7 @@ def load_factories_from_google():
 
     
 def load_tariffs_from_google():
+    global TARIFFS_CACHE
     """
     Читает лист 'Vehicles' и сохраняет tariffs.json (устойчиво к различиям в заголовках).
     """
@@ -456,10 +457,12 @@ def load_tariffs_from_google():
                 "заметки": str(note).strip(),
             })
 
-        with open("tariffs.json", "w", encoding="utf-8-sig") as f:
+        with open("/root/delivery_calc/tariffs.json", "w", encoding="utf-8-sig") as f:
             json.dump(tariffs, f, ensure_ascii=False, indent=2)
 
         print(f"✅ Тарифы обновлены ({len(tariffs)} записей)")
+        TARIFFS_CACHE = tariffs
+        print(f"💾 TARIFFS_CACHE обновлён ({len(TARIFFS_CACHE)} тарифов в памяти)")
         return {"status": "ok", "count": len(tariffs)}
 
     except Exception as e:
@@ -899,7 +902,9 @@ async def quote(req: QuoteRequest):
             print(f"⚠️ ВНИМАНИЕ: битая кириллица в запросе — {item.category} / {item.subtype}")
 
     factories = load_json(FACTORIES_FILE)
-    tariffs = load_json("tariffs.json")
+    global TARIFFS_CACHE
+    tariffs = TARIFFS_CACHE or load_json("/root/delivery_calc/tariffs.json")
+
 
     # Нормализация тарифов под compute_best_plan (ожидает англ. ключи)
     calc_tariffs = []
