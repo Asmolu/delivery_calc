@@ -1020,14 +1020,16 @@ async def quote(req: QuoteRequest):
 
     # === Новый блок расчёта рейсов на основе compute_best_plan ===
     print("🧩 DEBUG:", total_weight, distance_km, len(tariffs), allow_mani)
+
     selected_tag = "special" if req.selected_special and req.selected_special != "Не выбирать" else None
-    best_cost, best_plan = compute_best_plan(
-        total_weight, distance_km, calc_tariffs, allow_mani,
-        selected_tag=("special" if req.selected_special and req.selected_special != "Не выбирать" else None)
+    best_cost, plan_pack = compute_best_plan(
+        total_weight, distance_km, calc_tariffs, allow_mani, selected_tag=selected_tag
     )
 
+    # plan_pack — это словарь {"транспорт_детали": {"доп": [...]}, "транспорт": "..."}
+    trips_list = (plan_pack or {}).get("транспорт_детали", {}).get("доп", [])
 
-    if not best_plan or best_cost == 0:
+    if not trips_list or best_cost is None:
         print("⚠️ Нет подходящего маршрута — возвращаем пустой ответ пользователю")
         return JSONResponse({
             "error": "Нет подходящих маршрутов для выбранных параметров",
@@ -1039,35 +1041,44 @@ async def quote(req: QuoteRequest):
             }
         }, status_code=200)
 
-    # --- формируем таблицу рейсов ---
+    # --- формируем строки для сводной таблицы рейсов ---
     trips_rows = []
-    for p in best_plan:
-        title = "Длиномер" if p["tag"] == "long_haul" else "Манипулятор" if p["tag"] == "manipulator" else "Спецтранспорт"
-        bucket = "<20т" if p["bucket"] == "le20" else ">20т" if p["bucket"] == "gt20" else ""
+    for p in trips_list:
+        # p: {"тип","реальное_имя","рейсы","вес_перевезено","стоимость"}
+        title = p.get("реальное_имя") or (
+            "Манипулятор" if p.get("тип") == "manipulator"
+            else "Длинномер" if p.get("тип") == "long_haul"
+            else "Спецтранспорт"
+        )
         trips_rows.append({
-            "machine": f"{title} {bucket}".strip(),
+            "machine": title,
             "distance_km": round(distance_km, 2),
-            "load_t": round(p["load"], 2),
-            "price": round(p["price"], 2)
+            "load_t": round(float(p.get("вес_перевезено", 0) or 0), 2),
+            "price": round(float(p.get("стоимость", 0) or 0), 2),
+            "trips": int(p.get("рейсы", 0) or 0),
         })
 
+    # --- ответ ---
     response = {
-        "total_weight_t": round(total_weight, 2),
-        "trips": len(best_plan),
-        "sum_price": round(best_cost + material_sum, 2),
-        "transport_rows": trips_rows,
-    }
-    # Добавляем старое поле "детали" для совместимости со старым фронтом
-    response["детали"] = response["transport_rows"]
+        # сводка по транспортному плану
+        "transport": plan_pack.get("транспорт"),
+        "транспорт": plan_pack.get("транспорт"),  # для русских ключей, если надо
+        "транспорт_детали": plan_pack.get("транспорт_детали"),
 
-    # --- Отладка ошибок при возврате ответа ---
-    import traceback
-    try:
-        return JSONResponse(response)
-    except Exception as e:
-        print("❌ Ошибка при формировании ответа /quote():", e)
-        traceback.print_exc()
-        raise
+        # агрегаты
+        "total_weight_t": round(total_weight, 2),
+        "trips": sum(row["trips"] for row in trips_rows),
+        "sum_price": round(best_cost + material_sum, 2),
+
+        # строки для небольшой таблицы «рейсы»
+        "transport_rows": trips_rows,
+
+        # ВАЖНО: в «детали» возвращаем ПОЗИЦИИ ПО ЗАВОДАМ,
+        # именно их рисует ваша большая таблица на фронте
+        "детали": shipment_details,
+    }
+
+    return JSONResponse(response)
 
 
 
