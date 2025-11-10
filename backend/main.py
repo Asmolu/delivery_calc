@@ -1119,7 +1119,8 @@ async def quote(req: QuoteRequest):
         distance_km = 0.0
 
     # Разрешён ли манипулятор
-    allow_mani = (req.transport_type in ("automatic", "auto", "manipulator")) or req.add_manipulator
+    allow_mani = bool(req.add_manipulator)
+
 
     # Общая сумма материалов
     material_sum = sum(d["стоимость_материала"] for d in shipment_details)
