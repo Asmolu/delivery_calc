@@ -138,7 +138,7 @@ def compute_best_plan(weight_t: float, distance_km: float, tariffs: list[dict], 
     long_gt20 = sorted(long_gt20, key=lambda t: _price_for(t, distance_km))[:1]
 
     if not long_gt20:
-        return None  # длиномер обязателен минимум с >20 корзиной
+        return None, []  # возврат кортежа, чтобы не упало при распаковке
 
     cap_long = _vehicle_capacity(long_gt20[0]) or 39.5
     best_cost, best_plan = float("inf"), None
