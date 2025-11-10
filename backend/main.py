@@ -928,21 +928,41 @@ async def quote(req: QuoteRequest):
         """
         Подбирает оптимальное сочетание рейсов (≤20т, >20т, манипулятор, special)
         для минимальной стоимости доставки данного веса с завода.
+        ✅ Учитывает реальную грузоподъёмность и разбивает вес по рейсам.
         """
         options = []
         for tag in ["long_haul", "manipulator", "special"]:
             cap = type_capacity(tag)
             if cap <= 0:
                 continue
+
+            # Количество рейсов = вес / грузоподъёмность (с округлением вверх)
             trips = math.ceil(weight / cap)
-            cost, _ = calculate_tariff_cost(tag, distance_km, weight)
-            if cost:
-                options.append((tag, trips, cost * trips))
+            if trips <= 0:
+                continue
+
+            # Стоимость одного рейса
+            base_cost, _ = calculate_tariff_cost(tag, distance_km, cap)
+            if not base_cost:
+                continue
+
+            total_cost = trips * base_cost
+            options.append((tag, trips, total_cost, cap))
+
         if not options:
             return None
-        # выберем минимальную по общей стоимости
+
+        # выбираем комбинацию с минимальной общей стоимостью
         best = min(options, key=lambda x: x[2])
-        return best  # (tag, trips, total_cost)
+        best_tag, best_trips, best_cost, best_cap = best
+
+        # ⚖️ защита от перегруза — если общий вес > trips * cap, добавляем ещё один рейс
+        if weight > best_trips * best_cap:
+            best_trips += 1
+            best_cost += base_cost
+
+        return best_tag, best_trips, best_cost
+
 
 
     # --- 5.2 Базовые рейсы по уменьшенному весу (после доп.рейсов) ---
