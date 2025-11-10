@@ -972,6 +972,8 @@ async def quote(req: QuoteRequest):
         opt = optimal_combo_for_factory(f, remain, next(d["расстояние_км"] for d in shipment_details if d["завод"] == f))
         if opt:
             tag, trips, cost = opt
+            # 👇 Применяем реальный тип транспорта для этого завода
+            transport_type = tag
             info["base_trips"] = trips
             info["base_tag"] = tag
             info["base_cost"] = cost
@@ -1009,8 +1011,8 @@ async def quote(req: QuoteRequest):
                 share = d["вес_тонн"] / weight_sum
                 # стоимость одного рейса для этой позиции (старым способом)
                 # d["стоимость_доставки"] у нас сейчас обнулена — получим ставку:
-                _, tariff_info = calculate_tariff_cost(transport_type, d["расстояние_км"], d["вес_тонн"])
-                one_trip_cost, _ = calculate_tariff_cost(transport_type, d["расстояние_км"], d["вес_тонн"])
+                _, tariff_info = calculate_tariff_cost(info["base_tag"], d["расстояние_км"], d["вес_тонн"])
+                one_trip_cost, _ = calculate_tariff_cost(info["base_tag"], d["расстояние_км"], d["вес_тонн"])
                 if one_trip_cost is None:
                     one_trip_cost = 0
                 d["стоимость_доставки"] += round(one_trip_cost * share * base_trips, 2)
