@@ -143,10 +143,14 @@ def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_t
     # Отфильтруем явно запрещённые типы
     valid = []
     for t in tariffs:
-        try:
-            cap = float(str(t["capacity_ton"]).replace("т", "").replace("T", "").strip())
-        except:
+        val = t.get("capacity_ton") or t.get("грузоподъёмность")
+        if not val:
             continue
+        try:
+            cap = float(str(val).replace(",", ".").replace("т", "").replace("T", "").strip())
+        except ValueError:
+            continue
+
         if cap <= 0:
             continue
         t["cap"] = cap
@@ -154,6 +158,7 @@ def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_t
         t["base_cost"] = float(t.get("price", 0))
         t["per_km_cost"] = float(t.get("per_km", 0))
         t["total_cost"] = t["base_cost"] + distance_km * t["per_km_cost"]
+        print("✅ Добавлен тариф:", t.get("name"), cap, t["total_cost"])
         valid.append(t)
 
     if not valid:
