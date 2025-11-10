@@ -95,6 +95,7 @@ export default function Calculator() {
           quantity: parseInt(it.quantity),
         })),
       };
+      console.log("📤 Payload отправляется в /quote:", payload);
       const data = await getQuote(payload);
       setResult(data);
     } catch (err) {

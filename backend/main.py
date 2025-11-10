@@ -885,6 +885,18 @@ def cheapest_factory_for(tag: str, factory_ship: dict, shipment_details: list):
 @app.post("/quote")
 async def quote(req: QuoteRequest):
 
+    import json
+    try:
+        raw = await req.__dict__
+    except Exception:
+        raw = {}
+    print("\n=== 🧾 RAW REQUEST (получен от фронта) ===")
+    try:
+        print(json.dumps(req.dict(by_alias=True), ensure_ascii=False, indent=2))
+    except Exception as e:
+        print("Ошибка при выводе JSON:", e)
+    print("========================================\n")
+
     # Диагностика: если категории пришли битые
     for item in req.items:
         if "?" in item.category or "?" in item.subtype:
