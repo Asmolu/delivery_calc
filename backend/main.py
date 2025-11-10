@@ -924,13 +924,41 @@ async def quote(req: QuoteRequest):
             "стоимость_рейса": round(trip_cost or 0, 2)
         })
 
+    def optimal_combo_for_factory(factory_name, weight, distance_km):
+        """
+        Подбирает оптимальное сочетание рейсов (≤20т, >20т, манипулятор, special)
+        для минимальной стоимости доставки данного веса с завода.
+        """
+        options = []
+        for tag in ["long_haul", "manipulator", "special"]:
+            cap = type_capacity(tag)
+            if cap <= 0:
+                continue
+            trips = math.ceil(weight / cap)
+            cost, _ = calculate_tariff_cost(tag, distance_km, weight)
+            if cost:
+                options.append((tag, trips, cost * trips))
+        if not options:
+            return None
+        # выберем минимальную по общей стоимости
+        best = min(options, key=lambda x: x[2])
+        return best  # (tag, trips, total_cost)
+
+
     # --- 5.2 Базовые рейсы по уменьшенному весу (после доп.рейсов) ---
     total_trips = 0
     for f, info in factory_ship.items():
         remain = max(info["weight"], 0.0)
-        trips = math.ceil(remain / base_cap) if base_cap > 0 else 0
-        info["base_trips"] = trips
-        total_trips += trips
+        opt = optimal_combo_for_factory(f, remain, next(d["расстояние_км"] for d in shipment_details if d["завод"] == f))
+        if opt:
+            tag, trips, cost = opt
+            info["base_trips"] = trips
+            info["base_tag"] = tag
+            info["base_cost"] = cost
+            total_trips += trips
+        else:
+            info["base_trips"] = 0
+
     # плюс считаем доп.рейсы как тоже рейсы
     total_trips += sum(len(info["extra_trips"]) for info in factory_ship.values())
 
