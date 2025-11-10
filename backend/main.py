@@ -180,23 +180,20 @@ def _cost_one_trip(tag: str, distance_km: float, load_t: float, tariffs: list[di
 
 def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_tag=None, require_one_mani=False):
     """
-    Подбираем план рейсов для total_weight на distance_km по тарифам tariffs.
-    - Манипулятор всегда участвует в оптимизации, если allow_mani=True.
-    - Если require_one_mani=True: гарантируем минимум 1 рейс манипулятором.
-      Если оптимизация сама выбрала манипулятор — ничего не добавляем.
-      Иначе форсим ровно один рейс манипулятором (с грузом), а остаток возим другими.
+    Расчёт оптимального плана доставки.
+    Манипулятор и длинномер участвуют на равных.
+    Если выбран конкретный тип (selected_tag == 'manipulator' / 'long_haul'),
+    то подбираются только такие рейсы.
+    Если require_one_mani=True — гарантируем хотя бы один рейс манипулятором.
     """
 
-    # --- Вспомогалки ---
+    # === Вспомогалки ===
     def tag_capacity(tag: str) -> float:
         caps = []
         for t in tariffs:
             if (t.get("tag") or t.get("тег")) == tag:
                 caps.append(_to_float(t.get("capacity_ton") or t.get("грузоподъёмность")))
         return max(caps) if caps else 0.0
-
-    def plan_cost(plan):
-        return sum(float(p.get("стоимость", 0) or 0) * int(p.get("рейсы", 1) or 1) for p in plan)
 
     def make_trip_entry(tag, load, cost, desc):
         real_name = next(
@@ -214,11 +211,13 @@ def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_t
             "описание": desc,
         }
 
+    def plan_cost(plan):
+        return sum(float(p.get("стоимость", 0)) for p in plan)
+
+    # === Простой жадный подбор ===
     def optimize(weight, allowed_tags):
-        """Грязно-жадная оптимизация: каждый рейс везём максимально возможной машиной из allowed_tags."""
         remain = float(weight)
         trips = []
-        # сорт: от наибольшей грузоподъёмности к меньшей
         caps = sorted([(tag, tag_capacity(tag)) for tag in allowed_tags], key=lambda x: x[1], reverse=True)
         if not caps or caps[0][1] <= 0:
             return None
@@ -237,58 +236,51 @@ def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_t
             remain -= picked["вес_перевезено"]
         return trips
 
-    # --- Список разрешённых тегов для базовой оптимизации ---
-    base_allowed = {"long_haul"}
-    if allow_mani:
-        base_allowed.add("manipulator")
-    if selected_tag:  # спецтранспорт принудительно
-        base_allowed = {selected_tag}
+    # === Определяем, кто участвует в подборе ===
+    if selected_tag in ("manipulator", "long_haul"):
+        allowed_tags = {selected_tag}
+    else:
+        allowed_tags = {"long_haul"}
+        if allow_mani:
+            allowed_tags.add("manipulator")
 
-    # 1) Базовая оптимизация (манипулятор участвует, если allow_mani=True)
-    base_plan = optimize(total_weight, base_allowed)
-    if not base_plan:
+    # === Кандидаты для проверки ===
+    base_plan = optimize(total_weight, allowed_tags)
+
+    # Проверяем смешанные комбинации: длинномер + манипулятор
+    mixed_plan = None
+    if "manipulator" in allowed_tags and "long_haul" in allowed_tags:
+        mani_cap = tag_capacity("manipulator")
+        mani_load = min(mani_cap, total_weight)  # груз, который возьмёт манипулятор
+        remain = max(0.0, total_weight - mani_load)
+        mani_cost, mani_desc = calculate_tariff_cost("manipulator", distance_km, mani_load)
+        if mani_cost:
+            rest = optimize(remain, {"long_haul"})
+            if rest:
+                mixed_plan = [make_trip_entry("manipulator", mani_load, mani_cost, mani_desc)] + rest
+
+    # === Выбираем лучший план по цене ===
+    candidates = [p for p in [base_plan, mixed_plan] if p]
+    if not candidates:
         return None, None
+    best_plan = min(candidates, key=lambda x: plan_cost(x))
 
-    # Если манипулятор не обязателен — отдаём базовый план
-    if not require_one_mani:
-        best_human = ", ".join(sorted({t["реальное_имя"] for t in base_plan}))
-        return plan_cost(base_plan), {"транспорт_детали": {"доп": base_plan}, "транспорт": best_human}
+    # === Если требуется форсировать манипулятор ===
+    if require_one_mani and "manipulator" in allowed_tags:
+        has_mani = any(p["тип"] == "manipulator" for p in best_plan)
+        if not has_mani:
+            mani_cap = tag_capacity("manipulator")
+            mani_load = min(mani_cap, total_weight)
+            mani_cost, mani_desc = calculate_tariff_cost("manipulator", distance_km, mani_load)
+            if mani_cost:
+                forced = make_trip_entry("manipulator", mani_load, mani_cost, mani_desc)
+                remain = max(0.0, total_weight - mani_load)
+                rest = optimize(remain, {"long_haul"}) if remain > 1e-6 else []
+                best_plan = [forced] + (rest or [])
 
-    # Если обязателен: если в базовом плане уже есть манипулятор — оставляем как есть
-    if any(p["тип"] == "manipulator" for p in base_plan):
-        best_human = ", ".join(sorted({t["реальное_имя"] for t in base_plan}))
-        return plan_cost(base_plan), {"транспорт_детали": {"доп": base_plan}, "транспорт": best_human}
-
-    # 2) Форсируем ровно один рейс манипулятором:
-    mani_cap = tag_capacity("manipulator") if allow_mani else 0.0
-    if mani_cap <= 0:
-        # манипулятор недоступен — fallback к базовому (хотя по идее не должно быть)
-        best_human = ", ".join(sorted({t["реальное_имя"] for t in base_plan}))
-        return plan_cost(base_plan), {"транспорт_детали": {"доп": base_plan}, "транспорт": best_human}
-
-    mani_load = min(total_weight, mani_cap)  # манипулятор везёт реальный груз
-    mani_cost, mani_desc = calculate_tariff_cost("manipulator", distance_km, mani_load)
-    if not mani_cost:
-        # если почему-то нет тарифа — fallback к базовому
-        best_human = ", ".join(sorted({t["реальное_имя"] for t in base_plan}))
-        return plan_cost(base_plan), {"транспорт_детали": {"доп": base_plan}, "транспорт": best_human}
-
-    forced_mani = make_trip_entry("manipulator", mani_load, mani_cost, mani_desc)
-    remain_weight = max(0.0, total_weight - mani_load)
-
-    # Остаток оптимизируем БЕЗ манипулятора (чтобы ровно 1 рейс манипулятором)
-    rest_allowed = set(base_allowed) - {"manipulator"} if allow_mani else set(base_allowed)
-    rest_plan = optimize(remain_weight, rest_allowed) if remain_weight > 1e-6 else []
-    if rest_plan is None:
-        # если не смогли повезти остаток без манипулятора — отдаём базовый
-        best_human = ", ".join(sorted({t["реальное_имя"] for t in base_plan}))
-        return plan_cost(base_plan), {"транспорт_детали": {"доп": base_plan}, "транспорт": best_human}
-
-    forced_plan = [forced_mani] + rest_plan
-
-    # Сравнивать с базовым планом не нужно: требование — минимум 1 манипулятор.
-    best_human = ", ".join(sorted({t["реальное_имя"] for t in forced_plan}))
-    return plan_cost(forced_plan), {"транспорт_детали": {"доп": forced_plan}, "транспорт": best_human}
+    # === Формируем человеко-понятное описание ===
+    best_human = ", ".join(sorted({t["реальное_имя"] for t in best_plan}))
+    return plan_cost(best_plan), {"транспорт_детали": {"доп": best_plan}, "транспорт": best_human}
 
 
 
