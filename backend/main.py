@@ -126,82 +126,102 @@ def _price_for(tariff: dict, d_km: float) -> float:
     extra_km = max(0.0, d_km - max(dmin, 0.0))
     return base + per_km * extra_km
 
-def compute_best_plan(weight_t: float, distance_km: float, tariffs: list[dict], allow_manipulator: bool):
+def compute_best_plan(weight_t: float, distance_km: float, tariffs: list[dict], allow_manipulator: bool, selected_tag: str | None = None):
     """
     Возвращает (итоговая_цена, список_рейсов),
-    где каждый рейс: {"tag": "...", "bucket": "le20|gt20", "capacity": 39.5, "load": X, "price": Y}
+    где каждый рейс: {"tag": "...", "bucket": "le20|gt20|any", "capacity": 39.5, "load": X, "price": Y}
     """
-    # кандидаты длиномера
+    # Отбор по контексту: если выбран special — берём только special-тарифы
+    if selected_tag == "special":
+        special = [t for t in tariffs if t.get("tag") == "special" and _distance_ok(t, distance_km)]
+        if not special:
+            print("⚠️ Нет тарифов для спецтранспорта")
+            return 0, []
+        t = sorted(special, key=lambda t: _price_for(t, distance_km))[0]
+        cap = _vehicle_capacity(t)
+        rem = weight_t
+        plan = []
+        while rem > 0:
+            load = min(rem, cap)
+            plan.append({
+                "tag": "special",
+                "bucket": "any",
+                "capacity": cap,
+                "load": load,
+                "price": _price_for(t, distance_km),
+            })
+            rem -= load
+        total_cost = sum(p["price"] for p in plan)
+        return total_cost, plan
+
+    # --- Автоматический подбор ---
     long_le20 = [t for t in tariffs if t.get("tag") == "long_haul" and _is_le20_bucket(t) and _distance_ok(t, distance_km)]
     long_gt20 = [t for t in tariffs if t.get("tag") == "long_haul" and _is_gt20_bucket(t) and _distance_ok(t, distance_km)]
-    long_le20 = sorted(long_le20, key=lambda t: _price_for(t, distance_km))[:1]
-    long_gt20 = sorted(long_gt20, key=lambda t: _price_for(t, distance_km))[:1]
+    mani = [t for t in tariffs if t.get("tag") == "manipulator" and _distance_ok(t, distance_km)] if allow_manipulator else []
 
-    if not long_gt20:
-        return None, []  # возврат кортежа, чтобы не упало при распаковке
+    pick = lambda lst: sorted(lst, key=lambda t: _price_for(t, distance_km))[0] if lst else None
+    t_long_le20 = pick(long_le20)
+    t_long_gt20 = pick(long_gt20)
+    t_mani = pick(mani)
 
-    cap_long = _vehicle_capacity(long_gt20[0]) or 39.5
-    best_cost, best_plan = float("inf"), None
+    if not any([t_long_gt20, t_mani]):
+        print("⚠️ Нет подходящих тарифов для подбора транспорта")
+        return 0, []
+
+    best_cost, best_plan = float("inf"), []
 
     def plan_cost(plan):
         return sum(p["price"] for p in plan)
 
-    # Вариант A: только длиномеры по >20 до полного закрытия
-    rem = weight_t
-    planA = []
-    while rem > 0:
-        load = min(rem, cap_long)
-        # если последний «хвост» <=20 и есть дешевый ≤20 тариф — используем его
-        if load <= 20 and long_le20:
-            t = long_le20[0]
-            price = _price_for(t, distance_km)
-            planA.append({"tag":"long_haul","bucket":"le20","capacity":cap_long,"load":load,"price":price})
-        else:
-            t = long_gt20[0]
-            price = _price_for(t, distance_km)
-            planA.append({"tag":"long_haul","bucket":"gt20","capacity":cap_long,"load":load,"price":price})
-        rem -= load
-    best_cost, best_plan = plan_cost(planA), planA
+    def add_trip(tariff, load):
+        return {
+            "tag": tariff.get("tag"),
+            "bucket": "gt20" if _is_gt20_bucket(tariff) else "le20" if _is_le20_bucket(tariff) else "any",
+            "capacity": _vehicle_capacity(tariff),
+            "load": load,
+            "price": _price_for(tariff, distance_km),
+        }
 
-    # Вариант B: последнюю недогрузку возит манипулятор, если выгоднее и разрешён
-    if allow_manipulator:
-        mani = [t for t in tariffs if t.get("tag") == "manipulator" and _distance_ok(t, distance_km)]
-        if mani:
-            mani = sorted(mani, key=lambda t: _price_for(t, distance_km))[0]
-            cap_mani = _vehicle_capacity(mani) or 9.5
+    # Вариант 1: только длиномеры
+    if t_long_gt20:
+        cap = _vehicle_capacity(t_long_gt20)
+        rem = weight_t
+        planA = []
+        while rem > 0:
+            load = min(rem, cap)
+            planA.append(add_trip(t_long_gt20, load))
+            rem -= load
+        best_cost, best_plan = plan_cost(planA), planA
 
-            rem = weight_t
-            planB = []
-            # полные длиномеры >20
-            while rem > cap_mani:
-                load = min(rem, cap_long)
-                # если следующий остаток после этого рейса <= cap_mani — остановимся
-                if rem - load <= cap_mani:
-                    break
-                price = _price_for(long_gt20[0], distance_km)
-                planB.append({"tag":"long_haul","bucket":"gt20","capacity":cap_long,"load":load,"price":price})
-                rem -= load
-            # остаток возит манипулятор/или ≤20 длиномер
-            if rem > 0:
-                if rem <= cap_mani:
-                    price = _price_for(mani, distance_km)
-                    planB.append({"tag":"manipulator","bucket":"any","capacity":cap_mani,"load":rem,"price":price})
-                else:
-                    # остаток > cap_mani -> последний длиномер, но если ≤20 доступен и rem<=20 — он
-                    if rem <= 20 and long_le20:
-                        t = long_le20[0]
-                    else:
-                        t = long_gt20[0]
-                    price = _price_for(t, distance_km)
-                    planB.append({"tag":"long_haul","bucket":"gt20" if t in long_gt20 else "le20",
-                                  "capacity":cap_long,"load":rem,"price":price})
-            costB = plan_cost(planB)
-            if costB < best_cost:
-                best_cost, best_plan = costB, planB
-    if not best_plan or best_cost is None:
+    # Вариант 2: длиномеры + манипулятор (если выгоднее)
+    if allow_manipulator and t_long_gt20 and t_mani:
+        cap_long = _vehicle_capacity(t_long_gt20)
+        cap_mani = _vehicle_capacity(t_mani)
+        rem = weight_t
+        planB = []
+        while rem > cap_mani:
+            load = min(rem, cap_long)
+            if rem - load <= cap_mani:
+                break
+            planB.append(add_trip(t_long_gt20, load))
+            rem -= load
+        if rem > 0:
+            if rem <= cap_mani:
+                planB.append(add_trip(t_mani, rem))
+            elif rem <= 20 and t_long_le20:
+                planB.append(add_trip(t_long_le20, rem))
+            else:
+                planB.append(add_trip(t_long_gt20, rem))
+        costB = plan_cost(planB)
+        if costB < best_cost:
+            best_cost, best_plan = costB, planB
+
+    if not best_plan:
         print("⚠️ Не найден подходящий план перевозки, возвращаем пустой ответ")
         return 0, []
+
     return best_cost, best_plan
+
 
 
 def load_factories_from_google():
