@@ -126,92 +126,133 @@ def _price_for(tariff: dict, d_km: float) -> float:
     extra_km = max(0.0, d_km - max(dmin, 0.0))
     return base + per_km * extra_km
 
-def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_tag=None):
-    """
-    Подбор оптимальной комбинации рейсов для покрытия total_weight.
-    """
-    import math
-    from itertools import combinations_with_replacement
+def _matches_weight_rule(weight_rule: str | None, load_t: float) -> bool:
+    if not weight_rule or str(weight_rule).strip().lower() == "any":
+        return True
+    s = str(weight_rule).replace("т", "").replace("T", "").strip()
+    try:
+        if "≤" in weight_rule or "<=" in weight_rule:
+            lim = float(s.replace("≤", "").replace("<=", ""))
+            return load_t <= lim + 1e-6
+        if ">" in weight_rule:
+            lim = float(s.replace(">", ""))
+            return load_t > lim + 1e-6
+    except Exception:
+        return True
+    return True
 
-    # Отфильтруем по тегу, если выбран спецтранспорт
-    if selected_tag:
-        tariffs = [t for t in tariffs if t.get("tag") == selected_tag]
-        if not tariffs:
-            print("⚠️ Нет тарифов для спецтранспорта")
-            return None, None
-
-    # Отфильтруем явно запрещённые типы
-    valid = []
+def _cost_one_trip(tag: str, distance_km: float, load_t: float, tariffs: list[dict]):
+    """
+    Возвращает (цена, описание) для ОДНОГО рейса заданной загрузки.
+    Учитывает:
+      - тег транспорта
+      - правило веса (≤20т / >20т / any)
+      - диапазон дистанции (или надбавку, если dmin==dmax и поехали дальше)
+    Берёт минимальную подходящую цену среди строк одного тега.
+    """
+    best = None  # (price, desc)
     for t in tariffs:
-        val = t.get("capacity_ton") or t.get("грузоподъёмность") or ""
-        try:
-            cap = float(str(val).replace(",", ".").replace("т", "").replace("T", "").strip())
-        except (ValueError, TypeError):
+        if (t.get("tag") or t.get("тег")) != tag:
             continue
 
-        if cap <= 0:
+        weight_rule = t.get("weight_if") or t.get("вес_если")
+        if not _matches_weight_rule(weight_rule, load_t):
             continue
-
-        # безопасно берём цену и за км
-        try:
-            base = float(t.get("price") or t.get("цена") or 0)
-        except (ValueError, TypeError):
-            base = 0.0
-
-        try:
-            per_km = float(t.get("per_km") or t.get("за_км") or 0)
-        except (ValueError, TypeError):
-            per_km = 0.0
 
         dmin = float(t.get("distance_min") or t.get("дистанция_мин") or 0)
         dmax = float(t.get("distance_max") or t.get("дистанция_макс") or dmin)
+        base = float(t.get("price") or t.get("цена") or 0)
+        per_km = float(t.get("per_km") or t.get("за_км") or 0)
+        desc = (t.get("desc") or t.get("описание") or "").strip()
 
-        t["cap"] = cap
-        t["base_cost"] = base
-        t["per_km_cost"] = per_km
-        t["total_cost"] = base + per_km * distance_km
-        valid.append(t)
+        price = None
+        if dmin <= distance_km <= dmax:
+            price = base + per_km * 0
+        elif dmin == dmax and distance_km > dmax:
+            # “>120 км” и т.п.: надбавка за каждый км дальше границы
+            price = base + per_km * (distance_km - dmax)
 
-    if not valid:
-        print("⚠️ Нет подходящих тарифов после фильтрации")
-        return None, None
+        if price is not None:
+            if best is None or price < best[0]:
+                best = (price, desc)
 
-    # сортируем по цене за тонну (чтобы оптимально заполнять)
-    valid.sort(key=lambda t: t["total_cost"] / t["cap"])
+    return best  # или None
 
-    plan = []
-    remaining = total_weight
-    total_cost = 0.0
+def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_tag=None):
+    """
+    Подбираем последовательность рейсов под общий вес.
+    Каждый рейс считаем через calculate_tariff_cost(...) — так гарантируем,
+    что учитывается диапазон дистанции и правило веса (≤20 / >20).
+    """
+    # какие теги вообще разрешены
+    allowed_tags = {"long_haul"}
+    if allow_mani:
+        allowed_tags.add("manipulator")
+    if selected_tag:
+        allowed_tags = {selected_tag}  # если пользователь выбрал спец, используем только его
 
-    for t in valid:
-        if remaining <= 0:
-            break
-        count = int(remaining // t["cap"])
-        if remaining % t["cap"] > 0:
-            count += 1 if count == 0 else 0  # если остаток, добавляем ещё 1 рейс
+    # грузоподъёмность по тегам
+    def tag_capacity(tag: str) -> float:
+        caps = []
+        for t in tariffs:
+            if (t.get("tag") or t.get("тег")) == tag:
+                caps.append(_to_float(t.get("capacity_ton") or t.get("грузоподъёмность")))
+        return max(caps) if caps else 0.0
 
-        if count > 0:
-            moved = min(remaining, count * t["cap"])
-            cost = count * t["total_cost"]
-            plan.append({
-                "тип": t.get("tag"),
-                "реальное_имя": t.get("name"),
-                "рейсы": count,
-                "вес_перевезено": round(moved, 2),
-                "стоимость": round(cost, 2),
+    best_total = None
+    best_plan = None
+    best_human = None
+
+    # перебираем разрешённые теги
+    for tag in allowed_tags:
+        cap = tag_capacity(tag)
+        if cap <= 0:
+            continue
+
+        remain = float(total_weight)
+        trips = []
+        total_cost = 0.0
+
+        # гоним нужное число рейсов, пока не вывезем весь вес
+        while remain > 0:
+            load = min(remain, cap)
+            # цена за один рейс для этой загрузки и расстояния
+            one_cost, desc = calculate_tariff_cost(tag, distance_km, load)
+            if not one_cost:
+                # для этого тега нет валидного тарифа на такие дистанцию/вес — весь тег отпадает
+                trips = []
+                total_cost = None
+                break
+
+            # реальное имя машины (по первой подходящей строке)
+            real_name = next(
+                (t.get("name") or t.get("название")
+                 for t in tariffs
+                 if (t.get("tag") == tag or t.get("тег") == tag)),
+                tag
+            )
+
+            trips.append({
+                "тип": tag,
+                "реальное_имя": real_name,
+                "рейсы": 1,
+                "вес_перевезено": round(load, 2),
+                "стоимость": round(float(one_cost), 2),
+                "описание": desc,
             })
-            remaining -= moved
-            total_cost += cost
+            total_cost += float(one_cost)
+            remain -= load
 
-    if remaining > 0:
-        print(f"⚠️ Осталось {remaining:.2f} тонн без рейса")
+        if trips and (best_total is None or total_cost < best_total):
+            best_total = total_cost
+            best_plan = trips
+            # красивое имя набора машин: «Длинномер DAF» и т.п.
+            best_human = ", ".join(sorted({t["реальное_имя"] for t in trips}))
 
-    if not plan:
-        print("⚠️ Нет подходящих тарифов для подбора транспорта")
+    if not best_plan:
         return None, None
 
-    print(f"✅ Составлен план: {plan}")
-    return total_cost, {"транспорт_детали": {"доп": plan}, "транспорт": ", ".join(p['реальное_имя'] for p in plan)}
+    return best_total, {"транспорт_детали": {"доп": best_plan}, "транспорт": best_human}
 
 
 
@@ -1020,6 +1061,7 @@ async def quote(req: QuoteRequest):
                 "завод": f["name"],
                 "машина": real_name,
                 "tag": transport_type,
+                "реальное_имя_машины": real_name,
                 "кол-во": item.quantity,
                 "вес_тонн": round(p["weight_ton"] * item.quantity, 2),
                 "расстояние_км": round(dist, 2),
@@ -1055,17 +1097,12 @@ async def quote(req: QuoteRequest):
     # plan_pack — это словарь {"транспорт_детали": {"доп": [...]}, "транспорт": "..."}
     trips_list = (plan_pack or {}).get("транспорт_детали", {}).get("доп", [])
 
-    if not trips_list or best_cost is None:
-        print("⚠️ Нет подходящего маршрута — возвращаем пустой ответ пользователю")
-        return JSONResponse({
-            "error": "Нет подходящих маршрутов для выбранных параметров",
-            "debug": {
-                "total_weight": total_weight,
-                "distance_km": distance_km,
-                "allow_mani": allow_mani,
-                "selected_tag": selected_tag
-            }
-        }, status_code=200)
+    if trips_list and best_cost is not None and len(shipment_details) == 1:
+        shipment_details[0]["стоимость_доставки"] = round(best_cost, 2)
+        # и дадим человеко-читаемое описание тарифов по рейсам:
+        shipment_details[0]["тариф"] = " + ".join(
+            (r.get("описание") or r.get("реальное_имя") or "") for r in trips_list
+        )
 
     # --- формируем строки для сводной таблицы рейсов ---
     trips_rows = []

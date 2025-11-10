@@ -322,6 +322,47 @@ export default function Calculator() {
                   💰 Итого: {result["итого"]?.toLocaleString() ?? "—"} ₽
                 </p>
               </div>
+              {/* === Детали рейсов (если есть) === */}
+              {Array.isArray(result?.["транспорт_детали"]?.доп) &&
+                result["транспорт_детали"].доп.length > 0 && (
+                  <div className="mt-6 bg-gray-800/40 p-4 rounded-lg">
+                    <h3 className="text-lg font-semibold mb-2">🚚 Детали рейсов</h3>
+                    <table className="w-full text-sm">
+                      <thead className="text-gray-400 border-b border-gray-700">
+                        <tr>
+                          <th className="p-2 text-left">Машина</th>
+                          <th className="p-2 text-left">Вес (т)</th>
+                          <th className="p-2 text-left">Стоимость (₽)</th>
+                          <th className="p-2 text-left">Описание тарифа</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {result["транспорт_детали"].доп.map((trip, i) => (
+                          <tr
+                            key={i}
+                            className="border-b border-gray-800 hover:bg-gray-800/20"
+                          >
+                            <td className="p-2">
+                              {trip["реальное_имя"] ||
+                                (trip["тип"] === "manipulator"
+                                  ? "Манипулятор"
+                                  : trip["тип"] === "long_haul"
+                                  ? "Длинномер"
+                                  : "Спецтранспорт")}
+                            </td>
+                            <td className="p-2">{trip["вес_перевезено"]}</td>
+                            <td className="p-2">
+                              {Number(trip["стоимость"] || 0).toLocaleString()}
+                            </td>
+                            <td className="p-2 text-gray-400">
+                              {trip["описание"] || "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
             </>
           ) : (
             <p className="text-gray-400 mt-4">
@@ -330,54 +371,6 @@ export default function Calculator() {
           )}
         </motion.div>
       ) : null}
-
-      {/* === Транспорт (сводка + детали) === */}
-      {result?.["транспорт"] && (
-        <div className="mt-6 card-glass p-4 rounded-xl">
-          <p className="text-gray-300 text-sm mb-2">
-            <span className="font-semibold">🚚 Транспорт:</span> {result["транспорт"]}
-          </p>
-
-          {result["транспорт_детали"] && (
-            <table className="text-sm">
-              <tbody>
-                {/* Базовый транспорт */}
-                <tr>
-                  <td className="pr-3 text-gray-400">Базовый:</td>
-                  <td>
-                    {(() => {
-                      const base = result["транспорт_детали"]?.базовый || {};
-                      const human =
-                        base.реальное_имя ||
-                        (base.тип === "manipulator"
-                          ? "Манипулятор"
-                          : base.тип === "long_haul"
-                          ? "Длинномер"
-                          : base.тип || "—");
-                      const trips = base.рейсы ?? 0;
-                      return `${human} × ${trips}`;
-                    })()}
-                  </td>
-                </tr>
-
-                {/* Доп. рейсы */}
-                {Array.isArray(result["транспорт_детали"]?.доп) &&
-                  result["транспорт_детали"].доп.length > 0 &&
-                  result["транспорт_детали"].доп.map((e, i) => (
-                    <tr key={i}>
-                      <td className="pr-3 text-gray-400">
-                        {i === 0 ? "Доп. рейсы:" : ""}
-                      </td>
-                      <td>
-                        {e.реальное_имя || e.название} × {e.рейсы}
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
     </motion.div>
   );
 }
