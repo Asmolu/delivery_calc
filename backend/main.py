@@ -1015,17 +1015,13 @@ async def quote(req: QuoteRequest):
     # Общая сумма материалов
     material_sum = sum(d["стоимость_материала"] for d in shipment_details)
 
-
+    # === Новый блок расчёта рейсов на основе compute_best_plan ===
     print("🧩 DEBUG:", total_weight, distance_km, len(tariffs), allow_mani)
-    best = compute_best_plan(total_weight, distance_km, tariffs, allow_mani)
+    best = compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_tag=None)
     if not best:
         print("❌ compute_best_plan вернул None, тарифы:", [t["tag"] for t in tariffs])
         raise HTTPException(status_code=400, detail="Нет подходящих тарифов под это расстояние")
 
-    # === Новый блок расчёта рейсов на основе compute_best_plan ===
-    best = compute_best_plan(total_weight, distance_km, tariffs, allow_mani)
-    if not best:
-        raise HTTPException(status_code=400, detail="Нет подходящих тарифов под это расстояние")
 
     best_cost, best_plan = best
 
