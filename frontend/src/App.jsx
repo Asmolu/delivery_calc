@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Home from "./pages/home.jsx";
+import Home from "./pages/Home.jsx";
 import Calculator from "./pages/Calculator.jsx";
-import Admin from "./pages/admin.jsx";
+import Admin from "./pages/Admin.jsx";
 
 export default function App() {
   return (
