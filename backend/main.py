@@ -198,7 +198,9 @@ def compute_best_plan(weight_t: float, distance_km: float, tariffs: list[dict], 
             costB = plan_cost(planB)
             if costB < best_cost:
                 best_cost, best_plan = costB, planB
-
+    if not best_plan or best_cost is None:
+        print("⚠️ Не найден подходящий план перевозки, возвращаем пустой ответ")
+        return 0, []
     return best_cost, best_plan
 
 
