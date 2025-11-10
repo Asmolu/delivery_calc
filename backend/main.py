@@ -1128,7 +1128,12 @@ async def quote(req: QuoteRequest):
 
     selected_tag = "special" if req.selected_special and req.selected_special != "Не выбирать" else None
     best_cost, plan_pack = compute_best_plan(
-        total_weight, distance_km, calc_tariffs, allow_mani, selected_tag=selected_tag
+        total_weight,
+        distance_km,
+        calc_tariffs,
+        allow_mani,
+        selected_tag=selected_tag,
+        require_one_mani=req.add_manipulator
     )
 
     # plan_pack — это словарь {"транспорт_детали": {"доп": [...]}, "транспорт": "..."}
