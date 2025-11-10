@@ -271,110 +271,112 @@ export default function Calculator() {
       </div>
 
       {/* === Результаты === */}
-      {result && (
+      {result ? (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           className="card-glass mt-12 p-6 rounded-xl overflow-x-auto"
         >
           <h2 className="text-2xl font-semibold mb-4">🧾 Результаты</h2>
-          <table className="w-full text-sm border-collapse">
-            <thead className="text-gray-400 border-b border-gray-700">
-              <tr>
-                <th className="p-2 text-left">Производство</th>
-                <th className="p-2 text-left">Товар</th>
-                <th className="p-2 text-left">Машина</th>
-                <th className="p-2 text-left">Расстояние (км)</th>
-                <th className="p-2 text-left">Материал (₽)</th>
-                <th className="p-2 text-left">Доставка (₽)</th>
-                <th className="p-2 text-left">Тариф</th>
-                <th className="p-2 text-left">Итого (₽)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.детали?.map((d, idx) => (
-                <tr
-                  key={idx}
-                  className="border-b border-gray-800 hover:bg-gray-800/30 transition"
-                >
-                  <td className="p-2">{d["завод"]}</td>
-                  <td className="p-2">{d["товар"]}</td>
-                  <td className="p-2">{d["реальное_имя_машины"] || d["машина"]}</td>
-                  <td className="p-2">{d["расстояние_км"]}</td>
-                  <td className="p-2">{d["стоимость_материала"].toLocaleString()}</td>
-                  <td className="p-2">{d["стоимость_доставки"].toLocaleString()}</td>
-                  <td className="p-2 text-gray-400">{d["тариф"]}</td>
-                  <td className="p-2 font-semibold text-blue-300">
-                    {d["итого"].toLocaleString()}
+
+          {Array.isArray(result.детали) && result.детали.length > 0 ? (
+            <>
+              <table className="w-full text-sm border-collapse">
+                <thead className="text-gray-400 border-b border-gray-700">
+                  <tr>
+                    <th className="p-2 text-left">Производство</th>
+                    <th className="p-2 text-left">Товар</th>
+                    <th className="p-2 text-left">Машина</th>
+                    <th className="p-2 text-left">Расстояние (км)</th>
+                    <th className="p-2 text-left">Материал (₽)</th>
+                    <th className="p-2 text-left">Доставка (₽)</th>
+                    <th className="p-2 text-left">Тариф</th>
+                    <th className="p-2 text-left">Итого (₽)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.детали.map((d, idx) => (
+                    <tr
+                      key={idx}
+                      className="border-b border-gray-800 hover:bg-gray-800/30 transition"
+                    >
+                      <td className="p-2">{d["завод"]}</td>
+                      <td className="p-2">{d["товар"]}</td>
+                      <td className="p-2">{d["реальное_имя_машины"] || d["машина"]}</td>
+                      <td className="p-2">{d["расстояние_км"]}</td>
+                      <td className="p-2">{d["стоимость_материала"]?.toLocaleString() || "—"}</td>
+                      <td className="p-2">{d["стоимость_доставки"]?.toLocaleString() || "—"}</td>
+                      <td className="p-2 text-gray-400">{d["тариф"]}</td>
+                      <td className="p-2 font-semibold text-blue-300">
+                        {d["итого"]?.toLocaleString() || "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div className="mt-6 text-lg font-semibold">
+                <p>🚛 Общий вес: {result["общий_вес"] ?? "—"} т</p>
+                <p>🔁 Рейсы: {result["количество_рейсов"] ?? "—"}</p>
+                <p className="text-blue-400 text-xl mt-2">
+                  💰 Итого: {result["итого"]?.toLocaleString() ?? "—"} ₽
+                </p>
+              </div>
+            </>
+          ) : (
+            <p className="text-gray-400 mt-4">
+              ⚠️ Нет подходящих маршрутов для подбора транспорта.
+            </p>
+          )}
+        </motion.div>
+      ) : null}
+
+      {/* === Транспорт (сводка + детали) === */}
+      {result?.["транспорт"] && (
+        <div className="mt-6 card-glass p-4 rounded-xl">
+          <p className="text-gray-300 text-sm mb-2">
+            <span className="font-semibold">🚚 Транспорт:</span> {result["транспорт"]}
+          </p>
+
+          {result["транспорт_детали"] && (
+            <table className="text-sm">
+              <tbody>
+                {/* Базовый транспорт */}
+                <tr>
+                  <td className="pr-3 text-gray-400">Базовый:</td>
+                  <td>
+                    {(() => {
+                      const base = result["транспорт_детали"]?.базовый || {};
+                      const human =
+                        base.реальное_имя ||
+                        (base.тип === "manipulator"
+                          ? "Манипулятор"
+                          : base.тип === "long_haul"
+                          ? "Длинномер"
+                          : base.тип || "—");
+                      const trips = base.рейсы ?? 0;
+                      return `${human} × ${trips}`;
+                    })()}
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
 
-          <div className="mt-6 text-lg font-semibold">
-            <p>🚛 Общий вес: {result["общий_вес"]} т</p>
-            <p>🔁 Рейсы: {result["количество_рейсов"]}</p>
-            <p className="text-blue-400 text-xl mt-2">
-              💰 Итого: {result["итого"].toLocaleString()} ₽
-            </p>
-
-            {/* Транспорт (сводка + детали) */}
-            {result["транспорт"] && (
-              <div className="mt-4">
-                <p className="text-gray-300 text-sm">
-                  <span className="font-semibold">🚚 Транспорт:</span>{" "}
-                  {result["транспорт"]}
-                </p>
-
-                {result["транспорт_детали"] && (
-                  <div className="mt-2">
-                    <table className="text-sm">
-                      <tbody>
-                        {/* Базовый транспорт */}
-                        <tr>
-                          <td className="pr-3 text-gray-400">Базовый:</td>
-                          <td>
-                            {(() => {
-                              const base = result["транспорт_детали"]?.базовый || {};
-                              // Используем реальное имя, если есть
-                              const human =
-                                base.реальное_имя ||
-                                (base.тип === "manipulator"
-                                  ? "Манипулятор"
-                                  : base.тип === "long_haul"
-                                  ? "Длинномер"
-                                  : base.тип || "—");
-                              const trips = base.рейсы ?? 0;
-                              return `${human} × ${trips}`;
-                            })()}
-                          </td>
-                        </tr>
-
-                        {/* Доп. рейсы (манипулятор/спец) */}
-                        {Array.isArray(result["транспорт_детали"]?.доп) &&
-                          result["транспорт_детали"].доп.length > 0 && (
-                            <>
-                              {result["транспорт_детали"].доп.map((e, i) => (
-                                <tr key={i}>
-                                  <td className="pr-3 text-gray-400">
-                                    {i === 0 ? "Доп. рейсы:" : ""}
-                                  </td>
-                                  <td>
-                                    {e.реальное_имя || e.название} × {e.рейсы}
-                                  </td>
-                                </tr>
-                              ))}
-                            </>
-                          )}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </motion.div>
+                {/* Доп. рейсы */}
+                {Array.isArray(result["транспорт_детали"]?.доп) &&
+                  result["транспорт_детали"].доп.length > 0 &&
+                  result["транспорт_детали"].доп.map((e, i) => (
+                    <tr key={i}>
+                      <td className="pr-3 text-gray-400">
+                        {i === 0 ? "Доп. рейсы:" : ""}
+                      </td>
+                      <td>
+                        {e.реальное_имя || e.название} × {e.рейсы}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       )}
     </motion.div>
   );
