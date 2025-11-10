@@ -905,6 +905,22 @@ async def quote(req: QuoteRequest):
     factories = load_json(FACTORIES_FILE)
     tariffs = load_json("tariffs.json")
 
+    # Нормализация тарифов под compute_best_plan (ожидает англ. ключи)
+    calc_tariffs = []
+    for t in tariffs:
+        calc_tariffs.append({
+            "name":         t.get("название")         or t.get("name"),
+            "capacity_ton": t.get("грузоподъёмность") or t.get("capacity_ton"),
+            "tag":          t.get("тег")              or t.get("tag"),
+            "distance_min": t.get("дистанция_мин")    or t.get("distance_min"),
+            "distance_max": t.get("дистанция_макс")   or t.get("distance_max"),
+            "price":        t.get("цена")             or t.get("price"),
+            "per_km":       t.get("за_км")            or t.get("per_km"),
+            "desc":         t.get("описание")         or t.get("desc"),
+            "note":         t.get("заметки")          or t.get("note"),
+        })
+
+
     if not factories:
         return JSONResponse(status_code=400, content={"detail": "Нет данных о производствах"})
     if not tariffs:
@@ -1030,7 +1046,11 @@ async def quote(req: QuoteRequest):
     # === Новый блок расчёта рейсов на основе compute_best_plan ===
     print("🧩 DEBUG:", total_weight, distance_km, len(tariffs), allow_mani)
     selected_tag = "special" if req.selected_special and req.selected_special != "Не выбирать" else None
-    best_cost, best_plan = compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_tag=selected_tag)
+    best_cost, best_plan = compute_best_plan(
+        total_weight, distance_km, calc_tariffs, allow_mani,
+        selected_tag=("special" if req.selected_special and req.selected_special != "Не выбирать" else None)
+    )
+
 
     if not best_plan or best_cost == 0:
         print("⚠️ Нет подходящего маршрута — возвращаем пустой ответ пользователю")
@@ -1064,7 +1084,7 @@ async def quote(req: QuoteRequest):
     }
     # Добавляем старое поле "детали" для совместимости со старым фронтом
     response["детали"] = response["transport_rows"]
-    
+
     # --- Отладка ошибок при возврате ответа ---
     import traceback
     try:
