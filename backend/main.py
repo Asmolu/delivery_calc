@@ -285,6 +285,13 @@ def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_t
                         "описание": mani_desc or "Добавлен по условию +1 манипулятор",
                     })
                     best_total += float(mani_cost)
+
+                    # ⚙️ Учитываем, что манипулятор реально перевёз часть груза
+                    if total_weight and mani_cap < total_weight:
+                        total_weight -= mani_cap
+                    elif total_weight and mani_cap >= total_weight:
+                        total_weight = 0
+
                     # уменьшаем общий вес (манипулятор забрал часть)
                     total_weight = max(0.0, total_weight - mani_cap)
 
