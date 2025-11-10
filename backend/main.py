@@ -1019,6 +1019,8 @@ async def quote(req: QuoteRequest):
             "price": round(p["price"], 2),
         })
 
+    print("🧠 best_cost:", best_cost)
+    print("🧠 best_plan:", best_plan)
 
     response = {
         "total_weight_t": round(total_weight, 2),
