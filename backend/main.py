@@ -1017,52 +1017,41 @@ async def quote(req: QuoteRequest):
 
     # === Новый блок расчёта рейсов на основе compute_best_plan ===
     print("🧩 DEBUG:", total_weight, distance_km, len(tariffs), allow_mani)
-    best = compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_tag=None)
-    if not best:
-        print("❌ compute_best_plan вернул None, тарифы:", [t["tag"] for t in tariffs])
-        raise HTTPException(status_code=400, detail="Нет подходящих тарифов под это расстояние")
+    selected_tag = "special" if req.selected_special and req.selected_special != "Не выбирать" else None
+    best_cost, best_plan = compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_tag=selected_tag)
 
-
-    best_cost, best_plan = best
-
-    # --- 🔒 Безопасный возврат при пустом плане ---
-    if not best_plan or best_cost is None:
+    if not best_plan or best_cost == 0:
         print("⚠️ Нет подходящего маршрута — возвращаем пустой ответ пользователю")
-        return JSONResponse(
-            {"error": "Не найден подходящий вариант перевозки"},
-            status_code=400,
-        )
+        return JSONResponse({
+            "error": "Нет подходящих маршрутов для выбранных параметров",
+            "debug": {
+                "total_weight": total_weight,
+                "distance_km": distance_km,
+                "allow_mani": allow_mani,
+                "selected_tag": selected_tag
+            }
+        }, status_code=200)
 
-
-    # Формируем таблицу рейсов для UI
+    # --- формируем таблицу рейсов ---
     trips_rows = []
     for p in best_plan:
-        title = "Длинномер" if p["tag"] == "long_haul" else "Манипулятор"
-        bucket = "≤20т" if p["bucket"] == "le20" else (">20т" if p["bucket"] == "gt20" else "")
+        title = "Длиномер" if p["tag"] == "long_haul" else "Манипулятор" if p["tag"] == "manipulator" else "Спецтранспорт"
+        bucket = "<20т" if p["bucket"] == "le20" else ">20т" if p["bucket"] == "gt20" else ""
         trips_rows.append({
             "machine": f"{title} {bucket}".strip(),
             "distance_km": round(distance_km, 2),
             "load_t": round(p["load"], 2),
-            "price": round(p["price"], 2),
+            "price": round(p["price"], 2)
         })
-
-    print("🧠 best_cost:", best_cost)
-    print("🧠 best_plan:", best_plan)
 
     response = {
         "total_weight_t": round(total_weight, 2),
-        "trips": len(best_plan),
-        "sum_price": round(best_cost + material_sum, 2),
+        "sum_price": round(best_cost, 2),
         "transport_rows": trips_rows,
-    }  
-    # --- Отладка ошибок при возврате ответа ---
-    import traceback
-    try:
-        return JSONResponse(response)
-    except Exception as e:
-        print("❌ Ошибка при формировании ответа /quote():", e)
-        traceback.print_exc()
-        raise
+    }
+
+    print("✅ Успешный расчёт маршрута:", response)
+    return JSONResponse(response)
 
 
 
