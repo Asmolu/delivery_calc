@@ -1044,7 +1044,6 @@ async def quote(req: QuoteRequest):
     # --- формируем строки для сводной таблицы рейсов ---
     trips_rows = []
     for p in trips_list:
-        # p: {"тип","реальное_имя","рейсы","вес_перевезено","стоимость"}
         title = p.get("реальное_имя") or (
             "Манипулятор" if p.get("тип") == "manipulator"
             else "Длинномер" if p.get("тип") == "long_haul"
@@ -1058,28 +1057,20 @@ async def quote(req: QuoteRequest):
             "trips": int(p.get("рейсы", 0) or 0),
         })
 
-    # --- ответ ---
+    # --- итоговый ответ ---
     response = {
-        # сводка по транспортному плану
         "transport": plan_pack.get("транспорт"),
-        "транспорт": plan_pack.get("транспорт"),  # для русских ключей, если надо
+        "транспорт": plan_pack.get("транспорт"),
         "транспорт_детали": plan_pack.get("транспорт_детали"),
 
-        # агрегаты
-        "total_weight_t": round(total_weight, 2),
-        "trips": sum(row["trips"] for row in trips_rows),
-        "sum_price": round(best_cost + material_sum, 2),
+        "общий_вес": round(total_weight, 2),
+        "количество_рейсов": sum(row["trips"] for row in trips_rows),
+        "итого": round(best_cost + material_sum, 2),
 
-        # строки для небольшой таблицы «рейсы»
-        "transport_rows": trips_rows,
-
-        # ВАЖНО: в «детали» возвращаем ПОЗИЦИИ ПО ЗАВОДАМ,
-        # именно их рисует ваша большая таблица на фронте
-        "детали": shipment_details,
+        "детали": shipment_details,   # <- именно эти данные нужны таблице на фронте
     }
 
     return JSONResponse(response)
-
 
 
 # ===== Путь к фронтенду =====
