@@ -184,12 +184,19 @@ def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_t
     Каждый рейс считаем через calculate_tariff_cost(...) — так гарантируем,
     что учитывается диапазон дистанции и правило веса (≤20 / >20).
     """
-    # какие теги вообще разрешены
-    allowed_tags = {"long_haul"}
-    if allow_mani:
-        allowed_tags.add("manipulator")
+    # 🧩 Определяем, какие теги транспорта разрешены
     if selected_tag:
-        allowed_tags = {selected_tag}  # если пользователь выбрал спец, используем только его
+        # если выбран конкретный спецтранспорт — используем только его
+        allowed_tags = {selected_tag}
+    else:
+        # стандартно доступны оба типа: длиномер и манипулятор
+        allowed_tags = {"long_haul", "manipulator"}
+
+    # если активирована галочка "+1 манипулятор" — добавляем его принудительно
+    force_add_mani = allow_mani and "manipulator" not in allowed_tags
+    if force_add_mani:
+        allowed_tags.add("manipulator")
+
 
     # грузоподъёмность по тегам
     def tag_capacity(tag: str) -> float:
@@ -252,7 +259,35 @@ def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_t
     if not best_plan:
         return None, None
 
-    return best_total, {"транспорт_детали": {"доп": best_plan}, "транспорт": best_human}
+ 
+    # 🧩 Если включён флаг "+1 манипулятор" — добавляем один рейс вручную
+    if allow_mani and "manipulator" in {t.get("tag") or t.get("тег") for t in tariffs}:
+        # ищем подходящий тариф для манипулятора
+        mani_cap = 0.0
+        for t in tariffs:
+            if (t.get("tag") or t.get("тег")) == "manipulator":
+                mani_cap = _to_float(t.get("capacity_ton") or t.get("грузоподъёмность"))
+                break
+
+        if mani_cap > 0:
+            # грузим его "по полной", независимо от остатка
+            mani_cost, mani_desc = calculate_tariff_cost("manipulator", distance_km, mani_cap)
+            if mani_cost:
+                real_name = next(
+                    (t.get("название") or t.get("name")
+                     for t in tariffs
+                     if (t.get("тег") == "manipulator" or t.get("tag") == "manipulator")),
+                    "Манипулятор"
+                )
+                best_plan.append({
+                    "тип": "manipulator",
+                    "реальное_имя": real_name,
+                    "рейсы": 1,
+                    "вес_перевезено": round(mani_cap, 2),
+                    "стоимость": round(float(mani_cost), 2),
+                    "описание": mani_desc or "Принудительно добавлен манипулятор",
+                })
+                best_total += float(mani_cost)
 
 
 
@@ -1119,6 +1154,34 @@ async def quote(req: QuoteRequest):
             "price": round(float(p.get("стоимость", 0) or 0), 2),
             "trips": int(p.get("рейсы", 0) or 0),
         })
+
+    # 🧩 Группировка рейсов по машине и заводу
+    grouped = {}
+    for row in trips_rows:
+        # ищем завод в shipment_details по совпадению машины
+        factory_name = None
+        for s in shipment_details:
+            if s.get("машина") == row["machine"]:
+                factory_name = s.get("завод")
+                break
+
+        key = f"{row['machine']}_{factory_name or 'Неизвестный завод'}"
+        if key not in grouped:
+            grouped[key] = {
+                "machine": row["machine"],
+                "factory": factory_name or "Неизвестный завод",
+                "distance_km": row["distance_km"],
+                "load_t": row["load_t"],
+                "price": row["price"],
+                "trips": row["trips"],
+            }
+        else:
+            grouped[key]["load_t"] += row["load_t"]
+            grouped[key]["price"] += row["price"]
+            grouped[key]["trips"] += row["trips"]
+
+    # заменяем старый список новым, сгруппированным
+    trips_rows = list(grouped.values())
 
     # --- итоговый ответ ---
     response = {
