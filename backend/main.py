@@ -143,22 +143,33 @@ def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_t
     # Отфильтруем явно запрещённые типы
     valid = []
     for t in tariffs:
-        val = t.get("capacity_ton") or t.get("грузоподъёмность")
-        if not val:
-            continue
+        val = t.get("capacity_ton") or t.get("грузоподъёмность") or ""
         try:
             cap = float(str(val).replace(",", ".").replace("т", "").replace("T", "").strip())
-        except ValueError:
+        except (ValueError, TypeError):
             continue
 
         if cap <= 0:
             continue
+
+        # безопасно берём цену и за км
+        try:
+            base = float(t.get("price") or t.get("цена") or 0)
+        except (ValueError, TypeError):
+            base = 0.0
+
+        try:
+            per_km = float(t.get("per_km") or t.get("за_км") or 0)
+        except (ValueError, TypeError):
+            per_km = 0.0
+
+        dmin = float(t.get("distance_min") or t.get("дистанция_мин") or 0)
+        dmax = float(t.get("distance_max") or t.get("дистанция_макс") or dmin)
+
         t["cap"] = cap
-        # рассчитаем полную стоимость рейса
-        t["base_cost"] = float(t.get("price", 0))
-        t["per_km_cost"] = float(t.get("per_km", 0))
-        t["total_cost"] = t["base_cost"] + distance_km * t["per_km_cost"]
-        print("✅ Добавлен тариф:", t.get("name"), cap, t["total_cost"])
+        t["base_cost"] = base
+        t["per_km_cost"] = per_km
+        t["total_cost"] = base + per_km * distance_km
         valid.append(t)
 
     if not valid:
@@ -407,7 +418,12 @@ def load_tariffs_from_google():
         creds = load_credentials()
         client = gspread.authorize(creds)
         sheet = client.open_by_key(GOOGLE_SHEET_ID)
-        ws = sheet.worksheet("Vehicles")
+        ws = next(
+            (s for s in sheet.worksheets() if "veh" in s.title.lower() or "тариф" in s.title.lower()),
+            None
+        )
+        if not ws:
+            raise RuntimeError("❌ Не найден лист с тарифами (Vehicles/Тарифы) в Google Sheets")
         rows = ws.get_all_records()  # список dict, ключи — оригинальные заголовки
 
         tariffs = []
