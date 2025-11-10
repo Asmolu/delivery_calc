@@ -126,101 +126,76 @@ def _price_for(tariff: dict, d_km: float) -> float:
     extra_km = max(0.0, d_km - max(dmin, 0.0))
     return base + per_km * extra_km
 
-def compute_best_plan(weight_t: float, distance_km: float, tariffs: list[dict], allow_manipulator: bool, selected_tag: str | None = None):
+def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_tag=None):
     """
-    Возвращает (итоговая_цена, список_рейсов),
-    где каждый рейс: {"tag": "...", "bucket": "le20|gt20|any", "capacity": 39.5, "load": X, "price": Y}
+    Подбор оптимальной комбинации рейсов для покрытия total_weight.
     """
-    # Отбор по контексту: если выбран special — берём только special-тарифы
-    if selected_tag == "special":
-        special = [t for t in tariffs if t.get("tag") == "special" and _distance_ok(t, distance_km)]
-        if not special:
+    import math
+    from itertools import combinations_with_replacement
+
+    # Отфильтруем по тегу, если выбран спецтранспорт
+    if selected_tag:
+        tariffs = [t for t in tariffs if t.get("tag") == selected_tag]
+        if not tariffs:
             print("⚠️ Нет тарифов для спецтранспорта")
-            return 0, []
-        t = sorted(special, key=lambda t: _price_for(t, distance_km))[0]
-        cap = _vehicle_capacity(t)
-        rem = weight_t
-        plan = []
-        while rem > 0:
-            load = min(rem, cap)
+            return None, None
+
+    # Отфильтруем явно запрещённые типы
+    valid = []
+    for t in tariffs:
+        try:
+            cap = float(str(t["capacity_ton"]).replace("т", "").replace("T", "").strip())
+        except:
+            continue
+        if cap <= 0:
+            continue
+        t["cap"] = cap
+        # рассчитаем полную стоимость рейса
+        t["base_cost"] = float(t.get("price", 0))
+        t["per_km_cost"] = float(t.get("per_km", 0))
+        t["total_cost"] = t["base_cost"] + distance_km * t["per_km_cost"]
+        valid.append(t)
+
+    if not valid:
+        print("⚠️ Нет подходящих тарифов после фильтрации")
+        return None, None
+
+    # сортируем по цене за тонну (чтобы оптимально заполнять)
+    valid.sort(key=lambda t: t["total_cost"] / t["cap"])
+
+    plan = []
+    remaining = total_weight
+    total_cost = 0.0
+
+    for t in valid:
+        if remaining <= 0:
+            break
+        count = int(remaining // t["cap"])
+        if remaining % t["cap"] > 0:
+            count += 1 if count == 0 else 0  # если остаток, добавляем ещё 1 рейс
+
+        if count > 0:
+            moved = min(remaining, count * t["cap"])
+            cost = count * t["total_cost"]
             plan.append({
-                "tag": "special",
-                "bucket": "any",
-                "capacity": cap,
-                "load": load,
-                "price": _price_for(t, distance_km),
+                "тип": t.get("tag"),
+                "реальное_имя": t.get("name"),
+                "рейсы": count,
+                "вес_перевезено": round(moved, 2),
+                "стоимость": round(cost, 2),
             })
-            rem -= load
-        total_cost = sum(p["price"] for p in plan)
-        return total_cost, plan
+            remaining -= moved
+            total_cost += cost
 
-    # --- Автоматический подбор ---
-    long_le20 = [t for t in tariffs if t.get("tag") == "long_haul" and _is_le20_bucket(t) and _distance_ok(t, distance_km)]
-    long_gt20 = [t for t in tariffs if t.get("tag") == "long_haul" and _is_gt20_bucket(t) and _distance_ok(t, distance_km)]
-    mani = [t for t in tariffs if t.get("tag") == "manipulator" and _distance_ok(t, distance_km)] if allow_manipulator else []
+    if remaining > 0:
+        print(f"⚠️ Осталось {remaining:.2f} тонн без рейса")
 
-    pick = lambda lst: sorted(lst, key=lambda t: _price_for(t, distance_km))[0] if lst else None
-    t_long_le20 = pick(long_le20)
-    t_long_gt20 = pick(long_gt20)
-    t_mani = pick(mani)
-
-    if not any([t_long_gt20, t_mani]):
+    if not plan:
         print("⚠️ Нет подходящих тарифов для подбора транспорта")
-        return 0, []
+        return None, None
 
-    best_cost, best_plan = float("inf"), []
-
-    def plan_cost(plan):
-        return sum(p["price"] for p in plan)
-
-    def add_trip(tariff, load):
-        return {
-            "tag": tariff.get("tag"),
-            "bucket": "gt20" if _is_gt20_bucket(tariff) else "le20" if _is_le20_bucket(tariff) else "any",
-            "capacity": _vehicle_capacity(tariff),
-            "load": load,
-            "price": _price_for(tariff, distance_km),
-        }
-
-    # Вариант 1: только длиномеры
-    if t_long_gt20:
-        cap = _vehicle_capacity(t_long_gt20)
-        rem = weight_t
-        planA = []
-        while rem > 0:
-            load = min(rem, cap)
-            planA.append(add_trip(t_long_gt20, load))
-            rem -= load
-        best_cost, best_plan = plan_cost(planA), planA
-
-    # Вариант 2: длиномеры + манипулятор (если выгоднее)
-    if allow_manipulator and t_long_gt20 and t_mani:
-        cap_long = _vehicle_capacity(t_long_gt20)
-        cap_mani = _vehicle_capacity(t_mani)
-        rem = weight_t
-        planB = []
-        while rem > cap_mani:
-            load = min(rem, cap_long)
-            if rem - load <= cap_mani:
-                break
-            planB.append(add_trip(t_long_gt20, load))
-            rem -= load
-        if rem > 0:
-            if rem <= cap_mani:
-                planB.append(add_trip(t_mani, rem))
-            elif rem <= 20 and t_long_le20:
-                planB.append(add_trip(t_long_le20, rem))
-            else:
-                planB.append(add_trip(t_long_gt20, rem))
-        costB = plan_cost(planB)
-        if costB < best_cost:
-            best_cost, best_plan = costB, planB
-
-    if not best_plan:
-        print("⚠️ Не найден подходящий план перевозки, возвращаем пустой ответ")
-        return 0, []
-
-    return best_cost, best_plan
+    print(f"✅ Составлен план: {plan}")
+    return total_cost, {"транспорт_детали": {"доп": plan}, "транспорт": ", ".join(p['реальное_имя'] for p in plan)}
 
 
 
