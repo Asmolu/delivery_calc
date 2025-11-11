@@ -222,6 +222,15 @@ def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_t
         return sum(float(p["стоимость"]) for p in plan)
 
     # === Определяем доступные теги ===
+    # === Нормализация selected_tag (рус/англ эквиваленты) ===
+    if selected_tag:
+        st = selected_tag.strip().lower()
+        if st in ("манипулятор", "manipulator"):
+            selected_tag = "manipulator"
+        elif st in ("длинномер", "long_haul"):
+            selected_tag = "long_haul"
+
+    # === Определяем доступные теги 2 ===
     if selected_tag in ("manipulator", "long_haul"):
         allowed_tags = [selected_tag]
     else:
@@ -295,6 +304,27 @@ def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_t
                 if rest_plan:
                     best_plan = [mani_trip] + rest_plan
                     best_cost = plan_cost(best_plan)
+
+    # === Если включена галочка +1 манипулятор, а выбран длинномер ===
+    if require_one_mani and selected_tag == "long_haul":
+        # ищем тарифы манипулятора
+        mani_tariffs = [t for t in tariffs if (t.get("tag") or t.get("тег")) in ("manipulator", "манипулятор")]
+        if mani_tariffs:
+            mani = mani_tariffs[0]
+            has_mani = any("manipulator" in (p["тип"] or "").lower() for p in best_plan)
+            if not has_mani:
+                cost, desc = calculate_tariff_cost(mani.get("tag") or mani.get("тег"), distance_km, mani.get("capacity_ton", 0))
+                if cost:
+                    best_plan.append({
+                        "тип": mani.get("tag") or mani.get("тег"),
+                        "реальное_имя": mani.get("name") or mani.get("название") or "Манипулятор",
+                        "рейсы": 1,
+                        "вес_перевезено": mani.get("capacity_ton", 0),
+                        "стоимость": round(cost, 2),
+                        "описание": desc,
+                    })
+                    best_cost = (best_cost or 0) + cost
+
 
     best_human = ", ".join(sorted({t["реальное_имя"] for t in best_plan}))
     return best_cost, {"транспорт_детали": {"доп": best_plan}, "транспорт": best_human}
