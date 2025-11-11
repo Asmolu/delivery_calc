@@ -320,6 +320,8 @@ def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_t
         if mani_tariffs and best_plan:
             mani = mani_tariffs[0]
             mani_capacity = _to_float(mani.get("capacity_ton") or mani.get("грузоподъёмность"))
+            if mani_capacity <= 0:
+                mani_capacity = 10  # fallback чтобы не падало
             if mani_capacity > 0:
                 has_mani = any("manipulator" in (p["тип"] or "").lower() for p in best_plan)
                 if not has_mani:
@@ -1261,13 +1263,11 @@ async def quote(req: QuoteRequest):
     if not total_weight or total_weight <= 0:
         return JSONResponse(status_code=400, content={"detail": "Нулевой общий вес — нечего доставлять"})
     best_cost, plan_pack = compute_best_plan(
-        total_weight,
-        distance_km,
-        calc_tariffs,
-        allow_mani,
+        total_weight, distance_km, calc_tariffs, allow_mani,
         selected_tag=selected_tag or selected_by_type,
         require_one_mani=req.add_manipulator
     )
+
 
 
     # === Синхронизация итоговой таблицы "Результаты" ===
