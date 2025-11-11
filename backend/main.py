@@ -191,6 +191,15 @@ def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_t
 
     import itertools
 
+    # === Нормализуем теги тарифов ===
+    for t in tariffs:
+        tag_val = (t.get("tag") or t.get("тег") or "").strip().lower()
+        if "манипулятор" in tag_val:
+            t["tag"] = "manipulator"
+        elif "длинномер" in tag_val or "long_haul" in tag_val:
+            t["tag"] = "long_haul"
+
+
     # === Утилиты ===
     def tag_capacity(tag: str) -> float:
         """Возвращает максимальную грузоподъёмность по тегу"""
@@ -307,33 +316,31 @@ def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_t
 
     # === Если включена галочка +1 манипулятор, а выбран длинномер ===
     if require_one_mani and selected_tag == "long_haul":
-        # ищем тарифы манипулятора
-        mani_tariffs = [t for t in tariffs if (t.get("tag") or t.get("тег")) in ("manipulator", "манипулятор")]
+        mani_tariffs = [t for t in tariffs if (t.get("tag") or t.get("тег")) == "manipulator"]
         if mani_tariffs and best_plan:
             mani = mani_tariffs[0]
-            has_mani = any("manipulator" in (p["тип"] or "").lower() for p in best_plan)
-            if not has_mani:
-                # берём минимальный остаток веса, который влезет в манипулятор
-                mani_capacity = mani.get("capacity_ton", 0)
-                total_weight = sum(p["вес_перевезено"] for p in best_plan)
-                if mani_capacity > 0 and total_weight > mani_capacity:
-                    # отнимаем часть груза у последней машины
-                    last = best_plan[-1]
-                    if last["вес_перевезено"] > mani_capacity:
-                        last["вес_перевезено"] -= mani_capacity
-                        # добавляем рейс манипулятора с этой частью
-                        cost, desc = calculate_tariff_cost(mani.get("tag"), distance_km, mani_capacity)
+            mani_capacity = _to_float(mani.get("capacity_ton") or mani.get("грузоподъёмность"))
+            if mani_capacity > 0:
+                has_mani = any("manipulator" in (p["тип"] or "").lower() for p in best_plan)
+                if not has_mani:
+                    total_weight_now = sum(p["вес_перевезено"] for p in best_plan)
+                    if total_weight_now > mani_capacity:
+                        # снимаем часть груза с последнего рейса длинномера
+                        last = best_plan[-1]
+                        take_from_last = min(last["вес_перевезено"], mani_capacity)
+                        last["вес_перевезено"] -= take_from_last
+                        # создаём новый рейс манипулятора
+                        cost, desc = calculate_tariff_cost("manipulator", distance_km, take_from_last)
                         if cost:
                             best_plan.append({
                                 "тип": "manipulator",
                                 "реальное_имя": mani.get("name") or mani.get("название") or "Манипулятор",
                                 "рейсы": 1,
-                                "вес_перевезено": mani_capacity,
+                                "вес_перевезено": take_from_last,
                                 "стоимость": round(cost, 2),
                                 "описание": desc,
                             })
-                            best_cost = (best_cost or 0) + cost
-
+                            best_cost = plan_cost(best_plan)
 
 
     best_human = ", ".join(sorted({t["реальное_имя"] for t in best_plan}))
