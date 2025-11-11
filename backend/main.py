@@ -345,12 +345,12 @@ def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_t
 
     # === Если план пуст — создаём рейс только манипулятора ===
     if (not best_plan or len(best_plan) == 0) and selected_tag == "manipulator":
-        mani_tariffs = [t for t in tariffs if (t.get("tag") or t.get("тег")) == "manipulator"]
+        mani_tariffs = [t for t in tariffs if (t.get("tag") or t.get("тег") or "").lower() == "manipulator"]
         if mani_tariffs:
             mani = mani_tariffs[0]
             mani_capacity = _to_float(mani.get("capacity_ton") or mani.get("грузоподъёмность") or 0)
             if mani_capacity <= 0:
-                mani_capacity = 10  # fallback на 10т, чтобы не падало
+                mani_capacity = 10  # fallback чтобы не падало
 
             trips_needed = math.ceil(total_weight / mani_capacity)
             cost, desc = calculate_tariff_cost("manipulator", distance_km, total_weight)
@@ -365,12 +365,14 @@ def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_t
                 }]
                 best_cost = round(cost * trips_needed, 2)
             else:
+                print("⚠️ Не удалось рассчитать стоимость для манипулятора.")
                 best_plan = []
                 best_cost = 0
         else:
-            # нет тарифа манипулятора
+            print("⚠️ В тарифах отсутствует манипулятор!")
             best_plan = []
             best_cost = 0
+
 
     # === Убираем рейсы с нулевым весом ===
     best_plan = [p for p in best_plan if p.get("вес_перевезено", 0) > 0]
@@ -963,7 +965,16 @@ def calculate_tariff_cost(transport_tag: str, distance_km: float, weight_ton: fl
         return None, "Ошибка загрузки тарифов"
 
     # фильтруем по тегу транспорта
-    suitable = [t for t in tariffs if t.get("тег") == transport_tag or t.get("tag") == transport_tag]
+    # Нормализуем все теги перед фильтрацией
+    for t in tariffs:
+        tag_val = (t.get("tag") or t.get("тег") or "").strip().lower()
+        if "манипулятор" in tag_val:
+            t["tag"] = "manipulator"
+        elif "длинномер" in tag_val or "long_haul" in tag_val:
+            t["tag"] = "long_haul"
+
+    suitable = [t for t in tariffs if t.get("tag") == transport_tag]
+
     if not suitable:
         return None, f"Нет подходящих тарифов для '{transport_tag}'"
 
@@ -1208,6 +1219,8 @@ async def quote(req: QuoteRequest):
                 "тариф": tariff_info,
                 "итого": round(total, 2),
             })
+
+
     # Пересчёт общего веса по реально выбранным позициям (чтобы точно не было дублей)
     total_weight = sum(d["вес_тонн"] for d in shipment_details)
 
@@ -1229,13 +1242,24 @@ async def quote(req: QuoteRequest):
     # === Новый блок расчёта рейсов на основе compute_best_plan ===
     print("🧩 DEBUG:", total_weight, distance_km, len(tariffs), allow_mani)
 
-    selected_tag = "special" if req.selected_special and req.selected_special != "Не выбирать" else None
+    # если выбрана конкретная машина (например "Манипулятор SPECIAL") — ищем её тариф
+    selected_tag = None
+    if req.selected_special and req.selected_special not in ("Не выбирать", ""):
+        spec = next(
+            (t for t in calc_tariffs if str(t.get("name") or "").strip().lower() == req.selected_special.strip().lower()),
+            None
+        )
+        if spec:
+            selected_tag = spec.get("tag") or spec.get("тег")
+
     
     # === Определяем тип транспорта, заданный пользователем ===
     # "auto" — значит система сама подбирает (оба типа участвуют)
     selected_by_type = None
     if req.transport_type in ("manipulator", "long_haul"):
         selected_by_type = req.transport_type
+    if not total_weight or total_weight <= 0:
+        return JSONResponse(status_code=400, content={"detail": "Нулевой общий вес — нечего доставлять"})
     best_cost, plan_pack = compute_best_plan(
         total_weight,
         distance_km,
