@@ -1265,7 +1265,7 @@ async def quote(req: QuoteRequest):
         distance_km,
         calc_tariffs,
         allow_mani,
-        selected_tag=selected_by_type,
+        selected_tag=selected_tag or selected_by_type,
         require_one_mani=req.add_manipulator
     )
 
