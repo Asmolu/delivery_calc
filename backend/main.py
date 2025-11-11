@@ -309,21 +309,31 @@ def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_t
     if require_one_mani and selected_tag == "long_haul":
         # ищем тарифы манипулятора
         mani_tariffs = [t for t in tariffs if (t.get("tag") or t.get("тег")) in ("manipulator", "манипулятор")]
-        if mani_tariffs:
+        if mani_tariffs and best_plan:
             mani = mani_tariffs[0]
             has_mani = any("manipulator" in (p["тип"] or "").lower() for p in best_plan)
             if not has_mani:
-                cost, desc = calculate_tariff_cost(mani.get("tag") or mani.get("тег"), distance_km, mani.get("capacity_ton", 0))
-                if cost:
-                    best_plan.append({
-                        "тип": mani.get("tag") or mani.get("тег"),
-                        "реальное_имя": mani.get("name") or mani.get("название") or "Манипулятор",
-                        "рейсы": 1,
-                        "вес_перевезено": mani.get("capacity_ton", 0),
-                        "стоимость": round(cost, 2),
-                        "описание": desc,
-                    })
-                    best_cost = (best_cost or 0) + cost
+                # берём минимальный остаток веса, который влезет в манипулятор
+                mani_capacity = mani.get("capacity_ton", 0)
+                total_weight = sum(p["вес_перевезено"] for p in best_plan)
+                if mani_capacity > 0 and total_weight > mani_capacity:
+                    # отнимаем часть груза у последней машины
+                    last = best_plan[-1]
+                    if last["вес_перевезено"] > mani_capacity:
+                        last["вес_перевезено"] -= mani_capacity
+                        # добавляем рейс манипулятора с этой частью
+                        cost, desc = calculate_tariff_cost(mani.get("tag"), distance_km, mani_capacity)
+                        if cost:
+                            best_plan.append({
+                                "тип": "manipulator",
+                                "реальное_имя": mani.get("name") or mani.get("название") or "Манипулятор",
+                                "рейсы": 1,
+                                "вес_перевезено": mani_capacity,
+                                "стоимость": round(cost, 2),
+                                "описание": desc,
+                            })
+                            best_cost = (best_cost or 0) + cost
+
 
 
     best_human = ", ".join(sorted({t["реальное_имя"] for t in best_plan}))
@@ -1027,6 +1037,13 @@ async def quote(req: QuoteRequest):
     global TARIFFS_CACHE
     tariffs = TARIFFS_CACHE or load_json("/root/delivery_calc/tariffs.json")
 
+    # === Нормализуем теги тарифов ===
+    for t in tariffs:
+        tag_val = (t.get("tag") or t.get("тег") or "").strip().lower()
+        if "манипулятор" in tag_val:
+            t["tag"] = "manipulator"
+        elif "длинномер" in tag_val or "long_haul" in tag_val:
+            t["tag"] = "long_haul"
 
     # Нормализация тарифов под compute_best_plan (ожидает англ. ключи)
     calc_tariffs = []
