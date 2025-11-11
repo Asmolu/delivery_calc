@@ -178,6 +178,8 @@ def _cost_one_trip(tag: str, distance_km: float, load_t: float, tariffs: list[di
 
     return best  # или None
 
+
+
 def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_tag=None, require_one_mani=False):
     """
     Полный расчёт оптимального плана доставки.
@@ -1129,8 +1131,9 @@ async def quote(req: QuoteRequest):
     else:
         distance_km = 0.0
 
-    # Разрешён ли манипулятор
-    allow_mani = bool(req.add_manipulator)
+    # Манипулятор всегда участвует в переборе.
+    # Галочка +1 лишь гарантирует, что в финале будет хотя бы один манипулятор.
+    allow_mani = True
 
 
     # Общая сумма материалов
@@ -1140,25 +1143,41 @@ async def quote(req: QuoteRequest):
     print("🧩 DEBUG:", total_weight, distance_km, len(tariffs), allow_mani)
 
     selected_tag = "special" if req.selected_special and req.selected_special != "Не выбирать" else None
+    
+    # === Определяем тип транспорта, заданный пользователем ===
+    # "auto" — значит система сама подбирает (оба типа участвуют)
+    selected_by_type = None
+    if req.transport_type in ("manipulator", "long_haul"):
+        selected_by_type = req.transport_type
     best_cost, plan_pack = compute_best_plan(
         total_weight,
         distance_km,
         calc_tariffs,
         allow_mani,
-        selected_tag=selected_tag,
+        selected_tag=selected_by_type,
         require_one_mani=req.add_manipulator
     )
 
 
-    # plan_pack — это словарь {"транспорт_детали": {"доп": [...]}, "транспорт": "..."}
+    # === Синхронизация итоговой таблицы "Результаты" ===
     trips_list = (plan_pack or {}).get("транспорт_детали", {}).get("доп", [])
+    trip_desc_str = " + ".join(
+        (t.get("описание") or t.get("реальное_имя") or "").strip()
+        for t in trips_list
+    )
 
-    if trips_list and best_cost is not None and len(shipment_details) == 1:
-        shipment_details[0]["стоимость_доставки"] = round(best_cost, 2)
-        # и дадим человеко-читаемое описание тарифов по рейсам:
-        shipment_details[0]["тариф"] = " + ".join(
-            (r.get("описание") or r.get("реальное_имя") or "") for r in trips_list
-        )
+    if trips_list and best_cost is not None and total_weight > 0:
+        for row in shipment_details:
+            # доля веса конкретной строки в общем объёме
+            share = (row.get("вес_тонн", 0.0) or 0.0) / total_weight
+            # распределяем стоимость доставки пропорционально весу
+            row["стоимость_доставки"] = round(best_cost * share, 2)
+            # выводим состав транспорта и описание тарифа
+            row["машина"] = plan_pack.get("транспорт") or row.get("машина")
+            row["тариф"] = trip_desc_str
+            # финальное итого
+            row["итого"] = round(row["стоимость_материала"] + row["стоимость_доставки"], 2)
+
 
     # --- формируем строки для сводной таблицы рейсов ---
     trips_rows = []
