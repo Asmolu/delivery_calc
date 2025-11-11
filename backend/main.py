@@ -344,26 +344,37 @@ def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_t
 
 
     # === Если план пуст — создаём рейс только манипулятора ===
-    if not best_plan and selected_tag == "manipulator":
+    if (not best_plan or len(best_plan) == 0) and selected_tag == "manipulator":
         mani_tariffs = [t for t in tariffs if (t.get("tag") or t.get("тег")) == "manipulator"]
         if mani_tariffs:
             mani = mani_tariffs[0]
-            mani_capacity = _to_float(mani.get("capacity_ton") or mani.get("грузоподъёмность"))
-            trips_needed = math.ceil(total_weight / mani_capacity) if mani_capacity > 0 else 1
+            mani_capacity = _to_float(mani.get("capacity_ton") or mani.get("грузоподъёмность") or 0)
+            if mani_capacity <= 0:
+                mani_capacity = 10  # fallback на 10т, чтобы не падало
+
+            trips_needed = math.ceil(total_weight / mani_capacity)
             cost, desc = calculate_tariff_cost("manipulator", distance_km, total_weight)
             if cost:
-                best_plan.append({
+                best_plan = [{
                     "тип": "manipulator",
                     "реальное_имя": mani.get("name") or mani.get("название") or "Манипулятор",
                     "рейсы": trips_needed,
                     "вес_перевезено": total_weight,
                     "стоимость": round(cost * trips_needed, 2),
                     "описание": desc,
-                })
+                }]
                 best_cost = round(cost * trips_needed, 2)
+            else:
+                best_plan = []
+                best_cost = 0
+        else:
+            # нет тарифа манипулятора
+            best_plan = []
+            best_cost = 0
 
     # === Убираем рейсы с нулевым весом ===
     best_plan = [p for p in best_plan if p.get("вес_перевезено", 0) > 0]
+    best_cost = plan_cost(best_plan)
 
     best_human = ", ".join(sorted({t["реальное_имя"] for t in best_plan}))
     return best_cost, {"транспорт_детали": {"доп": best_plan}, "транспорт": best_human}
