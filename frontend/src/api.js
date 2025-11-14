@@ -1,6 +1,8 @@
 // Автоматически определяем базовый адрес API
-const API_BASE = window.location.origin;
+const isDev = window.location.port === "5173";
+const API_BASE = isDev ? "http://127.0.0.1:8000" : window.location.origin;
 console.log("🌍 API_BASE =", API_BASE);
+
 
 export async function fetchFactories() {
   const res = await fetch(`${API_BASE}/api/factories`);

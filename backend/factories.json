@@ -475,30 +475,6 @@
         "subtype": "ФБС 6-4-3",
         "weight_ton": 0.163,
         "price": 1275.0
-      },
-      {
-        "category": "ФБС БЛОКИ",
-        "subtype": "ФБС 12-5-3",
-        "weight_ton": 0.413,
-        "price": 1350.0
-      },
-      {
-        "category": "ФБС БЛОКИ",
-        "subtype": "ФБС 9-5-3",
-        "weight_ton": 0.295,
-        "price": 1550.0
-      },
-      {
-        "category": "ФБС БЛОКИ",
-        "subtype": "ФБС 12-6-3",
-        "weight_ton": 0.5,
-        "price": 1600.0
-      },
-      {
-        "category": "ФБС БЛОКИ",
-        "subtype": "ФБС 9-6-3",
-        "weight_ton": 0.35,
-        "price": 1750.0
       }
     ],
     "valid_coords": true
