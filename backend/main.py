@@ -81,15 +81,6 @@ def get_gspread_client():
     return gspread.authorize(creds)
 
 
-# Разрешаем запросы из любого источника (чтобы HTML мог обращаться к API)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # Подключаем папку static для HTML файлов
 import os
 from fastapi.staticfiles import StaticFiles
@@ -106,54 +97,22 @@ TARIFFS_FILE = "tariffs.json"
 # Кэш тарифов в памяти (инициализация)
 TARIFFS_CACHE: list = []
 
-# Новые утилиты
-TON_RE = re.compile(r"([0-9]+(?:[.,][0-9]+)?)")
-
-def _to_float(x: str | float | int) -> float:
+def _to_float(x) -> float:
+    """
+    Универсальный парсер чисел вида '39.5 Т', '20т', '12,3' и т.п.
+    Нужен для работы планировщика транспорта.
+    """
     if isinstance(x, (int, float)):
         return float(x)
-    m = TON_RE.search(str(x))
-    return float(m.group(1).replace(",", ".")) if m else 0.0
-
-def _vehicle_capacity(tariff: dict) -> float:
-    # "capacity_ton": "39.5 Т" -> 39.5
-    return _to_float(tariff.get("capacity_ton", 0))
-
-def _is_le20_bucket(tariff: dict) -> bool:
-    text = f"{tariff.get('desc','')} {tariff.get('note','')}"
-    return "≤20" in text or "<=20" in text or "≤20т" in text
-
-def _is_gt20_bucket(tariff: dict) -> bool:
-    text = f"{tariff.get('desc','')} {tariff.get('note','')}"
-    return ">20" in text or " >20" in text or ">20т" in text
-
-def _distance_ok(tariff: dict, d_km: float) -> bool:
-    dmin = float(tariff.get("distance_min", 0) or 0)
-    dmax = float(tariff.get("distance_max", dmin) or dmin)
-    # у нас для «>120 км» в данных distance_max == distance_min; значит бесконечная вилка
-    return dmin <= d_km and (dmax == dmin or d_km <= dmax)
-
-def _price_for(tariff: dict, d_km: float) -> float:
-    base = float(tariff.get("price", 0) or 0)
-    per_km = float(tariff.get("per_km", 0) or 0)
-    dmin = float(tariff.get("distance_min", 0) or 0)
-    extra_km = max(0.0, d_km - max(dmin, 0.0))
-    return base + per_km * extra_km
-
-def _matches_weight_rule(weight_rule: str | None, load_t: float) -> bool:
-    if not weight_rule or str(weight_rule).strip().lower() == "any":
-        return True
-    s = str(weight_rule).replace("т", "").replace("T", "").strip()
+    if x is None:
+        return 0.0
+    s = str(x).strip().lower()
+    s = s.replace("т", "").replace(" ", "").replace(",", ".")
     try:
-        if "≤" in weight_rule or "<=" in weight_rule:
-            lim = float(s.replace("≤", "").replace("<=", ""))
-            return load_t <= lim + 1e-6
-        if ">" in weight_rule:
-            lim = float(s.replace(">", ""))
-            return load_t > lim + 1e-6
+        return float(s)
     except Exception:
-        return True
-    return True
+        return 0.0
+
 
 import unicodedata
 import re as _re
@@ -172,343 +131,8 @@ def _norm_str(s: str) -> str:
     return s
 
 
-def _cost_one_trip(tag: str, distance_km: float, load_t: float, tariffs: list[dict]):
-    """
-    Возвращает (цена, описание) для ОДНОГО рейса заданной загрузки.
-    Учитывает:
-      - тег транспорта
-      - правило веса (≤20т / >20т / any)
-      - диапазон дистанции (или надбавку, если dmin==dmax и поехали дальше)
-    Берёт минимальную подходящую цену среди строк одного тега.
-    """
-    best = None  # (price, desc)
-    for t in tariffs:
-        if (t.get("tag") or t.get("тег")) != tag:
-            continue
-
-        weight_rule = t.get("weight_if") or t.get("вес_если")
-        if not _matches_weight_rule(weight_rule, load_t):
-            continue
-
-        dmin = float(t.get("distance_min") or t.get("дистанция_мин") or 0)
-        dmax = float(t.get("distance_max") or t.get("дистанция_макс") or dmin)
-        base = float(t.get("price") or t.get("цена") or 0)
-        per_km = float(t.get("per_km") or t.get("за_км") or 0)
-        desc = (t.get("desc") or t.get("описание") or "").strip()
-
-        price = None
-        if dmin <= distance_km <= dmax:
-            price = base + per_km * 0
-        elif dmin == dmax and distance_km > dmax:
-            # “>120 км” и т.п.: надбавка за каждый км дальше границы
-            price = base + per_km * (distance_km - dmax)
-
-        if price is not None:
-            if best is None or price < best[0]:
-                best = (price, desc)
-
-    return best  # или None
-
-
-
-def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_tag=None, require_one_mani=False):
-    """
-    Полный расчёт оптимального плана доставки.
-    Манипулятор и длинномер участвуют на равных.
-    Если выбран конкретный тип (selected_tag='manipulator' или 'long_haul'),
-    подбираются только такие рейсы.
-    Если require_one_mani=True — добавляем ровно один манипулятор, если его нет.
-    """
-
-    import itertools
-
-    # === Нормализуем теги тарифов ===
-    for t in tariffs:
-        tag_val = (t.get("tag") or t.get("тег") or "").strip().lower()
-        if "манипулятор" in tag_val:
-            t["tag"] = "manipulator"
-        elif "длинномер" in tag_val or "long_haul" in tag_val:
-            t["tag"] = "long_haul"
-
-
-    # === Утилиты ===
-    def tag_capacity(tag: str) -> float:
-        """Возвращает максимальную грузоподъёмность по тегу"""
-        caps = [
-            _to_float(t.get("capacity_ton") or t.get("грузоподъёмность"))
-            for t in tariffs
-            if (t.get("tag") or t.get("тег")) == tag
-        ]
-        return max(caps) if caps else 0.0
-
-    def make_trip_entry(tag, load, cost, desc):
-        """Оформление одной машины"""
-        real_name = next(
-            (t.get("name") or t.get("название")
-             for t in tariffs
-             if (t.get("tag") == tag or t.get("тег") == tag)),
-            tag
-        )
-        return {
-            "тип": tag,
-            "реальное_имя": real_name,
-            "рейсы": 1,
-            "вес_перевезено": round(load, 2),
-            "стоимость": round(float(cost), 2),
-            "описание": desc,
-        }
-
-    def plan_cost(plan):
-        return sum(float(p["стоимость"]) for p in plan)
-
-    # === Определяем доступные теги ===
-    # === Нормализация selected_tag (рус/англ эквиваленты) ===
-    if selected_tag:
-        st = selected_tag.strip().lower()
-        if st in ("manipulator", "манипулятор", "манипулятор "):
-            selected_tag = "manipulator"
-        elif st in ("длинномер", "long_haul"):
-            selected_tag = "long_haul"
-
-    # === Определяем доступные теги 2 ===
-    if selected_tag in ("manipulator", "long_haul"):
-        allowed_tags = [selected_tag]
-    else:
-        allowed_tags = ["long_haul"]
-        if allow_mani:
-            allowed_tags.append("manipulator")
-
-    if not allowed_tags:
-        return None, None
-
-    # === Подготовка тарифов ===
-    capacities = {tag: tag_capacity(tag) for tag in allowed_tags}
-    if not capacities or all(v <= 0 for v in capacities.values()):
-        return None, None
-
-    # === Функция для расчёта стоимости комбинации ===
-    def evaluate_combo(combo_counts):
-        total = 0.0
-        plan = []
-        weight_left = total_weight
-        for tag, count in combo_counts.items():
-            cap = capacities[tag]
-            for i in range(count):
-                if weight_left <= 0:
-                    break
-                load = min(weight_left, cap)
-                cost, desc = calculate_tariff_cost(tag, distance_km, load)
-                if not cost:
-                    return None, None
-                plan.append(make_trip_entry(tag, load, cost, desc))
-                total += cost
-                weight_left -= load
-        if weight_left > 0.1:
-            return None, None
-        return total, plan
-
-    # === Перебор комбинаций машин (до 5 рейсов суммарно) ===
-    best_plan = None
-    best_cost = float("inf")
-
-    max_reisov = 5
-    for n in range(1, max_reisov + 1):
-        for combo in itertools.combinations_with_replacement(allowed_tags, n):
-            combo_counts = {t: combo.count(t) for t in allowed_tags}
-            total_weight_possible = sum(capacities[t] * combo_counts[t] for t in allowed_tags)
-            if total_weight_possible < total_weight:
-                continue
-            total, plan = evaluate_combo(combo_counts)
-            if total and total < best_cost:
-                best_cost = total
-                best_plan = plan
-
-    # === Если ничего не подошло, вернём None ===
-    if not best_plan:
-        return None, None
-
-    # === Fallback для чистого манипулятора (если подбор не сработал) ===
-    if selected_tag == "manipulator" and (not best_plan or len(best_plan) == 0):
-        print("⚙️ Fallback: подбор только манипулятором")
-        mani_tariffs = [t for t in tariffs if (t.get("tag") or t.get("тег")) == "manipulator"]
-        if mani_tariffs:
-            mani = mani_tariffs[0]
-            mani_capacity = _to_float(mani.get("capacity_ton") or mani.get("грузоподъёмность") or 0)
-            if mani_capacity <= 0:
-                mani_capacity = 10.0
-            trips_needed = math.ceil(total_weight / mani_capacity)
-            cost, desc = calculate_tariff_cost("manipulator", distance_km, mani_capacity)
-            if cost:
-                total_cost = cost * trips_needed
-                best_plan = [{
-                    "тип": "manipulator",
-                    "реальное_имя": mani.get("name") or mani.get("название") or "Манипулятор",
-                    "рейсы": trips_needed,
-                    "вес_перевезено": total_weight,
-                    "стоимость": round(total_cost, 2),
-                    "описание": desc,
-                }]
-                best_cost = total_cost
-                print(f"✅ Fallback-расчёт успешен: {trips_needed} рейсов, {total_cost}₽")
-
-
-    if require_one_mani and "manipulator" in capacities:
-        has_mani = any(p["тип"] == "manipulator" for p in best_plan)
-        if not has_mani and total_weight > 0:
-            mani_cap = capacities["manipulator"]
-            mani_load = min(mani_cap, total_weight)
-            cost, desc = calculate_tariff_cost("manipulator", distance_km, mani_load)
-            mani_trip = make_trip_entry("manipulator", mani_load, cost, desc)
-
-            # ✅ Новый блок — манипулятор реально забирает часть веса
-            taken = False
-            for trip in reversed(best_plan):
-                if trip["тип"] == "long_haul" and trip["вес_перевезено"] > mani_load:
-                    trip["вес_перевезено"] -= mani_load
-                    taken = True
-                    break
-
-            # Если длинномеров нет, просто добавляем манипулятор
-            if not taken:
-                remaining_weight = max(0.0, total_weight - mani_load)
-                rest_combo = {"long_haul": math.ceil(remaining_weight / capacities["long_haul"])} if remaining_weight > 0 else {}
-                _, rest_plan = evaluate_combo(rest_combo) if rest_combo else (0, [])
-                best_plan = (rest_plan or [])
-
-            best_plan.append(mani_trip)
-            best_plan = [p for p in best_plan if p["вес_перевезено"] > 0]
-            best_cost = plan_cost(best_plan)
-            print(f"✅ Принудительный манипулятор забрал {mani_load}т у длинномера, скорректирован план.")
-
-
-
-    # === Если включена галочка +1 манипулятор, а выбран длинномер ===
-    if require_one_mani and selected_tag == "long_haul":
-        mani_tariffs = [t for t in tariffs if (t.get("tag") or t.get("тег")) == "manipulator"]
-        if mani_tariffs and best_plan:
-            mani = mani_tariffs[0]
-            mani_capacity = _to_float(mani.get("capacity_ton") or mani.get("грузоподъёмность"))
-            if mani_capacity > 0:
-                has_mani = any("manipulator" in (p["тип"] or "").lower() for p in best_plan)
-                if not has_mani:
-                    total_weight_now = sum(p["вес_перевезено"] for p in best_plan)
-                    if total_weight_now > mani_capacity:
-                        # снимаем часть груза с последнего рейса длинномера
-                        last = best_plan[-1]
-                        take_from_last = min(last["вес_перевезено"], mani_capacity)
-                        last["вес_перевезено"] -= take_from_last
-                        # создаём новый рейс манипулятора
-                        cost, desc = calculate_tariff_cost("manipulator", distance_km, take_from_last)
-                        if cost:
-                            best_plan.append({
-                                "тип": "manipulator",
-                                "реальное_имя": mani.get("name") or mani.get("название") or "Манипулятор",
-                                "рейсы": 1,
-                                "вес_перевезено": take_from_last,
-                                "стоимость": round(cost, 2),
-                                "описание": desc,
-                            })
-                            best_cost = plan_cost(best_plan)
-
-    # === Fallback при большом весе для манипуляторов ===
-    if not best_plan and selected_tag == "manipulator" and total_weight > 0:
-        print(f"⚙️ Автогенерация рейсов манипулятора для {total_weight} т (fallback)")
-        cap = 9.5
-        trips = math.ceil(total_weight / cap)
-        total_cost = 0.0
-        plan = []
-        for i in range(trips):
-            load = min(cap, total_weight - i * cap)
-            cost, desc = calculate_tariff_cost("manipulator", distance_km, load)
-            if not cost:
-                cost = 24000  # безопасная ставка по умолчанию
-            plan.append({
-                "тип": "manipulator",
-                "реальное_имя": "Манипулятор (fallback)",
-                "рейсы": 1,
-                "вес_перевезено": load,
-                "стоимость": cost,
-                "описание": desc or "Автогенерация при перегрузе",
-            })
-            total_cost += cost
-        best_plan = plan
-        best_cost = total_cost
-        print(f"✅ fallback завершён: {trips} рейсов, {total_cost}₽")
-
-    # === Если план пуст — создаём рейс только манипулятора ===
-    if (not best_plan or len(best_plan) == 0) and selected_tag == "manipulator":
-        mani_tariffs = [t for t in tariffs if (t.get("tag") or t.get("тег")) == "manipulator"]
-        if mani_tariffs:
-            mani = mani_tariffs[0]
-            mani_capacity = _to_float(mani.get("capacity_ton") or mani.get("грузоподъёмность") or 0)
-            if mani_capacity <= 0:
-                mani_capacity = 10  # fallback на 10т, чтобы не падало
-
-            trips_needed = math.ceil(total_weight / mani_capacity)
-            cost, desc = calculate_tariff_cost("manipulator", distance_km, total_weight)
-            if cost:
-                best_plan = [{
-                    "тип": "manipulator",
-                    "реальное_имя": mani.get("name") or mani.get("название") or "Манипулятор",
-                    "рейсы": trips_needed,
-                    "вес_перевезено": total_weight,
-                    "стоимость": round(cost * trips_needed, 2),
-                    "описание": desc,
-                }]
-                best_cost = round(cost * trips_needed, 2)
-            else:
-                best_plan = []
-                best_cost = 0
-        else:
-            # нет тарифа манипулятора
-            best_plan = []
-            best_cost = 0
-
-    # === Убираем рейсы с нулевым весом ===
-    best_plan = [p for p in best_plan if p.get("вес_перевезено", 0) > 0]
-    best_cost = plan_cost(best_plan)
-
-    best_human = ", ".join(sorted({t["реальное_имя"] for t in best_plan}))
-    return best_cost, {"транспорт_детали": {"доп": best_plan}, "транспорт": best_human}
-
-
-
 
 def load_factories_from_google():
-    try:
-        creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "google_credentials.json")
-
-        if not os.path.exists(creds_path):
-            print(f"❌ Ключ не найден: {creds_path}")
-            return {}
-
-        print("✅ Используем ключ для Google Sheets")
-        creds = service_account.Credentials.from_service_account_file(creds_path, scopes=[
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive",
-        ])
-        client = gspread.authorize(creds)
-
-    except Exception as e:
-        print(f"❌ Ошибка авторизации Google Sheets: {e}")
-        return {}  # <<< важно — сразу выйти, если client не создан
-
-    # если дошли сюда — client есть, можно безопасно открывать
-    try:
-        sheet = client.open_by_key(GOOGLE_SHEET_ID)
-        ...
-    except APIError as e:
-        print(f"⚠️ Ошибка Google API: {e}")
-        return {}
-
-    """
-    Загружает данные с заводами и товарами из Google Sheets.
-    Структура листа:
-    1 строка — вес (тонны)
-    2 строка — название товара
-    3+ строка — заводы (название, контакты, координаты, цены)
-    """
-
     try:
         print("✅ Используем ключ для Google Sheets")
         client = get_gspread_client()
@@ -743,14 +367,6 @@ def capacity_to_ton(x) -> float:
 def max_capacity_by_tag(tariffs: list, tag: str) -> float:
     caps = [capacity_to_ton(t.get("грузоподъёмность")) for t in tariffs if t.get("тег") == tag]
     return max(caps) if caps else 0.0
-
-def pick_special_by_name(tariffs: list, name: str):
-    if not name:
-        return None
-    for t in tariffs:
-        if str(t.get("название", "")).strip().lower() == str(name).strip().lower():
-            return t
-    return None
 
 
 # --- Инициализируем данные при старте ---
@@ -1056,17 +672,18 @@ def calculate_tariff_cost(transport_tag: str, distance_km: float, weight_ton: fl
         s = (s or "").strip().lower()
         if "манипулятор" in s or s == "manipulator":
             return "manipulator"
-        if "длинномер" in s or s == "long_haul":
+        if "длинномер" in s or "long" in s or s == "long_haul":
             return "long_haul"
-        if "special" in s or "спец" in s:
+        if "спец" in s or "special" in s:
             return "special"
         return s
 
     transport_tag = _norm_tag(transport_tag)
+
+    # НАДО: проставить tag у каждой строки тарифа
     for t in tariffs:
         t["tag"] = _norm_tag(t.get("tag") or t.get("тег"))
 
-    # ⚠️ фильтрацию переносим сюда — после нормализации
     suitable = [t for t in tariffs if t.get("tag") == transport_tag]
     if not suitable:
         print(f"⚠️ Нет тарифов для '{transport_tag}' (из {len(tariffs)} строк)")
@@ -1110,6 +727,635 @@ def calculate_tariff_cost(transport_tag: str, distance_km: float, weight_ton: fl
     print(f"⚠️ Тариф не найден для {transport_tag}, расстояние {distance_km} км")
     return None, "Тариф не найден"
 
+def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_tag=None, require_one_mani=False):
+    """
+    Полный расчёт оптимального плана доставки.
+    Манипулятор и длинномер участвуют на равных.
+    Если выбран конкретный тип (selected_tag='manipulator' или 'long_haul'),
+    подбираются только такие рейсы.
+    Если require_one_mani=True — добавляем хотя бы один манипулятор.
+    """
+    import itertools
+    import math
+
+    # === Нормализуем теги тарифов ===
+    for t in tariffs:
+        tag_val = (t.get("tag") or t.get("тег") or "").strip().lower()
+        if "манипулятор" in tag_val:
+            t["tag"] = "manipulator"
+        elif "длинномер" in tag_val or "long_haul" in tag_val or "long" in tag_val:
+            t["tag"] = "long_haul"
+
+    # === Утилиты ===
+    def tag_capacity(tag: str) -> float:
+        """Возвращает максимальную грузоподъёмность по тегу"""
+        caps = [
+            _to_float(t.get("capacity_ton") or t.get("грузоподъёмность"))
+            for t in tariffs
+            if (t.get("tag") or t.get("тег")) == tag
+        ]
+        return max(caps) if caps else 0.0
+
+    def make_trip_entry(tag, load, cost, desc):
+        """Оформление одной машины"""
+        real_name = next(
+            (t.get("name") or t.get("название")
+             for t in tariffs
+             if (t.get("tag") == tag or t.get("тег") == tag)),
+            tag
+        )
+        return {
+            "тип": tag,
+            "реальное_имя": real_name,
+            "рейсы": 1,
+            "вес_перевезено": round(load, 2),
+            "стоимость": round(float(cost), 2),
+            "описание": desc,
+        }
+
+    def plan_cost(plan):
+        return sum(float(p["стоимость"]) for p in plan)
+
+    # === Нормализация selected_tag ===
+    if selected_tag:
+        st = selected_tag.strip().lower()
+        if st in ("manipulator", "манипулятор", "манипулятор "):
+            selected_tag = "manipulator"
+        elif st in ("длинномер", "long_haul", "long"):
+            selected_tag = "long_haul"
+
+    # === Определяем доступные теги ===
+    if selected_tag in ("manipulator", "long_haul"):
+        allowed_tags = [selected_tag]
+    else:
+        allowed_tags = ["long_haul"]
+        if allow_mani:
+            allowed_tags.append("manipulator")
+
+    if not allowed_tags:
+        return None, None
+
+    # === Подготовка тарифов ===
+    capacities = {tag: tag_capacity(tag) for tag in allowed_tags}
+    if not capacities or all(v <= 0 for v in capacities.values()):
+        return None, None
+
+    # === Функция для расчёта стоимости комбинации ===
+    def evaluate_combo(combo_counts):
+        total = 0.0
+        plan = []
+        weight_left = total_weight
+        for tag, count in combo_counts.items():
+            cap = capacities[tag]
+            for i in range(count):
+                if weight_left <= 0:
+                    break
+                load = min(weight_left, cap)
+                cost, desc = calculate_tariff_cost(tag, distance_km, load)
+                if not cost:
+                    return None, None
+                plan.append(make_trip_entry(tag, load, cost, desc))
+                total += cost
+                weight_left -= load
+        if weight_left > 0.1:
+            return None, None
+        return total, plan
+
+    # === Перебор комбинаций машин (до 5 рейсов суммарно) ===
+    best_plan = None
+    best_cost = float("inf")
+
+    max_reisov = 5
+    for n in range(1, max_reisov + 1):
+        for combo in itertools.combinations_with_replacement(allowed_tags, n):
+            combo_counts = {t: combo.count(t) for t in allowed_tags}
+            total_weight_possible = sum(capacities[t] * combo_counts[t] for t in allowed_tags)
+            if total_weight_possible < total_weight:
+                continue
+            total, plan = evaluate_combo(combo_counts)
+            if total and total < best_cost:
+                best_cost = total
+                best_plan = plan
+
+    # === Если ничего не подошло, вернём None ===
+    if not best_plan:
+        return None, None
+
+    # === Если нужно гарантировать хотя бы один манипулятор ===
+    if require_one_mani and "manipulator" in capacities:
+        has_mani = any(p["тип"] == "manipulator" for p in best_plan)
+        if not has_mani and total_weight > 0:
+            mani_cap = capacities["manipulator"]
+            mani_load = min(mani_cap, total_weight)
+            cost, desc = calculate_tariff_cost("manipulator", distance_km, mani_load)
+            mani_trip = make_trip_entry("manipulator", mani_load, cost, desc)
+
+            # снимаем вес с последнего длинномера, если он есть
+            taken = False
+            for trip in reversed(best_plan):
+                if trip["тип"] == "long_haul" and trip["вес_перевезено"] > mani_load:
+                    trip["вес_перевезено"] -= mani_load
+                    taken = True
+                    break
+
+            if not taken:
+                # если длинномера нет или мало веса — оставляем план как есть и просто добавляем манипулятор
+                pass
+
+            best_plan.append(mani_trip)
+            best_plan = [p for p in best_plan if p["вес_перевезено"] > 0]
+            best_cost = plan_cost(best_plan)
+
+    best_human = ", ".join(sorted({t["реальное_имя"] for t in best_plan}))
+    return best_cost, {"транспорт_детали": {"доп": best_plan}, "транспорт": best_human}
+
+
+# ============================================================
+#  FACTORY SCENARIO BUILDER — часть DeliveryCalc 2.0
+# ============================================================
+
+from itertools import product
+from collections import defaultdict
+
+def build_factory_scenarios(factories, items):
+    """
+    Создаёт ВСЕ возможные сценарии поставки товаров с разных заводов.
+
+    factories — список заводов из factories.json
+    items — [{category, subtype, quantity}, ...]
+
+    Возвращает список сценариев:
+        [
+          {
+            "scenario_id": 1,
+            "factories": {
+                "Завод А": [ {product}, {product} ],
+                "Завод B": [ ... ]
+            },
+            "total_weight": ...,
+            "weights_by_factory": {"Завод А": 12.4, "Завод B": 48.2}
+          },
+          ...
+        ]
+    """
+
+    # ========================================================
+    # 1. Строим карту: товар → список заводов, где он есть
+    # ========================================================
+    candidates = []  # список списков: [[factory1, factory2], [factory1], ...]
+
+    item_meta = []   # сохраним вес/цену каждого товара
+
+    for item in items:
+        cat = item.category.strip().lower()
+        sub = item.subtype.strip().lower()
+        qty = item.quantity
+
+        possible_factories = []
+
+        for f in factories:
+            for p in f.get("products", []):
+                if p["category"].strip().lower() == cat and \
+                   p["subtype"].strip().lower() == sub:
+
+                    possible_factories.append({
+                        "factory": f,
+                        "product": p,
+                        "quantity": qty
+                    })
+
+        if not possible_factories:
+            print(f"⚠️ Нет заводов для товара {item.category} / {item.subtype}")
+            return []
+
+        candidates.append(possible_factories)
+
+    # ========================================================
+    # 2. Комбинаторика: декартово произведение всех вариантов
+    # ========================================================
+    all_scenarios_raw = list(product(*candidates))
+
+    scenarios = []
+    scenario_id = 1
+
+    # ========================================================
+    # 3. Группируем товары по заводам
+    # ========================================================
+    for raw_scenario in all_scenarios_raw:
+        grouped = defaultdict(list)
+
+        for choice in raw_scenario:
+            f = choice["factory"]
+            p = choice["product"]
+            qty = choice["quantity"]
+
+            grouped[f["name"]].append({
+                "factory": f,
+                "product": p,
+                "quantity": qty,
+                "weight_total": p["weight_ton"] * qty
+            })
+
+        # считаем суммарный вес по заводу
+        weights = {}
+        for fname, plist in grouped.items():
+            weights[fname] = sum(x["weight_total"] for x in plist)
+
+        scenarios.append({
+            "scenario_id": scenario_id,
+            "factories": grouped,
+            "weights_by_factory": weights,
+            "total_weight": sum(weights.values())
+        })
+
+        scenario_id += 1
+
+    return scenarios
+
+def evaluate_scenario_transport(scenario, req, calc_tariffs):
+    """
+    Считает полный план по одному сценарию (раскладка по заводам уже задана).
+
+    Возвращает dict:
+      {
+        "scenario": scenario,
+        "material_sum": ...,
+        "delivery_cost": ...,
+        "total_cost": ...,
+        "plans": [список рейсов],
+        "transport_name": "...",
+        "factory_distances": {имя_завода: дистанция_км},
+      }
+    либо None, если сценарий невозможен.
+    """
+
+    factories_map = scenario["factories"]
+    total_weight = scenario["total_weight"]
+
+    if total_weight <= 0:
+        return None
+
+    # --- подготовка ограничений по типам транспорта ---
+    forbidden = set((req.forbidden_types or []))
+
+    # выбрали спецтранспорт? тогда игнорируем манипуляторы/длинномеры
+    use_special = bool(req.selected_special and req.selected_special != "Не выбирать")
+
+    # фильтруем тарифы по запретам
+    usable_tariffs = [
+        t for t in calc_tariffs
+        if str(t.get("tag") or "").strip().lower() not in forbidden
+    ]
+
+    if not usable_tariffs:
+        print("⚠️ Нет доступных тарифов после фильтрации по forbidden_types")
+        return None
+
+    # helper: расстояние от завода до клиента
+    factory_distances = {}
+    material_sum = 0.0
+
+    # соберём данные по заводам
+    factories_info = []  # список {name, weight, distance, material_cost, items}
+
+    for fname, items in factories_map.items():
+        # берём первый объект завода (везде один и тот же)
+        f_obj = items[0]["factory"]
+        lat = f_obj.get("lat")
+        lon = f_obj.get("lon")
+
+        dist = get_cached_distance(lat, lon, req.upload_lat, req.upload_lon)
+        factory_distances[fname] = dist
+
+        weight = sum(x["weight_total"] for x in items)
+        mat_cost = 0.0
+        for x in items:
+            p = x["product"]
+            qty = x["quantity"]
+            price = p.get("price") or 0
+            mat_cost += price * qty
+
+        material_sum += mat_cost
+
+        factories_info.append({
+            "name": fname,
+            "factory": f_obj,
+            "items": items,
+            "weight": weight,
+            "distance": dist,
+            "material_cost": mat_cost,
+        })
+
+    # === Ветка: выбран конкретный спецтранспорт ===
+    if use_special:
+        special_name_norm = _norm_str(req.selected_special)
+        special_tariff = next(
+            (t for t in usable_tariffs if _norm_str(t.get("name")) == special_name_norm),
+            None
+        )
+        if not special_tariff:
+            print(f"⚠️ Не найден спецтранспорт '{req.selected_special}'")
+            return None
+
+        cap_t = _to_float(special_tariff.get("capacity_ton") or 0) or 1.0
+        tag = special_tariff.get("tag") or special_tariff.get("тег") or "special"
+
+        all_trips = []
+        delivery_cost = 0.0
+
+        for finfo in factories_info:
+            weight_left = finfo["weight"]
+            dist = finfo["distance"]
+
+            while weight_left > 0:
+                load = min(cap_t, weight_left)
+                cost_per_trip, desc = calculate_tariff_cost(tag, dist, load)
+                if not cost_per_trip:
+                    return None
+
+                all_trips.append({
+                    "тип": "special",
+                    "реальное_имя": special_tariff.get("name"),
+                    "рейсы": 1,
+                    "вес_перевезено": round(load, 2),
+                    "стоимость": round(float(cost_per_trip), 2),
+                    "описание": desc or "",
+                })
+                delivery_cost += float(cost_per_trip)
+                weight_left -= load
+
+        transport_name = special_tariff.get("name")
+        total_cost = material_sum + delivery_cost
+
+        return {
+            "scenario": scenario,
+            "material_sum": material_sum,
+            "delivery_cost": delivery_cost,
+            "total_cost": total_cost,
+            "plans": all_trips,
+            "transport_name": transport_name,
+            "factory_distances": factory_distances,
+        }
+
+    # === Обычный режим: манипы / длинномеры / auto ===
+
+    # определяем, что пользователь задал
+    ttype = (req.transport_type or "auto").strip().lower()
+
+    if ttype == "manipulator":
+        selected_tag = "manipulator"
+        allow_mani = True
+    elif ttype == "long_haul":
+        selected_tag = "long_haul"
+        # манипулятор возможен только как "+1", через require_one_mani в compute_best_plan
+        allow_mani = True
+    else:
+        # auto — даём свободу комбинировать оба типа
+        selected_tag = None
+        allow_mani = True
+
+    # --- для "+1 манипулятор" будем считать по двум вариантам на каждый завод ---
+    per_factory_variants = []  # [{name, no_mani, with_mani}]
+
+    for finfo in factories_info:
+        fname = finfo["name"]
+        weight = finfo["weight"]
+        dist = finfo["distance"]
+
+        # если веса нет — пропускаем
+        if weight <= 0:
+            continue
+
+        # считаем вариант "без обязательного манипулятора"
+        cost_no, plan_pack_no = compute_best_plan(
+            weight,
+            dist,
+            usable_tariffs,
+            allow_mani=allow_mani,
+            selected_tag=selected_tag,
+            require_one_mani=False
+        )
+
+        # по умолчанию вариант с манипулятором отсутствует
+        cost_with = None
+        plan_pack_with = None
+
+        # если пользователь отметил "+1 манипулятор" и тип транспорта не pure-manipulator
+        if req.add_manipulator and ttype != "manipulator":
+            cost_with, plan_pack_with = compute_best_plan(
+                weight,
+                dist,
+                usable_tariffs,
+                allow_mani=allow_mani,
+                selected_tag=selected_tag,
+                require_one_mani=True
+            )
+
+        if cost_no is None and cost_with is None:
+            # с этим заводом сценарий нереализуем
+            return None
+
+        per_factory_variants.append({
+            "name": fname,
+            "distance": dist,
+            "weight": weight,
+            "material_cost": finfo["material_cost"],
+            "no_mani": (cost_no, plan_pack_no),
+            "with_mani": (cost_with, plan_pack_with),
+        })
+
+    # === собираем итоговый план по сценарию ===
+
+    def extract_trips(plan_pack):
+        if not plan_pack:
+            return []
+        return (plan_pack or {}).get("транспорт_детали", {}).get("доп", []) or []
+
+    # если "+1 манипулятор" НЕ включён — просто берём самые дешёвые варианты по каждому заводу
+    if not req.add_manipulator or ttype == "manipulator":
+        all_trips = []
+        delivery_cost = 0.0
+
+        for v in per_factory_variants:
+            cost_no, pack_no = v["no_mani"]
+            cost_with, pack_with = v["with_mani"]
+
+            # выбираем существующий и более дешёвый
+            if cost_no is None and cost_with is not None:
+                use_cost, use_pack = cost_with, pack_with
+            elif cost_with is None and cost_no is not None:
+                use_cost, use_pack = cost_no, pack_no
+            else:
+                # оба есть — берём минимальный
+                if cost_with is not None and cost_with < cost_no:
+                    use_cost, use_pack = cost_with, pack_with
+                else:
+                    use_cost, use_pack = cost_no, pack_no
+
+            delivery_cost += float(use_cost or 0)
+            all_trips.extend(extract_trips(use_pack))
+
+        if not all_trips:
+            return None
+
+        transport_name = ", ".join(sorted({t["реальное_имя"] for t in all_trips}))
+        total_cost = material_sum + delivery_cost
+
+        return {
+            "scenario": scenario,
+            "material_sum": material_sum,
+            "delivery_cost": delivery_cost,
+            "total_cost": total_cost,
+            "plans": all_trips,
+            "transport_name": transport_name,
+            "factory_distances": factory_distances,
+        }
+
+    # === режим: нужен хотя бы один манипулятор глобально (+1 манипулятор) ===
+
+    best_total = None
+    best_trips = None
+
+    # пробуем сделать "манипулятор живёт на заводе k"
+    for k, vk in enumerate(per_factory_variants):
+        all_trips_k = []
+        total_delivery_k = 0.0
+
+        has_mani_here = False
+
+        for idx, v in enumerate(per_factory_variants):
+            # на заводе k стараемся использовать вариант with_mani
+            if idx == k:
+                cost_with, pack_with = v["with_mani"]
+                if cost_with is not None:
+                    use_cost, use_pack = cost_with, pack_with
+                else:
+                    use_cost, use_pack = v["no_mani"]
+            else:
+                # на остальных — берём более дешёвый без учёта манипулятора
+                cost_no, pack_no = v["no_mani"]
+                cost_with, pack_with = v["with_mani"]
+                if cost_no is None and cost_with is not None:
+                    use_cost, use_pack = cost_with, pack_with
+                elif cost_with is None and cost_no is not None:
+                    use_cost, use_pack = cost_no, pack_no
+                else:
+                    if cost_with is not None and cost_with < cost_no:
+                        use_cost, use_pack = cost_with, pack_with
+                    else:
+                        use_cost, use_pack = cost_no, pack_no
+
+            if use_cost is None:
+                all_trips_k = None
+                break
+
+            trips_here = extract_trips(use_pack)
+            all_trips_k.extend(trips_here)
+            total_delivery_k += float(use_cost or 0)
+
+        if not all_trips_k:
+            continue
+
+        # проверим, что в плане вообще есть манипулятор
+        if not any("manipulator" in (t.get("тип") or "") for t in all_trips_k):
+            continue
+
+        if best_total is None or total_delivery_k < best_total:
+            best_total = total_delivery_k
+            best_trips = all_trips_k
+
+    # если так и не нашли валидный план с манипулятором — откатываемся к варианту без требования
+    if best_trips is None:
+        # просто берём минимальные комбинации по заводам
+        all_trips = []
+        delivery_cost = 0.0
+        for v in per_factory_variants:
+            cost_no, pack_no = v["no_mani"]
+            delivery_cost += float(cost_no or 0)
+            all_trips.extend(extract_trips(pack_no))
+        if not all_trips:
+            return None
+        transport_name = ", ".join(sorted({t["реальное_имя"] for t in all_trips}))
+        total_cost = material_sum + delivery_cost
+        return {
+            "scenario": scenario,
+            "material_sum": material_sum,
+            "delivery_cost": delivery_cost,
+            "total_cost": total_cost,
+            "plans": all_trips,
+            "transport_name": transport_name,
+            "factory_distances": factory_distances,
+        }
+
+    # успех: есть план с манипулятором
+    transport_name = ", ".join(sorted({t["реальное_имя"] for t in best_trips}))
+    total_cost = material_sum + best_total
+
+    return {
+        "scenario": scenario,
+        "material_sum": material_sum,
+        "delivery_cost": best_total,
+        "total_cost": total_cost,
+        "plans": best_trips,
+        "transport_name": transport_name,
+        "factory_distances": factory_distances,
+    }
+
+def build_shipment_details_from_result(best_result, req):
+    """
+    Формирует список 'детали' для ответа /quote,
+    распределяя стоимость доставки пропорционально весу.
+    """
+    scenario = best_result["scenario"]
+    factories_map = scenario["factories"]
+    factory_distances = best_result["factory_distances"]
+
+    # сначала собираем все строки без стоимости доставки
+    rows = []
+    for fname, items in factories_map.items():
+        dist = factory_distances.get(fname, 0.0)
+        for x in items:
+            f_obj = x["factory"]
+            p = x["product"]
+            qty = x["quantity"]
+            weight = x["weight_total"]
+            mat_cost = (p.get("price") or 0) * qty
+
+            rows.append({
+                "товар": f"{p['category']} ({p['subtype']})",
+                "завод": fname,
+                "машина": best_result["transport_name"],
+                "tag": req.transport_type,
+                "реальное_имя_машины": best_result["transport_name"],
+                "кол-во": qty,
+                "вес_тонн": round(weight, 2),
+                "расстояние_км": round(dist, 2),
+                "стоимость_материала": mat_cost,
+                "стоимость_доставки": 0.0,  # пока 0, заполним ниже
+                "тариф": "",
+                "итого": 0.0,
+            })
+
+    total_weight = sum(r["вес_тонн"] for r in rows) or 1.0
+    delivery_cost = best_result["delivery_cost"]
+
+    # описание тарифа — просто склейка описаний из рейсов
+    desc_parts = []
+    for t in best_result["plans"]:
+        d = (t.get("описание") or "").strip()
+        if d and d not in desc_parts:
+            desc_parts.append(d)
+    tariff_desc = " + ".join(desc_parts)
+
+    # распределяем стоимость доставки по весу
+    for r in rows:
+        share = (r["вес_тонн"] or 0.0) / total_weight
+        r["стоимость_доставки"] = round(delivery_cost * share, 2)
+        r["тариф"] = tariff_desc
+        r["итого"] = round(r["стоимость_материала"] + r["стоимость_доставки"], 2)
+
+    return rows
+
 
 # ===== Калькулятор стоимости доставки =====
 class QuoteItem(BaseModel):
@@ -1133,70 +1379,43 @@ class QuoteRequest(BaseModel):
     selected_special: Optional[str] = Field(None, alias="selectedSpecial")
 
 
-def cheapest_factory_for(tag: str, factory_ship: dict, shipment_details: list):
-    """
-    Возвращает завод, где доп.рейс (по данному тегу транспорта)
-    выйдет дешевле всего по суммарной стоимости доставки.
-    """
-    best_factory = None
-    best_cost = float("inf")
-
-    for factory_name, info in factory_ship.items():
-        # возьмём первую позицию от этого завода, чтобы оценить дистанцию
-        positions = [d for d in shipment_details if d["завод"] == factory_name]
-        if not positions:
-            continue
-
-        # возьмём среднюю дистанцию (если разные товары с разных координат)
-        avg_distance = sum(d["расстояние_км"] for d in positions) / len(positions)
-        cost_per_trip, _ = calculate_tariff_cost(tag, avg_distance, sum(d["вес_тонн"] for d in positions))
-        if cost_per_trip and cost_per_trip < best_cost:
-            best_cost = cost_per_trip
-            best_factory = factory_name
-
-    return best_factory, best_cost if best_factory else (None, None)
-
-
 @app.post("/quote")
 async def quote(req: QuoteRequest):
-
     import json
+
+    # --- лог входного запроса (как у тебя было) ---
     try:
-        raw = await req.__dict__
-    except Exception:
-        raw = {}
-    print("\n=== 🧾 RAW REQUEST (получен от фронта) ===")
-    try:
+        print("\n=== 🧾 RAW REQUEST (получен от фронта) ===")
         print(json.dumps(req.dict(by_alias=True), ensure_ascii=False, indent=2))
+        print("========================================\n")
     except Exception as e:
         print("Ошибка при выводе JSON:", e)
-    print("========================================\n")
-
-    # Диагностика: если категории пришли битые
-    for item in req.items:
-        if "?" in item.category or "?" in item.subtype:
-            print(f"⚠️ ВНИМАНИЕ: битая кириллица в запросе — {item.category} / {item.subtype}")
 
     factories = load_json(FACTORIES_FILE)
     global TARIFFS_CACHE
     tariffs = TARIFFS_CACHE or load_json(TARIFFS_FILE)
 
+    if not factories:
+        return JSONResponse(status_code=400, content={"detail": "Нет данных о производствах"})
+    if not tariffs:
+        return JSONResponse(status_code=400, content={"detail": "Нет данных о тарифах"})
 
-    # === Нормализуем теги тарифов ===
-    for t in tariffs:
-        tag_val = (t.get("tag") or t.get("тег") or "").strip().lower()
-        if "манипулятор" in tag_val:
-            t["tag"] = "manipulator"
-        elif "длинномер" in tag_val or "long_haul" in tag_val:
-            t["tag"] = "long_haul"
-
-    # Нормализация тарифов под compute_best_plan (ожидает англ. ключи)
+    # --- нормализуем тарифы под compute_best_plan / evaluate_scenario_transport ---
     calc_tariffs = []
     for t in tariffs:
+        raw_tag = t.get("тег") or t.get("tag") or ""
+        tag_norm = raw_tag.strip().lower()
+        if "манипулятор" in tag_norm:
+            tag_norm = "manipulator"
+        elif "длинномер" in tag_norm or "long" in tag_norm:
+            tag_norm = "long_haul"
+        elif "спец" in tag_norm or "special" in tag_norm:
+            tag_norm = "special"
+
         calc_tariffs.append({
             "name":         t.get("название")         or t.get("name"),
             "capacity_ton": t.get("грузоподъёмность") or t.get("capacity_ton"),
-            "tag":          t.get("тег")              or t.get("tag"),
+            "tag":          tag_norm,
             "distance_min": t.get("дистанция_мин")    or t.get("distance_min"),
             "distance_max": t.get("дистанция_макс")   or t.get("distance_max"),
             "price":        t.get("цена")             or t.get("price"),
@@ -1206,365 +1425,71 @@ async def quote(req: QuoteRequest):
         })
 
 
-    if not factories:
-        return JSONResponse(status_code=400, content={"detail": "Нет данных о производствах"})
-    if not tariffs:
-        return JSONResponse(status_code=400, content={"detail": "Нет данных о тарифах"})
-
-    def find_weight_ton(category: str, subtype: str) -> float:
-        cat = _norm_str(category)
-        sub = _norm_str(subtype)
-
-        matches_cat = 0
-        matches_both = 0
-
-        for f in factories:
-            for p in f.get("products", []):
-                p_cat = _norm_str(p.get("category"))
-                p_sub = _norm_str(p.get("subtype"))
-                if p_cat == cat:
-                    matches_cat += 1
-                if p_cat == cat and p_sub == sub:
-                    matches_both += 1
-                    return float(p.get("weight_ton", 0.0))
-
-        # подробный лог, если не нашли
-        print(f"⚠️ find_weight_ton: не нашёл вес для [{category}] / [{subtype}] "
-            f"(совпадений по категории: {matches_cat}, по паре: {matches_both})")
-        return 0.0
-
-
-    total_weight = 0.0
-    for item in req.items:
-        w = find_weight_ton(item.category, item.subtype)
-        if w <= 0:
-            print(f"❌ Не найден вес для {item.category} / {item.subtype}")
-        total_weight += w * item.quantity
-
-    if total_weight <= 0:
-        print("❌ Ошибка: общий вес = 0, возможно, не совпали подтипы с factories.json")
+    # --- строим ВСЕ сценарии по комбинациям заводов ---
+    scenarios = build_factory_scenarios(factories, req.items)
+    if not scenarios:
         return JSONResponse(
             status_code=400,
-            content={"detail": "Не удалось определить вес товара (проверьте подтипы в таблице)"}
-        )
-    # === 2. Максимальная грузоподъёмность по тегу ===
-    def type_capacity(tag: str) -> float:
-        def _parse_capacity(value):
-            if value is None:
-                return 0.0
-            s = str(value).replace(",", ".").replace("т", "").replace("Т", "").strip()
-            try:
-                return float(s)
-            except ValueError:
-                return 0.0
-
-        caps = [_parse_capacity(t.get("грузоподъёмность")) for t in tariffs if t.get("тег") == tag]
-        if not caps:
-            return max(_parse_capacity(t.get("грузоподъёмность")) for t in tariffs)
-        return max(caps)
-
-
-    # === 3. Определяем тип транспорта ===
-    if req.transport_type == "auto":
-        possible_types = sorted({t.get("тег") for t in tariffs if t.get("тег") in ("manipulator", "long_haul")})
-        if not possible_types:
-            largest = max(tariffs, key=lambda t: float(t.get("грузоподъёмность", 0)))
-            transport_type = largest.get("тег", "long_haul")
-        else:
-            best_type, best_total_delivery = None, float("inf")
-            first_factory = factories[0]
-            sample_dist = get_cached_distance(first_factory["lat"], first_factory["lon"],
-                                              req.upload_lat, req.upload_lon)
-            for t in possible_types:
-                cap = type_capacity(t)
-                if cap <= 0:
-                    continue
-                cost_per_trip, _ = calculate_tariff_cost(t, sample_dist, total_weight)
-                trips = math.ceil(total_weight / cap)
-                total_delivery = cost_per_trip * trips if cost_per_trip else float("inf")
-                if total_delivery < best_total_delivery:
-                    best_total_delivery = total_delivery
-                    best_type = t
-            transport_type = best_type or "manipulator"
-    else:
-        transport_type = req.transport_type
-
-    # === 4. Подбор лучших заводов по каждому товару ===
-    shipment_details = []
-    for item in req.items:
-        best = None
-        for f in factories:
-            for p in f.get("products", []):
-                if _norm_str(p.get("category")) == _norm_str(item.category) and \
-                   _norm_str(p.get("subtype"))  == _norm_str(item.subtype):
-                    print(f"🔎 match: {f['name']} -> {p['category']} / {p['subtype']}")
-                    dist = get_cached_distance(f["lat"], f["lon"], req.upload_lat, req.upload_lon)
-                    mat_cost = p["price"] * item.quantity
-                    weight_here = p["weight_ton"] * item.quantity
-                    del_cost_per_trip, tariff_info = calculate_tariff_cost(transport_type, dist, weight_here)
-                    if not del_cost_per_trip:
-                        continue
-                    total = mat_cost + del_cost_per_trip
-                    if best is None or total < best[0]:
-                        best = (total, f, p, dist, mat_cost, del_cost_per_trip, tariff_info)
-
-        if best:
-            total, f, p, dist, mat_cost, del_cost_per_trip, tariff_info = best
-
-            # получаем человеко-читаемое имя машины (делаем это ДО append)
-            real_name = next(
-                (t.get("название") or t.get("name")
-                 for t in tariffs
-                 if (t.get("тег") == transport_type or t.get("tag") == transport_type)),
-                transport_type
-            )
-
-            shipment_details.append({
-                "товар": f"{p['category']} ({p['subtype']})",
-                "завод": f["name"],
-                "машина": real_name,
-                "tag": transport_type,
-                "реальное_имя_машины": real_name,
-                "кол-во": item.quantity,
-                "вес_тонн": round(p["weight_ton"] * item.quantity, 2),
-                "расстояние_км": round(dist, 2),
-                "стоимость_материала": mat_cost,
-                "стоимость_доставки": round(del_cost_per_trip, 2),
-                "тариф": tariff_info,
-                "итого": round(total, 2),
-            })
-    # Пересчёт общего веса по реально выбранным позициям (чтобы точно не было дублей)
-    total_weight = sum(d["вес_тонн"] for d in shipment_details)
-
-    # --- Ввод недостающих переменных ---
-    # Средняя дистанция по всем товарам (используем для расчёта тарифов)
-    if shipment_details:
-        distance_km = sum(d["расстояние_км"] for d in shipment_details) / len(shipment_details)
-    else:
-        distance_km = 0.0
-
-    # Манипулятор всегда участвует в переборе.
-    # Галочка +1 лишь гарантирует, что в финале будет хотя бы один манипулятор.
-    allow_mani = True
-
-
-    # Общая сумма материалов
-    material_sum = sum(d["стоимость_материала"] for d in shipment_details)
-
-    # === Новый блок расчёта рейсов на основе compute_best_plan ===
-    print("🧩 DEBUG:", total_weight, distance_km, len(tariffs), allow_mani)
-
-    # === Определяем тип транспорта, заданный пользователем ===
-    # "auto" — значит система сама подбирает (оба типа участвуют)
-    selected_by_type = None
-    if req.transport_type in ("manipulator", "long_haul"):
-        selected_by_type = req.transport_type
-
-    # === Если выбран спецтранспорт, считаем только его ===
-    if req.selected_special and req.selected_special != "Не выбирать":
-        special_name_norm = _norm_str(req.selected_special)
-        print(f"🚚 Расчёт спецтранспорта: {special_name_norm}")
-
-        # ищем по нормализованному имени
-        special_tariff = next(
-            (t for t in calc_tariffs if _norm_str(t.get("name")) == special_name_norm),
-            None
+            content={"detail": "Не удалось подобрать заводы под выбранные товары"}
         )
 
-        if special_tariff:
-            cap_t = _to_float(special_tariff.get("capacity_ton") or 0) or 1.0
-            # стоимость одного рейса по тарифу для этой машины
-            cost_per_trip, desc = calculate_tariff_cost(
-                special_tariff.get("tag") or special_tariff.get("тег"),
-                distance_km,
-                cap_t  # считаем по полной загрузке машины
-            )
-            if not cost_per_trip:
-                return JSONResponse(status_code=400, content={"detail": "Нет тарифа для выбранного спецтранспорта"})
+    print(f"🧩 Построено сценариев по заводам: {len(scenarios)}")
 
-            trips_needed = max(1, math.ceil(total_weight / cap_t))
-            print(f"✅ Спецтранспорт рассчитан: {trips_needed} рейсов")
+    # --- оцениваем каждый сценарий и выбираем самый дешёвый ---
+    best_result = None
 
-            # Формируем ПЛАН с разбивкой по рейсам — каждый как отдельная запись
-            trips_list = []
-            weight_left = total_weight
-            for i in range(trips_needed):
-                load = round(min(cap_t, weight_left), 2)
-                trips_list.append({
-                    "тип": "special",
-                    "реальное_имя": special_tariff.get("name"),
-                    "рейсы": 1,
-                    "вес_перевезено": load,
-                    "стоимость": round(float(cost_per_trip), 2),
-                    "описание": desc or "",
-                })
-                weight_left -= load
+    for scen in scenarios:
+        res = evaluate_scenario_transport(scen, req, calc_tariffs)
+        if not res:
+            continue
+        if best_result is None or res["total_cost"] < best_result["total_cost"]:
+            best_result = res
 
-            best_cost = round(cost_per_trip * trips_needed, 2)
-            plan_pack = {
-                "транспорт": special_tariff.get("name"),
-                "транспорт_детали": {"доп": trips_list}
-            }
-
-            # Пропорционально раскладываем стоимость по строкам результатов
-            for row in shipment_details:
-                share = (row.get("вес_тонн", 0.0) or 0.0) / (total_weight or 1)
-                row["машина"] = special_tariff.get("name")
-                row["стоимость_доставки"] = round(best_cost * share, 2)
-                row["тариф"] = desc or ""
-                row["итого"] = round(row["стоимость_материала"] + row["стоимость_доставки"], 2)
-
-            # Возвращаем ответ СРАЗУ после формирования всего плана (а не внутри цикла)
-            return JSONResponse({
-                "transport": plan_pack["транспорт"],
-                "транспорт": plan_pack["транспорт"],
-                "транспорт_детали": plan_pack["транспорт_детали"],
-                "общий_вес": round(total_weight, 2),
-                "количество_рейсов": trips_needed,
-                "итого": round(best_cost + material_sum, 2),
-                "детали": shipment_details,
-            })
-
-        else:
-            print(f"⚠️ Не найден спецтранспорт '{req.selected_special}' — продолжаем обычный расчёт")
-
-
-    # === Новый блок: считаем по каждому заводу отдельно ===
-    grouped_by_factory = {}
-    for d in shipment_details:
-        grouped_by_factory.setdefault(d["завод"], []).append(d)
-
-    plans = []
-    total_delivery_cost = 0.0
-
-    for factory, items in grouped_by_factory.items():
-        weight = sum(i["вес_тонн"] for i in items)
-        distance = sum(i["расстояние_км"] for i in items) / len(items)
-        cost, plan_pack_local = compute_best_plan(
-            weight,
-            distance,
-            calc_tariffs,
-            allow_mani,
-            selected_tag=selected_by_type,
-            require_one_mani=req.add_manipulator
+    if not best_result:
+        return JSONResponse(
+            status_code=400,
+            content={"detail": "Не удалось подобрать транспорт под заданные ограничения"}
         )
-        if plan_pack_local:
-            plans.extend(plan_pack_local["транспорт_детали"]["доп"])
-            total_delivery_cost += cost
 
-    # === Формируем общий план из всех заводов ===
-    plan_pack = {
-        "транспорт": "Смешанный план (по заводам)",
-        "транспорт_детали": {"доп": plans}
-    }
-    best_cost = total_delivery_cost
+    # --- формируем детали для фронта ---
+    shipment_details = build_shipment_details_from_result(best_result, req)
 
+    total_weight = best_result["scenario"]["total_weight"]
+    trips_list = best_result["plans"]
+    transport_title = best_result["transport_name"]
+    material_sum = best_result["material_sum"]
+    delivery_cost = best_result["delivery_cost"]
 
-    if best_cost is None or not plan_pack:
-        print("⚠️ compute_best_plan вернул пустой план — пробуем fallback.")
-        if selected_by_type == "manipulator" and total_weight > 0:
-            cap = 9.5
-            trips = math.ceil(total_weight / cap)
-            trips_list = []
-            total_cost = 0.0
-            for i in range(trips):
-                load = min(cap, total_weight - i * cap)
-                cost, desc = calculate_tariff_cost("manipulator", distance_km, load)
-                if not cost:
-                    cost = 24000
-                trips_list.append({
-                    "тип": "manipulator",
-                    "реальное_имя": "Манипулятор (auto)",
-                    "рейсы": 1,
-                    "вес_перевезено": load,
-                    "стоимость": cost,
-                    "описание": desc or "Автогенерация при перегрузе",
-                })
-                total_cost += cost
+    # количество рейсов — сумма по всем trip'ам
+    total_trips = sum(t.get("рейсы", 1) for t in trips_list)
 
-            plan_pack = {
-                "транспорт": "Манипулятор (auto)",
-                "транспорт_детали": {"доп": trips_list}
-            }
-            best_cost = total_cost
-            print(f"✅ Fallback из /quote сработал: {trips} рейсов, {total_cost}₽")
-        else:
-            print("⚠️ Fallback невозможен — возвращаем 400.")
-            return JSONResponse(
-                status_code=400,
-                content={"detail": "Не удалось подобрать транспорт под заданные ограничения."}
-            )
-
-
-    # === Синхронизация итоговой таблицы "Результаты" ===
-    trips_list = (plan_pack or {}).get("транспорт_детали", {}).get("доп", [])
-    trip_desc_str = " + ".join(
-        (t.get("описание") or t.get("реальное_имя") or "").strip()
-        for t in trips_list
-    )
-
-    if trips_list and best_cost is not None and total_weight > 0:
-        for row in shipment_details:
-            share = (row.get("вес_тонн", 0.0) or 0.0) / (total_weight or 1)
-            row["стоимость_доставки"] = round(best_cost * share, 2)
-            row["итого"] = round(row["стоимость_материала"] + row["стоимость_доставки"], 2)
-
-    # 🧩 Группировка рейсов по машине и заводу
-    trips_rows = (plan_pack or {}).get("транспорт_детали", {}).get("доп", [])
-    grouped = {}
-
-    for row in trips_rows:
-        factory_name = None
-        for s in shipment_details:
-            if s.get("машина") == row.get("реальное_имя"):
-                factory_name = s.get("завод")
-                break
-
-        key = f"{row['реальное_имя']}_{factory_name or 'unknown_factory'}"
-        grouped.setdefault(key, {
-            "machine": row.get("реальное_имя"),
-            "factory": factory_name or "Неизвестный завод",
-            "distance_km": distance_km,
-            "load_t": row.get("вес_перевезено"),
-            "price": row.get("стоимость"),
-            "trips": row.get("рейсы"),
-        })
-
-    trips_rows = list(grouped.values())
-
-
-    # --- итоговый ответ ---
     response = {
-        "transport": plan_pack.get("транспорт"),
-        "транспорт": plan_pack.get("транспорт"),
-        "транспорт_детали": plan_pack.get("транспорт_детали"),
+        "transport": transport_title,
+        "транспорт": transport_title,
+        "транспорт_детали": {"доп": trips_list},
 
         "общий_вес": round(total_weight, 2),
-        "количество_рейсов": sum(row["trips"] for row in trips_rows),
-        "итого": round(best_cost + material_sum, 2),
+        "количество_рейсов": total_trips,
+        "итого": round(material_sum + delivery_cost, 2),
 
-        "детали": shipment_details,   # <- именно эти данные нужны таблице на фронте
+        "детали": shipment_details,
     }
 
-    # === Отладочная печать результатов ===
+    # отладочный вывод
     try:
-        transport_title_dbg = (plan_pack or {}).get("транспорт") or response.get("транспорт") or "—"
-        trips_list_dbg = (plan_pack or {}).get("транспорт_детали", {}).get("доп", [])
-
-        print("\n=== 📊 РЕЗУЛЬТАТ РАСЧЁТА ===")
-        print(f"Тип транспорта: {transport_title_dbg}")
+        print("\n=== 📊 РЕЗУЛЬТАТ РАСЧЁТА (2.0) ===")
+        print(f"Лучший сценарий: #{best_result['scenario']['scenario_id']}")
+        print(f"Тип транспорта: {transport_title}")
         print(f"Вес общий: {round(total_weight, 2)}т")
-        print(f"Расстояние: {round(distance_km, 2)} км")
-        print(f"План: {json.dumps(trips_list_dbg, ensure_ascii=False, indent=2)}")
-        print(f"Итого: {round(best_cost or 0, 2)}₽ + материалы {round(material_sum, 2)}₽")
-        print("==============================\n")
-    except Exception as _e:
-        import traceback as _tb
-        print("⚠️ Ошибка печати результата:", _e)
-        print(_tb.format_exc())
-
+        print(f"План рейсов: {json.dumps(trips_list, ensure_ascii=False, indent=2)}")
+        print(f"Доставка: {round(delivery_cost, 2)}₽, материалы: {round(material_sum, 2)}₽")
+        print(f"Итого: {round(material_sum + delivery_cost, 2)}₽")
+        print("==================================\n")
+    except Exception as e:
+        print("⚠️ Ошибка печати результата:", e)
 
     return JSONResponse(response)
+
 
 
 # ===== Путь к фронтенду =====
