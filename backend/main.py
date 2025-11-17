@@ -53,7 +53,7 @@ load_dotenv(dotenv_path=env_path)
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 GOOGLE_SHEET_ID = "1TECrfLG4qGJDo3l9MQava7SMJpPKnhK3RId8wcnEgm8"
-IGNORE_SHEETS = {"factories", "тест", "справочник", "сводная", "КОЛЬЦА КОЛОДЕЗНЫЕ"}    #игнорируем эти листы
+IGNORE_SHEETS = {"Factories", "КОЛЬЦА КОЛОДЕЗНЫЕ", "ПЛИТЫ ПЕРЕКРЫТИЯ" }    #игнорируем эти листы
 
 def get_gspread_client():
     """
@@ -138,7 +138,7 @@ def load_factories_from_google():
         client = get_gspread_client()
         sheet = client.open_by_key(GOOGLE_SHEET_ID)
 
-        IGNORE_SHEETS = {"factories", "Factories", "тест", "Тест", "справочник", "Справочник", "Сводная", "Vehicles", "КОЛЬЦА КОЛОДЕЗНЫЕ"} #  теперь лист машин игнорируется
+        IGNORE_SHEETS = {"factories", "Factories", "Vehicles", "ПЛИТЫ ПЕРЕКРЫТИЯ", "КОЛЬЦА КОЛОДЕЗНЫЕ"} #  теперь лист машин игнорируется
         worksheets = sheet.worksheets()
         sheet_titles = [ws.title for ws in worksheets]
         print(f"📘 Найдены листы: {', '.join(sheet_titles)}")
