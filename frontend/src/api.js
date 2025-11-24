@@ -1,68 +1,54 @@
-// Автоматически определяем базовый адрес API
+// === API base URL ===
 const isDev = window.location.port === "5173";
-const API_BASE = isDev ? "http://127.0.0.1:8000" : window.location.origin;
+export const API_BASE = isDev ? "http://127.0.0.1:8000" : window.location.origin;
 console.log("🌍 API_BASE =", API_BASE);
 
-
-export async function fetchFactories() {
-  const res = await fetch(`${API_BASE}/api/factories`);
-  if (!res.ok) throw new Error("Ошибка при загрузке factories");
-  return await res.json();
-}
-
-export async function fetchTariffs() {
-  const res = await fetch(`${API_BASE}/api/tariffs`);
-  if (!res.ok) throw new Error("Не удалось загрузить тарифы");
-  return await res.json();
-}
-
-export async function reloadFactories() {
-  const res = await fetch(`${API_BASE}/admin/reload`, { method: "POST" });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.detail || "Ошибка при обновлении");
-  return data;
-}
-
-
-export async function fetchCategories() {
-  const res = await fetch(`${API_BASE}/api/categories`);
-  if (!res.ok) throw new Error("Ошибка при загрузке категорий");
-  return await res.json();
-}
-
-export async function calculateQuote(payload) {
-  const res = await fetch(`${API_BASE}/quote`, {
-    method: "POST",
+// === Универсальная обёртка для fetch ===
+async function request(method, path, body) {
+  const url = `${API_BASE}${path}`;
+  const options = {
+    method,
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.detail || "Ошибка при расчёте");
-  return data;
+  };
+  if (body !== undefined) {
+    options.body = JSON.stringify(body);
+  }
+
+  const resp = await fetch(url, options);
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw new Error(`Ошибка запроса ${method} ${path}: ${resp.status} ${resp.statusText} ${text}`);
+  }
+  if (resp.status === 204) return null;
+  return resp.json();
 }
 
+// === Основные функции API ===
 export async function getCategories() {
-  try {
-    const res = await fetch(`${API_BASE}/api/categories`);
-    if (!res.ok) throw new Error("Ошибка при получении категорий");
-    return await res.json();
-  } catch (err) {
-    console.error("Ошибка в getCategories:", err);
-    return {};
-  }
+  return request("GET", "/api/categories");
+}
+
+export async function getTariffs() {
+  return request("GET", "/api/tariffs");
+}
+
+export async function reloadAll() {
+  return request("POST", "/admin/reload", {});
 }
 
 export async function getQuote(payload) {
-  try {
-    const res = await fetch(`${API_BASE}/quote`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) throw new Error("Ошибка при расчёте стоимости");
-    return await res.json();
-  } catch (err) {
-    console.error("Ошибка в getQuote:", err);
-    return null;
-  }
+  const data = await request("POST", "/quote", payload);
+  // если сервер возвращает объект с полем result, разворачиваем
+  return data.result || data;
 }
+
+
+// === Совместимость со старым фронтом ===
+// (чтобы Admin.jsx и прочие старые страницы не падали)
+export const reloadFactories = reloadAll;
+export const fetchFactories = async () => request("GET", "/api/factories");
+export const fetchTariffs = getTariffs;
+export const loadCategories = getCategories;
+export const loadTariffs = getTariffs;
+export const calculateQuote = getQuote;
+export const reloadData = reloadAll;

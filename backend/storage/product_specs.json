@@ -1,0 +1,202 @@
+{
+  "2п30.18.30 ТУ": {
+    "weight_per_item": 2.2,
+    "special_threshold": 20,
+    "max_per_trip": 25
+  },
+  "2п30.18.30 ГОСТ": {
+    "weight_per_item": 2.2,
+    "special_threshold": 20,
+    "max_per_trip": 25
+  },
+  "1п.30.18.30 Гравий": {
+    "weight_per_item": 2.2,
+    "special_threshold": 20,
+    "max_per_trip": 25
+  },
+  "1п.30.18.30 Гранит": {
+    "weight_per_item": 2.2,
+    "special_threshold": 20,
+    "max_per_trip": 25
+  },
+  "некондиция 2п.30.18": {
+    "weight_per_item": 0.0,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ПАГ 14 ТУ": {
+    "weight_per_item": 4.2,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ПАГ 14 ГОСТ": {
+    "weight_per_item": 4.2,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "некондиция ПАГ 14": {
+    "weight_per_item": 0.0,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ПАГ 18 ТУ": {
+    "weight_per_item": 5.2,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ПАГ 18 ГОСТ": {
+    "weight_per_item": 5.2,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ПАГ 20 ГОСТ": {
+    "weight_per_item": 6.0,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 24-6-6": {
+    "weight_per_item": 1.96,
+    "special_threshold": 22,
+    "max_per_trip": 28
+  },
+  "ФБС 12-6-6": {
+    "weight_per_item": 0.96,
+    "special_threshold": 42,
+    "max_per_trip": 56
+  },
+  "ФБС 9-6-6": {
+    "weight_per_item": 0.7,
+    "special_threshold": 58,
+    "max_per_trip": 78
+  },
+  "ФБС 6-6-6": {
+    "weight_per_item": 0.5,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 24-5-6": {
+    "weight_per_item": 1.63,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 12-5-6": {
+    "weight_per_item": 0.79,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 9-5-6": {
+    "weight_per_item": 0.59,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 6-5-6": {
+    "weight_per_item": 0.39,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 24-4-6": {
+    "weight_per_item": 1.3,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 12-4-6": {
+    "weight_per_item": 0.65,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 9-4-6": {
+    "weight_per_item": 0.5,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 6-4-6": {
+    "weight_per_item": 0.3,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 24-3-6": {
+    "weight_per_item": 1.0,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 12-3-6": {
+    "weight_per_item": 0.5,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 9-3-6": {
+    "weight_per_item": 0.35,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 6-3-6": {
+    "weight_per_item": 0.25,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 6-3-3": {
+    "weight_per_item": 0.125,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 24-4-6У": {
+    "weight_per_item": 1.15,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 24-3-3": {
+    "weight_per_item": 0.5,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 12-3-3": {
+    "weight_per_item": 0.25,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 9-3-3": {
+    "weight_per_item": 0.175,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 24-4-3": {
+    "weight_per_item": 0.65,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 12-4-3": {
+    "weight_per_item": 0.325,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 9-4-3": {
+    "weight_per_item": 0.25,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 6-4-3": {
+    "weight_per_item": 0.163,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 12-5-3": {
+    "weight_per_item": 0.413,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 9-5-3": {
+    "weight_per_item": 0.295,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 12-6-3": {
+    "weight_per_item": 0.5,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  },
+  "ФБС 9-6-3": {
+    "weight_per_item": 0.35,
+    "special_threshold": 0,
+    "max_per_trip": 0
+  }
+}

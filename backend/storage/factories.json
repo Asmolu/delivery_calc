@@ -1,57 +1,108 @@
 ﻿[
   {
     "name": "тубетон",
+    "contacts": "7 903 005-07-77",
     "lat": 55.577505,
     "lon": 36.498658,
     "products": [
       {
-        "category": "Дорожные ПЛИТЫ",
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
         "subtype": "2п30.18.30 ТУ",
         "weight_ton": 2.2,
         "price": 8100.0
       },
       {
-        "category": "Дорожные ПЛИТЫ",
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
         "subtype": "2п30.18.30 ГОСТ",
         "weight_ton": 2.2,
         "price": 11300.0
       },
       {
-        "category": "Дорожные ПЛИТЫ",
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
         "subtype": "1п.30.18.30 Гравий",
         "weight_ton": 2.2,
         "price": 14200.0
       },
       {
-        "category": "Дорожные ПЛИТЫ",
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
         "subtype": "1п.30.18.30 Гранит",
         "weight_ton": 2.2,
         "price": 16200.0
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "некондиция 2п.30.18",
+        "weight_ton": 0.0,
+        "price": 7500.0
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 14 ТУ",
+        "weight_ton": 4.2,
+        "price": 23000.0
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 14 ГОСТ",
+        "weight_ton": 4.2,
+        "price": 26000.0
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "некондиция ПАГ 14",
+        "weight_ton": 0.0,
+        "price": 20000.0
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 18 ТУ",
+        "weight_ton": 5.2,
+        "price": 28000.0
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 18 ГОСТ",
+        "weight_ton": 5.2,
+        "price": 32000.0
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 20 ГОСТ",
+        "weight_ton": 6.0,
+        "price": 50000.0
       }
     ],
     "valid_coords": true
   },
   {
     "name": "бетон-авто",
+    "contacts": "7 926 877-00-17",
     "lat": 55.736267,
     "lon": 38.226321,
     "products": [
       {
-        "category": "Дорожные ПЛИТЫ",
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
         "subtype": "2п30.18.30 ТУ",
         "weight_ton": 2.2,
         "price": 8700.0
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "некондиция 2п.30.18",
+        "weight_ton": 0.0,
+        "price": 8000.0
       }
     ],
     "valid_coords": true
   },
   {
     "name": "ооо  СК",
+    "contacts": "7 926 103-67-81",
     "lat": 55.833496,
     "lon": 37.412909,
     "products": [
       {
-        "category": "Дорожные ПЛИТЫ",
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
         "subtype": "2п30.18.30 ТУ",
         "weight_ton": 2.2,
         "price": 8900.0
@@ -61,77 +112,135 @@
   },
   {
     "name": "стд жби",
+    "contacts": "7 929 678-28-48",
     "lat": 55.571162,
     "lon": 37.947134,
     "products": [
       {
-        "category": "Дорожные ПЛИТЫ",
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
         "subtype": "2п30.18.30 ТУ",
         "weight_ton": 2.2,
         "price": 8900.0
       },
       {
-        "category": "Дорожные ПЛИТЫ",
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
         "subtype": "2п30.18.30 ГОСТ",
         "weight_ton": 2.2,
         "price": 12000.0
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 14 ТУ",
+        "weight_ton": 4.2,
+        "price": 24000.0
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 14 ГОСТ",
+        "weight_ton": 4.2,
+        "price": 28000.0
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 18 ТУ",
+        "weight_ton": 5.2,
+        "price": 33000.0
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 18 ГОСТ",
+        "weight_ton": 5.2,
+        "price": 36000.0
       }
     ],
     "valid_coords": true
   },
   {
     "name": "дзжбк",
+    "contacts": "7 953 438-37-69",
     "lat": 55.28382,
     "lon": 37.865804,
     "products": [
       {
-        "category": "Дорожные ПЛИТЫ",
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
         "subtype": "2п30.18.30 ТУ",
         "weight_ton": 2.2,
         "price": 8700.0
       },
       {
-        "category": "Дорожные ПЛИТЫ",
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
         "subtype": "2п30.18.30 ГОСТ",
         "weight_ton": 2.2,
         "price": 11500.0
       },
       {
-        "category": "Дорожные ПЛИТЫ",
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
         "subtype": "1п.30.18.30 Гравий",
         "weight_ton": 2.2,
         "price": 14000.0
       },
       {
-        "category": "Дорожные ПЛИТЫ",
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
         "subtype": "1п.30.18.30 Гранит",
         "weight_ton": 2.2,
         "price": 15000.0
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "некондиция 2п.30.18",
+        "weight_ton": 0.0,
+        "price": 7500.0
       }
     ],
     "valid_coords": true
   },
   {
     "name": "жби зеленоград",
+    "contacts": "7 909 941-45-28",
     "lat": 56.059443,
     "lon": 37.132536,
     "products": [
       {
-        "category": "Дорожные ПЛИТЫ",
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
         "subtype": "2п30.18.30 ТУ",
         "weight_ton": 2.2,
         "price": 9500.0
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 14 ТУ",
+        "weight_ton": 4.2,
+        "price": 23500.0
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 14 ГОСТ",
+        "weight_ton": 4.2,
+        "price": 25000.0
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 18 ТУ",
+        "weight_ton": 5.2,
+        "price": 29500.0
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 18 ГОСТ",
+        "weight_ton": 5.2,
+        "price": 32000.0
       }
     ],
     "valid_coords": true
   },
   {
     "name": "ооо стройиндустрия",
+    "contacts": "7 926 481-02-78",
     "lat": 55.320729,
     "lon": 37.187809,
     "products": [
       {
-        "category": "Дорожные ПЛИТЫ",
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
         "subtype": "2п30.18.30 ТУ",
         "weight_ton": 2.2,
         "price": 9000.0
@@ -140,7 +249,83 @@
     "valid_coords": true
   },
   {
+    "name": "bear бетон",
+    "contacts": "7 985 016-21-27",
+    "lat": 55.312486,
+    "lon": 37.906803,
+    "products": [
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "2п30.18.30 ТУ",
+        "weight_ton": 2.2,
+        "price": 9000.0
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 14 ТУ",
+        "weight_ton": 4.2,
+        "price": 25900.0
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 14 ГОСТ",
+        "weight_ton": 4.2,
+        "price": 27000.0
+      }
+    ],
+    "valid_coords": true
+  },
+  {
+    "name": "Лина",
+    "contacts": "7 925 545-99-86",
+    "lat": 55.59267,
+    "lon": 36.468627,
+    "products": [
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "2п30.18.30 ТУ",
+        "weight_ton": 2.2,
+        "price": 8700.0
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "2п30.18.30 ГОСТ",
+        "weight_ton": 2.2,
+        "price": 11500.0
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "некондиция 2п.30.18",
+        "weight_ton": 0.0,
+        "price": 7500.0
+      }
+    ],
+    "valid_coords": true
+  },
+  {
+    "name": "ооо дорожные плиты",
+    "contacts": "7 917 555-10-04",
+    "lat": 55.462543,
+    "lon": 37.781901,
+    "products": [
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "2п30.18.30 ТУ",
+        "weight_ton": 2.2,
+        "price": 9000.0
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "2п30.18.30 ГОСТ",
+        "weight_ton": 2.2,
+        "price": 11500.0
+      }
+    ],
+    "valid_coords": true
+  },
+  {
     "name": "ооо  СК",
+    "contacts": "7 926 103-67-81",
     "lat": 55.833496,
     "lon": 37.412909,
     "products": [
@@ -323,6 +508,7 @@
   },
   {
     "name": "ооо Интрес",
+    "contacts": "7 910 004-55-77, 7 910 707-93-35",
     "lat": 55.8836,
     "lon": 37.626627,
     "products": [
@@ -475,36 +661,13 @@
         "subtype": "ФБС 6-4-3",
         "weight_ton": 0.163,
         "price": 1275.0
-      },
-      {
-        "category": "ФБС БЛОКИ",
-        "subtype": "ФБС 12-5-3",
-        "weight_ton": 0.413,
-        "price": 1350.0
-      },
-      {
-        "category": "ФБС БЛОКИ",
-        "subtype": "ФБС 9-5-3",
-        "weight_ton": 0.295,
-        "price": 1550.0
-      },
-      {
-        "category": "ФБС БЛОКИ",
-        "subtype": "ФБС 12-6-3",
-        "weight_ton": 0.5,
-        "price": 1600.0
-      },
-      {
-        "category": "ФБС БЛОКИ",
-        "subtype": "ФБС 9-6-3",
-        "weight_ton": 0.35,
-        "price": 1750.0
       }
     ],
     "valid_coords": true
   },
   {
     "name": "ооо Главоблстрой",
+    "contacts": "7 985 455-01-25",
     "lat": 55.703926,
     "lon": 37.712964,
     "products": [
@@ -687,6 +850,7 @@
   },
   {
     "name": "Даскон",
+    "contacts": "8 (906) 078-77-99",
     "lat": 54.901517,
     "lon": 37.344341,
     "products": [
@@ -701,6 +865,7 @@
   },
   {
     "name": "стройтехпск",
+    "contacts": "7 967 230-20-20, 7 968 793-03-92",
     "lat": 55.993756,
     "lon": 35.950793,
     "products": [
@@ -763,6 +928,7 @@
   },
   {
     "name": "бетон-авто",
+    "contacts": "7 926 877-00-17",
     "lat": 55.736267,
     "lon": 38.226321,
     "products": [
@@ -789,6 +955,7 @@
   },
   {
     "name": "дмитровский мжбк",
+    "contacts": "7 495 993-94-22",
     "lat": 56.331169,
     "lon": 37.540919,
     "products": [

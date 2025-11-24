@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { getCategories, getQuote } from "../api";
 import { motion } from "framer-motion";
+import { getCategories, getQuote } from "../api";
+import { API_BASE } from "../api";
 
 export default function Calculator() {
   const [categories, setCategories] = useState({});
@@ -21,8 +22,9 @@ export default function Calculator() {
       setCategories(data || {});
 
       // подгружаем тарифы, чтобы достать список машин с тегом 'special'
+      
       try {
-        const res = await fetch(`${window.location.origin}/api/tariffs`);
+        const res = await fetch(`${API_BASE}/api/tariffs`);
         const tariffs = await res.json();
 
         // поддержка русских и английских ключей
@@ -96,8 +98,31 @@ export default function Calculator() {
         })),
       };
       console.log("📤 Payload отправляется в /quote:", payload);
+      
       const data = await getQuote(payload);
-      setResult(data);
+      console.log("📥 Ответ от сервера:", data);
+      if (data?.variants) {
+        // если сервер вернул несколько вариантов (новый формат)
+        setResult({ ...data, selectedVariant: 0 });
+      } else {
+        // старый формат (на всякий случай, чтобы не сломать обратную совместимость)
+        const localized = {
+          variants: [
+            {
+              totalCost: data.totalCost,
+              materialCost: data.materialCost,
+              deliveryCost: data.deliveryCost,
+              totalWeight: data.totalWeight,
+              transportName: data.transportName,
+              tripCount: data.trip_count || 0,
+              transportDetails: data.transport_details || {},
+              details: data.details || [],
+            },
+          ],
+          selectedVariant: 0,
+        };
+        setResult(localized);
+      }
     } catch (err) {
       console.error("Ошибка расчёта:", err);
       alert("Ошибка при расчёте стоимости");
@@ -271,16 +296,53 @@ export default function Calculator() {
       </div>
 
       {/* === Результаты === */}
-      {result ? (
+      {result?.variants ? (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           className="card-glass mt-12 p-6 rounded-xl overflow-x-auto"
         >
-          <h2 className="text-2xl font-semibold mb-4">🧾 Результаты</h2>
+          <h2 className="text-2xl font-semibold mb-4">
+            🧾 Найдено {result.variants.length} вариантов
+          </h2>
 
-          {Array.isArray(result.детали) && result.детали.length > 0 ? (
-            <>
+          {/* карточки вариантов */}
+          <div className="grid md:grid-cols-3 gap-4">
+            {result.variants.map((variant, idx) => (
+              <div
+                key={idx}
+                onClick={() => setResult({ ...result, selectedVariant: idx })}
+                className={`cursor-pointer rounded-xl p-4 transition shadow-lg ${
+                  result.selectedVariant === idx
+                    ? "bg-blue-700/40 border border-blue-400"
+                    : "bg-gray-800/60 hover:bg-gray-700/60"
+                }`}
+              >
+                <h3 className="text-lg font-semibold mb-1">
+                  🚛 {variant.transportName}
+                </h3>
+                <p className="text-blue-400 font-bold text-xl mb-1">
+                  {variant.totalCost.toLocaleString()} ₽
+                </p>
+                <p>📦 {variant.totalWeight} т, 🔁 {variant.tripCount} рейс(ов)</p>
+                <p className="text-sm text-gray-400 mt-1">
+                  Доставка: {variant.deliveryCost.toLocaleString()} ₽
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {/* таблица выбранного варианта */}
+          {result.selectedVariant !== undefined && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="mt-10 p-4 bg-gray-900/80 rounded-lg"
+            >
+              <h3 className="text-xl font-semibold mb-3">
+                📊 Детали варианта #{result.selectedVariant + 1}
+              </h3>
+
               <table className="w-full text-sm border-collapse">
                 <thead className="text-gray-400 border-b border-gray-700">
                   <tr>
@@ -290,84 +352,53 @@ export default function Calculator() {
                     <th className="p-2 text-left">Расстояние (км)</th>
                     <th className="p-2 text-left">Материал (₽)</th>
                     <th className="p-2 text-left">Доставка (₽)</th>
-                    <th className="p-2 text-left">Тариф</th>
                     <th className="p-2 text-left">Итого (₽)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {result.детали.map((d, idx) => (
-                    <tr
-                      key={idx}
-                      className="border-b border-gray-800 hover:bg-gray-800/30 transition"
-                    >
+                  {result.variants[result.selectedVariant].details.map((d, idx) => (
+                    <tr key={idx} className="border-b border-gray-800">
                       <td className="p-2">{d["завод"]}</td>
                       <td className="p-2">{d["товар"]}</td>
-                      <td className="p-2">{d["реальное_имя_машины"] || d["машина"]}</td>
+                      <td className="p-2">{d["машина"]}</td>
                       <td className="p-2">{d["расстояние_км"]}</td>
-                      <td className="p-2">{d["стоимость_материала"]?.toLocaleString() || "—"}</td>
-                      <td className="p-2">{d["стоимость_доставки"]?.toLocaleString() || "—"}</td>
-                      <td className="p-2 text-gray-400">{d["тариф"]}</td>
-                      <td className="p-2 font-semibold text-blue-300">
-                        {d["итого"]?.toLocaleString() || "—"}
+                      <td className="p-2">{d["стоимость_материала"]?.toLocaleString()}</td>
+                      <td className="p-2">{d["стоимость_доставки"]?.toLocaleString()}</td>
+                      <td className="p-2 text-blue-400 font-semibold">
+                        {d["итого"]?.toLocaleString()}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
 
-              <div className="mt-6 text-lg font-semibold">
-                <p>🚛 Общий вес: {result["общий_вес"] ?? "—"} т</p>
-                <p>🔁 Рейсы: {result["количество_рейсов"] ?? "—"}</p>
-                <p className="text-blue-400 text-xl mt-2">
-                  💰 Итого: {result["итого"]?.toLocaleString() ?? "—"} ₽
-                </p>
-              </div>
-              {/* === Детали рейсов (если есть) === */}
-              {Array.isArray(result?.["транспорт_детали"]?.доп) &&
-                result["транспорт_детали"].доп.length > 0 && (
-                  <div className="mt-6 bg-gray-800/40 p-4 rounded-lg">
-                    <h3 className="text-lg font-semibold mb-2">🚚 Детали рейсов</h3>
-                    <table className="w-full text-sm">
-                      <thead className="text-gray-400 border-b border-gray-700">
-                        <tr>
-                          <th className="p-2 text-left">Машина</th>
-                          <th className="p-2 text-left">Вес (т)</th>
-                          <th className="p-2 text-left">Стоимость (₽)</th>
-                          <th className="p-2 text-left">Описание тарифа</th>
+              {/* таблица деталей рейсов */}
+              {Array.isArray(result.variants[result.selectedVariant].transportDetails?.["доп"]) && (
+                <div className="mt-6 bg-gray-800/40 p-4 rounded-lg">
+                  <h4 className="text-lg font-semibold mb-2">🚚 Детали рейсов</h4>
+                  <table className="w-full text-sm">
+                    <thead className="text-gray-400 border-b border-gray-700">
+                      <tr>
+                        <th className="p-2 text-left">Машина</th>
+                        <th className="p-2 text-left">Вес (т)</th>
+                        <th className="p-2 text-left">Стоимость (₽)</th>
+                        <th className="p-2 text-left">Описание тарифа</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.variants[result.selectedVariant].transportDetails["доп"].map((trip, i) => (
+                        <tr key={i} className="border-b border-gray-800">
+                          <td className="p-2">{trip["реальное_имя"]}</td>
+                          <td className="p-2">{trip["вес_перевезено"]}</td>
+                          <td className="p-2">{Number(trip["стоимость"] || 0).toLocaleString()}</td>
+                          <td className="p-2 text-gray-400">{trip["описание"]}</td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {result["транспорт_детали"].доп.map((trip, i) => (
-                          <tr
-                            key={i}
-                            className="border-b border-gray-800 hover:bg-gray-800/20"
-                          >
-                            <td className="p-2">
-                              {trip["реальное_имя"] ||
-                                (trip["тип"] === "manipulator"
-                                  ? "Манипулятор"
-                                  : trip["тип"] === "long_haul"
-                                  ? "Длинномер"
-                                  : "Спецтранспорт")}
-                            </td>
-                            <td className="p-2">{trip["вес_перевезено"]}</td>
-                            <td className="p-2">
-                              {Number(trip["стоимость"] || 0).toLocaleString()}
-                            </td>
-                            <td className="p-2 text-gray-400">
-                              {trip["описание"] || "—"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-            </>
-          ) : (
-            <p className="text-gray-400 mt-4">
-              ⚠️ Нет подходящих маршрутов для подбора транспорта.
-            </p>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </motion.div>
           )}
         </motion.div>
       ) : null}
