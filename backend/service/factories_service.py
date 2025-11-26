@@ -1,86 +1,261 @@
-from __future__ import annotations
-from typing import List, Dict, Any, Optional, Tuple
-from backend.core.data_loader import load_factories_products
-from backend.core.logger import get_logger
+import os
+import gspread
+from dotenv import load_dotenv
+
+load_dotenv()
+
+SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
+CREDENTIALS_PATH = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+
+
+def parse_google_sheet(ALLOWED_SHEETS=None):
+    """
+    Загружает данные из Google Sheets и возвращает структуру:
+    {
+        "Дорожные ПЛИТЫ/ПАГИ": [...],
+        "ФБС БЛОКИ": [...],
+        "vehicles": [...]
+    }
+    """
+    gc = gspread.service_account(filename=CREDENTIALS_PATH)
+    sh = gc.open_by_key(SHEET_ID)
+
+    parsed_data = {}
+
+    for worksheet in sh.worksheets():
+        category_name = worksheet.title.strip()
+        if ALLOWED_SHEETS and category_name not in ALLOWED_SHEETS:
+            print(f"⚙️ Пропускаем лист {category_name} — не входит в ALLOWED_SHEETS")
+            continue
+
+        print(f"📄 Загружаем лист: {category_name}")
+        data = worksheet.get_all_values()
+
+        if len(data) < 6 and category_name.lower() != "vehicles":
+            print(f"⚠️ Пропущен лист {category_name} — слишком мало строк.")
+            continue
+
+        # === Парсинг тарифов (Vehicles) ===
+        if category_name.lower() == "vehicles":
+            vehicles = []
+            for row in data[1:]:  # пропускаем заголовок
+                if not any(row):
+                    continue
+                try:
+                    vehicle = {
+                        "название": row[0].strip(),
+                        "тип": row[1].strip() if len(row) > 1 else "",
+                        "base": float(row[2].replace(",", ".")) if len(row) > 2 and row[2] else 0,
+                        "per_km": float(row[3].replace(",", ".")) if len(row) > 3 and row[3] else 0,
+                        "min_distance": float(row[4].replace(",", ".")) if len(row) > 4 and row[4] else 0,
+                        "max_load": float(row[5].replace(",", ".")) if len(row) > 5 and row[5] else 0,
+                        "tag": row[6].strip().lower() if len(row) > 6 else ""
+                    }
+                    vehicles.append(vehicle)
+                except Exception as e:
+                    print(f"⚠️ Ошибка парсинга строки в Vehicles: {e}")
+            parsed_data["vehicles"] = vehicles
+            print(f"🚛 Vehicles: добавлено {len(vehicles)} тарифов")
+            continue
+
+        # === Парсинг товаров и заводов ===
+        weights_row = data[0]
+        special_row = data[1]
+        max_row = data[2]
+        subtypes_row = data[3]
+
+        col_start = 3
+        col_end = len(subtypes_row)
+
+        subtypes = []
+        for col in range(col_start, col_end):
+            subtype_name = subtypes_row[col].strip()
+            if subtype_name:
+                subtypes.append((col, subtype_name))
+
+        category_items = []
+        for row in data[4:]:
+            if not row or len(row) < 4:
+                continue
+            factory_name = row[0].strip()
+            if not factory_name:
+                continue
+
+            try:
+                lat = float(row[2].replace(",", "."))
+                lon = float(row[3].replace(",", "."))
+            except Exception:
+                lat = lon = None
+
+            contact = row[1].strip() if len(row) > 1 else ""
+
+            for col, subtype in subtypes:
+                try:
+                    price = float(row[col].replace(" ", "").replace(",", "."))
+                except Exception:
+                    price = None
+
+                if not price:
+                    continue
+
+                weight_val = float(weights_row[col].replace(",", ".") or 0)
+                special_val = float(special_row[col].replace(",", ".") or 0)
+                max_val = float(max_row[col].replace(",", ".") or 0)
+
+                category_items.append({
+                    "category": category_name,
+                    "subtype": subtype,
+                    "weight_per_item": weight_val,
+                    "special_threshold": special_val,
+                    "max_per_trip": max_val,
+                    "factory": {
+                        "name": factory_name,
+                        "lat": lat,
+                        "lon": lon,
+                        "price": price,
+                        "contact": contact
+                    }
+                })
+
+        parsed_data[category_name] = category_items
+        print(f"🔹 {category_name}: добавлено {len(category_items)} связок 'товар+завод'")
+
+    return parsed_data
+
+
+
 import math
-log = get_logger("factories_service")
+from functools import lru_cache
 
-# Кэш данных
-_FACTORIES_DATA: List[Dict[str, Any]] = []
-
-# ==== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =============================================
+# === ПРОСТЫЕ ХЕЛПЕРЫ ======================================================
 
 def _norm_str(s):
-    """Нормализует строки для поиска и сопоставления (убирает пробелы, регистр и неразрывные пробелы)."""
+    """Нормализует строку (убирает пробелы, \xa0, приводит к нижнему регистру)."""
     if s is None:
         return ""
     return str(s).replace("\xa0", " ").strip().lower()
 
-
 def _to_float(x):
-    """Преобразует значения к float с защитой от мусора."""
+    """Безопасно приводит значение к float."""
     if x is None or x == "":
         return 0.0
     try:
-        return float(str(x).replace(" ", "").replace(",", "."))
+        return float(str(x).replace(" ", "").replace("\xa0", "").replace(",", "."))
     except Exception:
         return 0.0
 
+import re
 
-def init_factories_cache(force_reload: bool = False):
-    """
-    Инициализация данных о товарах и заводах.
-    """
-    global _FACTORIES_DATA
-    _FACTORIES_DATA = load_factories_products(force_reload)
-    log.info(f"📦 Инициализировано {len(_FACTORIES_DATA)} товаров (объединённые данные).")
-
-
-def get_all_factories() -> List[Dict[str, Any]]:
-    """
-    Возвращает список всех заводов (уникальные).
-    """
-    seen = {}
-    for item in _FACTORIES_DATA:
-        for fac in item.get("factories", []):
-            name = fac.get("name")
-            if name and name not in seen:
-                seen[name] = fac
-    return list(seen.values())
+def _detect_standard_for_factory_items(name: str) -> str:
+    """Пытается определить стандарт изделия по названию."""
+    if not name:
+        return ""
+    s = _norm_str(name)
+    if "гост" in s:
+        match = re.search(r"гост\s*[\d\-]+", s)
+        return match.group(0).upper() if match else "ГОСТ"
+    if "ту" in s:
+        match = re.search(r"ту\s*[\d\-]+", s)
+        return match.group(0).upper() if match else "ТУ"
+    if "сто" in s:
+        match = re.search(r"сто\s*[\d\-]+", s)
+        return match.group(0).upper() if match else "СТО"
+    return ""
 
 
-def get_all_products() -> List[Dict[str, Any]]:
-    """
-    Возвращает все товары (с вложенными заводами).
-    """
-    return _FACTORIES_DATA
+# === РАССТОЯНИЕ ===========================================================
 
+@lru_cache(maxsize=2000)
+def get_cached_distance(lat1, lon1, lat2, lon2):
+    """Заглушка: вычисление расстояния через гаверсин."""
+    R = 6371.0
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
 
-def find_product(category: str, subtype: str) -> Optional[Dict[str, Any]]:
+    a = (
+        math.sin(dphi / 2) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    )
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return round(R * c, 2)
+
+# === ТАРИФЫ (ПРОСТАЯ ОБЁРТКА) ============================================
+
+_CURRENT_TARIFFS = []
+
+def set_current_tariffs(tariffs):
+    """Сохраняет текущие тарифы в памяти."""
+    global _CURRENT_TARIFFS
+    _CURRENT_TARIFFS = tariffs or []
+
+def calculate_tariff_cost(tag, distance_km, load_ton):
+    """Простейший расчёт тарифа по совпадению тега."""
+    if not _CURRENT_TARIFFS:
+        print("⚠️ Нет доступных тарифов для расчёта.")
+        return None, None
+
+    candidates = [
+        t for t in _CURRENT_TARIFFS
+        if _norm_str(t.get("tag")) == _norm_str(tag)
+        and _to_float(t.get("min_distance", 0)) <= distance_km <= _to_float(t.get("max_distance", 999999))
+    ]
+
+    if not candidates:
+        print(f"⚠️ Нет подходящих тарифов для тега '{tag}' при дистанции {distance_km} км.")
+        return None, None
+
+    best = min(
+        candidates,
+        key=lambda t: _to_float(t.get("base", 0)) + _to_float(t.get("per_km", 0)) * distance_km
+    )
+
+    cost = _to_float(best.get("base", 0)) + _to_float(best.get("per_km", 0)) * distance_km
+    desc = f"{best.get('название', best.get('name', tag))} ({best.get('tag')}, {distance_km} км)"
+
+    return cost, desc
+
+# === СТАРЫЕ УТИЛИТЫ ДЛЯ СОВМЕСТИМОСТИ =============================
+# Они нужны только для transport_calc.py и старых расчётных сценариев
+
+def _plan_special_single_heavy_long_haul(*args, **kwargs):
     """
-    Ищет конкретный товар по категории и подтипу.
+    Заглушка старой логики: особые сценарии перевозок (негабарит, длинномер и т.д.).
+    Раньше подбирала специфический транспорт, теперь просто None.
     """
-    for p in _FACTORIES_DATA:
-        if (
-            p.get("category", "").strip().lower() == category.strip().lower()
-            and p.get("subtype", "").strip().lower() == subtype.strip().lower()
-        ):
-            return p
     return None
 
-# ==== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ПЛАНИРОВАНИЯ =============================
-
-def _detect_standard_for_factory_items(items):
+def _plan_regular_single_short_haul(*args, **kwargs):
     """
-    Определяет, применима ли стандартная схема для завода.
-    Пока возвращает None — логика отключена (всё идёт через compute_best_plan).
+    Заглушка обычного сценария короткой перевозки.
     """
     return None
 
+def _plan_special_multidrop_long_haul(*args, **kwargs):
+    """
+    Заглушка многоадресной доставки.
+    """
+    return None
 
-def _plan_special_single_heavy_long_haul(factory_info, std_info, req, usable_tariffs):
+def build_factory_lookup(factories):
     """
-    Заглушка для планирования одиночного тяжёлого рейса.
-    Пока возвращает (None, None), чтобы передавать управление compute_best_plan.
+    Заглушка — строит индекс по ID заводов (раньше для поиска ближайших).
     """
-    return None, None
+    if not factories:
+        return {}
+    lookup = {}
+    for f in factories:
+        fid = str(f.get("id") or f.get("название") or "").strip()
+        if fid:
+            lookup[fid] = f
+    return lookup
+
+def select_best_factory(factories, product_tag, destination_lat, destination_lon):
+    """
+    Заглушка — раньше выбирала лучший завод по расстоянию и наличию.
+    Сейчас возвращает первый попавшийся.
+    """
+    if not factories:
+        return None
+    return factories[0]

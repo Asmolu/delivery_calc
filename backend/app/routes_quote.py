@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 
 from backend.core.logger import get_logger
 from backend.models.dto import QuoteRequest
-from backend.service.factories_service import get_all_products
+from backend.core.data_loader import load_factories_products
 from backend.service.scenario_builder import build_factory_scenarios
 from backend.service.transport_calc import evaluate_scenario_transport, build_shipment_details_from_result
 
@@ -20,7 +20,7 @@ async def make_quote(req: QuoteRequest):
     log.info("Запрос на расчёт: %s", req.dict())
 
     # ✅ загружаем объединённые данные (товары + заводы)
-    factories_products = get_all_products()
+    factories_products = factories_data = load_factories_products()
     if not factories_products:
         return JSONResponse(
             status_code=500,

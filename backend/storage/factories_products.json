@@ -1,0 +1,2392 @@
+{
+  "products": {
+    "Дорожные ПЛИТЫ/ПАГИ": [
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "2п30.18.30 ТУ",
+        "weight_per_item": 2.2,
+        "special_threshold": 20.0,
+        "max_per_trip": 25.0,
+        "factory": {
+          "name": "тубетон",
+          "lat": null,
+          "lon": null,
+          "price": 8100.0,
+          "contact": "7 903 005-07-77"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "2п30.18.30 ГОСТ",
+        "weight_per_item": 2.2,
+        "special_threshold": 20.0,
+        "max_per_trip": 25.0,
+        "factory": {
+          "name": "тубетон",
+          "lat": null,
+          "lon": null,
+          "price": 11300.0,
+          "contact": "7 903 005-07-77"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "1п.30.18.30 Гравий",
+        "weight_per_item": 2.2,
+        "special_threshold": 20.0,
+        "max_per_trip": 25.0,
+        "factory": {
+          "name": "тубетон",
+          "lat": null,
+          "lon": null,
+          "price": 14200.0,
+          "contact": "7 903 005-07-77"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "1п.30.18.30 Гранит",
+        "weight_per_item": 2.2,
+        "special_threshold": 20.0,
+        "max_per_trip": 25.0,
+        "factory": {
+          "name": "тубетон",
+          "lat": null,
+          "lon": null,
+          "price": 16200.0,
+          "contact": "7 903 005-07-77"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "некондиция 2п.30.18",
+        "weight_per_item": 0.0,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "тубетон",
+          "lat": null,
+          "lon": null,
+          "price": 7500.0,
+          "contact": "7 903 005-07-77"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 14 ТУ",
+        "weight_per_item": 4.2,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "тубетон",
+          "lat": null,
+          "lon": null,
+          "price": 23000.0,
+          "contact": "7 903 005-07-77"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 14 ГОСТ",
+        "weight_per_item": 4.2,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "тубетон",
+          "lat": null,
+          "lon": null,
+          "price": 26000.0,
+          "contact": "7 903 005-07-77"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "некондиция ПАГ 14",
+        "weight_per_item": 0.0,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "тубетон",
+          "lat": null,
+          "lon": null,
+          "price": 20000.0,
+          "contact": "7 903 005-07-77"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 18 ТУ",
+        "weight_per_item": 5.2,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "тубетон",
+          "lat": null,
+          "lon": null,
+          "price": 28000.0,
+          "contact": "7 903 005-07-77"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 18 ГОСТ",
+        "weight_per_item": 5.2,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "тубетон",
+          "lat": null,
+          "lon": null,
+          "price": 32000.0,
+          "contact": "7 903 005-07-77"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 20 ГОСТ",
+        "weight_per_item": 6.0,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "тубетон",
+          "lat": null,
+          "lon": null,
+          "price": 50000.0,
+          "contact": "7 903 005-07-77"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "2п30.18.30 ТУ",
+        "weight_per_item": 2.2,
+        "special_threshold": 20.0,
+        "max_per_trip": 25.0,
+        "factory": {
+          "name": "бетон-авто",
+          "lat": null,
+          "lon": null,
+          "price": 8700.0,
+          "contact": "7 926 877-00-17"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "некондиция 2п.30.18",
+        "weight_per_item": 0.0,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "бетон-авто",
+          "lat": null,
+          "lon": null,
+          "price": 8000.0,
+          "contact": "7 926 877-00-17"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "2п30.18.30 ТУ",
+        "weight_per_item": 2.2,
+        "special_threshold": 20.0,
+        "max_per_trip": 25.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 8900.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "2п30.18.30 ТУ",
+        "weight_per_item": 2.2,
+        "special_threshold": 20.0,
+        "max_per_trip": 25.0,
+        "factory": {
+          "name": "стд жби",
+          "lat": null,
+          "lon": null,
+          "price": 8900.0,
+          "contact": "7 929 678-28-48"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "2п30.18.30 ГОСТ",
+        "weight_per_item": 2.2,
+        "special_threshold": 20.0,
+        "max_per_trip": 25.0,
+        "factory": {
+          "name": "стд жби",
+          "lat": null,
+          "lon": null,
+          "price": 12000.0,
+          "contact": "7 929 678-28-48"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 14 ТУ",
+        "weight_per_item": 4.2,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "стд жби",
+          "lat": null,
+          "lon": null,
+          "price": 24000.0,
+          "contact": "7 929 678-28-48"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 14 ГОСТ",
+        "weight_per_item": 4.2,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "стд жби",
+          "lat": null,
+          "lon": null,
+          "price": 28000.0,
+          "contact": "7 929 678-28-48"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 18 ТУ",
+        "weight_per_item": 5.2,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "стд жби",
+          "lat": null,
+          "lon": null,
+          "price": 33000.0,
+          "contact": "7 929 678-28-48"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 18 ГОСТ",
+        "weight_per_item": 5.2,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "стд жби",
+          "lat": null,
+          "lon": null,
+          "price": 36000.0,
+          "contact": "7 929 678-28-48"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "2п30.18.30 ТУ",
+        "weight_per_item": 2.2,
+        "special_threshold": 20.0,
+        "max_per_trip": 25.0,
+        "factory": {
+          "name": "дзжбк",
+          "lat": null,
+          "lon": null,
+          "price": 8700.0,
+          "contact": "7 953 438-37-69"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "2п30.18.30 ГОСТ",
+        "weight_per_item": 2.2,
+        "special_threshold": 20.0,
+        "max_per_trip": 25.0,
+        "factory": {
+          "name": "дзжбк",
+          "lat": null,
+          "lon": null,
+          "price": 11500.0,
+          "contact": "7 953 438-37-69"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "1п.30.18.30 Гравий",
+        "weight_per_item": 2.2,
+        "special_threshold": 20.0,
+        "max_per_trip": 25.0,
+        "factory": {
+          "name": "дзжбк",
+          "lat": null,
+          "lon": null,
+          "price": 14000.0,
+          "contact": "7 953 438-37-69"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "1п.30.18.30 Гранит",
+        "weight_per_item": 2.2,
+        "special_threshold": 20.0,
+        "max_per_trip": 25.0,
+        "factory": {
+          "name": "дзжбк",
+          "lat": null,
+          "lon": null,
+          "price": 15000.0,
+          "contact": "7 953 438-37-69"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "некондиция 2п.30.18",
+        "weight_per_item": 0.0,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "дзжбк",
+          "lat": null,
+          "lon": null,
+          "price": 7500.0,
+          "contact": "7 953 438-37-69"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "2п30.18.30 ТУ",
+        "weight_per_item": 2.2,
+        "special_threshold": 20.0,
+        "max_per_trip": 25.0,
+        "factory": {
+          "name": "жби зеленоград",
+          "lat": null,
+          "lon": null,
+          "price": 9500.0,
+          "contact": "7 909 941-45-28"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 14 ТУ",
+        "weight_per_item": 4.2,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "жби зеленоград",
+          "lat": null,
+          "lon": null,
+          "price": 23500.0,
+          "contact": "7 909 941-45-28"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 14 ГОСТ",
+        "weight_per_item": 4.2,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "жби зеленоград",
+          "lat": null,
+          "lon": null,
+          "price": 25000.0,
+          "contact": "7 909 941-45-28"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 18 ТУ",
+        "weight_per_item": 5.2,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "жби зеленоград",
+          "lat": null,
+          "lon": null,
+          "price": 29500.0,
+          "contact": "7 909 941-45-28"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 18 ГОСТ",
+        "weight_per_item": 5.2,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "жби зеленоград",
+          "lat": null,
+          "lon": null,
+          "price": 32000.0,
+          "contact": "7 909 941-45-28"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "2п30.18.30 ТУ",
+        "weight_per_item": 2.2,
+        "special_threshold": 20.0,
+        "max_per_trip": 25.0,
+        "factory": {
+          "name": "ооо стройиндустрия",
+          "lat": null,
+          "lon": null,
+          "price": 9000.0,
+          "contact": "7 926 481-02-78"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "2п30.18.30 ТУ",
+        "weight_per_item": 2.2,
+        "special_threshold": 20.0,
+        "max_per_trip": 25.0,
+        "factory": {
+          "name": "bear бетон",
+          "lat": null,
+          "lon": null,
+          "price": 9000.0,
+          "contact": "7 985 016-21-27"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 14 ТУ",
+        "weight_per_item": 4.2,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "bear бетон",
+          "lat": null,
+          "lon": null,
+          "price": 25900.0,
+          "contact": "7 985 016-21-27"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 14 ГОСТ",
+        "weight_per_item": 4.2,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "bear бетон",
+          "lat": null,
+          "lon": null,
+          "price": 27000.0,
+          "contact": "7 985 016-21-27"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "2п30.18.30 ТУ",
+        "weight_per_item": 2.2,
+        "special_threshold": 20.0,
+        "max_per_trip": 25.0,
+        "factory": {
+          "name": "Лина",
+          "lat": null,
+          "lon": null,
+          "price": 8700.0,
+          "contact": "7 925 545-99-86"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "2п30.18.30 ГОСТ",
+        "weight_per_item": 2.2,
+        "special_threshold": 20.0,
+        "max_per_trip": 25.0,
+        "factory": {
+          "name": "Лина",
+          "lat": null,
+          "lon": null,
+          "price": 11500.0,
+          "contact": "7 925 545-99-86"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "некондиция 2п.30.18",
+        "weight_per_item": 0.0,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "Лина",
+          "lat": null,
+          "lon": null,
+          "price": 7500.0,
+          "contact": "7 925 545-99-86"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "2п30.18.30 ТУ",
+        "weight_per_item": 2.2,
+        "special_threshold": 20.0,
+        "max_per_trip": 25.0,
+        "factory": {
+          "name": "ооо дорожные плиты",
+          "lat": null,
+          "lon": null,
+          "price": 9000.0,
+          "contact": "7 917 555-10-04"
+        }
+      },
+      {
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "2п30.18.30 ГОСТ",
+        "weight_per_item": 2.2,
+        "special_threshold": 20.0,
+        "max_per_trip": 25.0,
+        "factory": {
+          "name": "ооо дорожные плиты",
+          "lat": null,
+          "lon": null,
+          "price": 11500.0,
+          "contact": "7 917 555-10-04"
+        }
+      }
+    ],
+    "ФБС БЛОКИ": [
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-6-6",
+        "weight_per_item": 1.96,
+        "special_threshold": 22.0,
+        "max_per_trip": 28.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 4550.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-6-6",
+        "weight_per_item": 0.96,
+        "special_threshold": 42.0,
+        "max_per_trip": 56.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 2550.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-6-6",
+        "weight_per_item": 0.7,
+        "special_threshold": 58.0,
+        "max_per_trip": 78.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 2350.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 6-6-6",
+        "weight_per_item": 0.5,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 2200.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-5-6",
+        "weight_per_item": 1.63,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 3600.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-5-6",
+        "weight_per_item": 0.79,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 2150.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-5-6",
+        "weight_per_item": 0.59,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 2050.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 6-5-6",
+        "weight_per_item": 0.39,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 1900.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-4-6",
+        "weight_per_item": 1.3,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 3150.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-4-6",
+        "weight_per_item": 0.65,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 1810.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-4-6",
+        "weight_per_item": 0.5,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 1700.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 6-4-6",
+        "weight_per_item": 0.3,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 1600.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-3-6",
+        "weight_per_item": 1.0,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 2650.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-3-6",
+        "weight_per_item": 0.5,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 1570.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-3-6",
+        "weight_per_item": 0.35,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 1450.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 6-3-6",
+        "weight_per_item": 0.25,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 1350.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 6-3-3",
+        "weight_per_item": 0.125,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 1100.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-4-6У",
+        "weight_per_item": 1.15,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 3350.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-3-3",
+        "weight_per_item": 0.5,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 2000.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-3-3",
+        "weight_per_item": 0.25,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 1210.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-3-3",
+        "weight_per_item": 0.175,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 1150.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-4-3",
+        "weight_per_item": 0.65,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 2300.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-4-3",
+        "weight_per_item": 0.325,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 1330.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-4-3",
+        "weight_per_item": 0.25,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 1275.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 6-4-3",
+        "weight_per_item": 0.163,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 1275.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-5-3",
+        "weight_per_item": 0.413,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 1550.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-5-3",
+        "weight_per_item": 0.295,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 1500.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-6-3",
+        "weight_per_item": 0.5,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 1775.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-6-3",
+        "weight_per_item": 0.35,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо  СК",
+          "lat": null,
+          "lon": null,
+          "price": 1700.0,
+          "contact": "7 926 103-67-81"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-6-6",
+        "weight_per_item": 1.96,
+        "special_threshold": 22.0,
+        "max_per_trip": 28.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 4700.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-6-6",
+        "weight_per_item": 0.96,
+        "special_threshold": 42.0,
+        "max_per_trip": 56.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 2550.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-6-6",
+        "weight_per_item": 0.7,
+        "special_threshold": 58.0,
+        "max_per_trip": 78.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 2350.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 6-6-6",
+        "weight_per_item": 0.5,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 2200.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-5-6",
+        "weight_per_item": 1.63,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 3600.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-5-6",
+        "weight_per_item": 0.79,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 2150.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-5-6",
+        "weight_per_item": 0.59,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 2050.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 6-5-6",
+        "weight_per_item": 0.39,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 1900.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-4-6",
+        "weight_per_item": 1.3,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 3150.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-4-6",
+        "weight_per_item": 0.65,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 1810.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-4-6",
+        "weight_per_item": 0.5,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 1700.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 6-4-6",
+        "weight_per_item": 0.3,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 1600.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-3-6",
+        "weight_per_item": 1.0,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 2650.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-3-6",
+        "weight_per_item": 0.5,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 1570.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-3-6",
+        "weight_per_item": 0.35,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 1450.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 6-3-6",
+        "weight_per_item": 0.25,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 1350.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 6-3-3",
+        "weight_per_item": 0.125,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 1100.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-4-6У",
+        "weight_per_item": 1.15,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 3350.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-3-3",
+        "weight_per_item": 0.5,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 2000.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-3-3",
+        "weight_per_item": 0.25,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 1210.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-3-3",
+        "weight_per_item": 0.175,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 1150.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-4-3",
+        "weight_per_item": 0.65,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 2300.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-4-3",
+        "weight_per_item": 0.325,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 1330.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-4-3",
+        "weight_per_item": 0.25,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 1275.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 6-4-3",
+        "weight_per_item": 0.163,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Интрес",
+          "lat": null,
+          "lon": null,
+          "price": 1275.0,
+          "contact": "7 910 004-55-77, 7 910 707-93-35"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-6-6",
+        "weight_per_item": 1.96,
+        "special_threshold": 22.0,
+        "max_per_trip": 28.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 4500.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-6-6",
+        "weight_per_item": 0.96,
+        "special_threshold": 42.0,
+        "max_per_trip": 56.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 2500.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-6-6",
+        "weight_per_item": 0.7,
+        "special_threshold": 58.0,
+        "max_per_trip": 78.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 2300.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 6-6-6",
+        "weight_per_item": 0.5,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 2150.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-5-6",
+        "weight_per_item": 1.63,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 3550.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-5-6",
+        "weight_per_item": 0.79,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 2100.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-5-6",
+        "weight_per_item": 0.59,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 2000.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 6-5-6",
+        "weight_per_item": 0.39,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 1850.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-4-6",
+        "weight_per_item": 1.3,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 3100.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-4-6",
+        "weight_per_item": 0.65,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 1750.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-4-6",
+        "weight_per_item": 0.5,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 1650.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 6-4-6",
+        "weight_per_item": 0.3,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 1550.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-3-6",
+        "weight_per_item": 1.0,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 2600.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-3-6",
+        "weight_per_item": 0.5,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 1520.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-3-6",
+        "weight_per_item": 0.35,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 1400.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 6-3-6",
+        "weight_per_item": 0.25,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 1300.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 6-3-3",
+        "weight_per_item": 0.125,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 1030.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-4-6У",
+        "weight_per_item": 1.15,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 3300.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-3-3",
+        "weight_per_item": 0.5,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 1950.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-3-3",
+        "weight_per_item": 0.25,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 1150.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-3-3",
+        "weight_per_item": 0.175,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 1100.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-4-3",
+        "weight_per_item": 0.65,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 2250.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-4-3",
+        "weight_per_item": 0.325,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 1300.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-4-3",
+        "weight_per_item": 0.25,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 1250.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 6-4-3",
+        "weight_per_item": 0.163,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 1250.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-5-3",
+        "weight_per_item": 0.413,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 1500.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-5-3",
+        "weight_per_item": 0.295,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 1450.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-6-3",
+        "weight_per_item": 0.5,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 1750.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-6-3",
+        "weight_per_item": 0.35,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "ооо Главоблстрой",
+          "lat": null,
+          "lon": null,
+          "price": 1650.0,
+          "contact": "7 985 455-01-25"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-4-6",
+        "weight_per_item": 1.3,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "Даскон",
+          "lat": null,
+          "lon": null,
+          "price": 3300.0,
+          "contact": "8 (906) 078-77-99"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-5-6",
+        "weight_per_item": 1.63,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "стройтехпск",
+          "lat": null,
+          "lon": null,
+          "price": 4290.0,
+          "contact": "7 967 230-20-20, 7 968 793-03-92"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-5-6",
+        "weight_per_item": 0.79,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "стройтехпск",
+          "lat": null,
+          "lon": null,
+          "price": 2300.0,
+          "contact": "7 967 230-20-20, 7 968 793-03-92"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-5-6",
+        "weight_per_item": 0.59,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "стройтехпск",
+          "lat": null,
+          "lon": null,
+          "price": 1900.0,
+          "contact": "7 967 230-20-20, 7 968 793-03-92"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-4-6",
+        "weight_per_item": 1.3,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "стройтехпск",
+          "lat": null,
+          "lon": null,
+          "price": 3500.0,
+          "contact": "7 967 230-20-20, 7 968 793-03-92"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-4-6",
+        "weight_per_item": 0.65,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "стройтехпск",
+          "lat": null,
+          "lon": null,
+          "price": 2450.0,
+          "contact": "7 967 230-20-20, 7 968 793-03-92"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 6-4-6",
+        "weight_per_item": 0.3,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "стройтехпск",
+          "lat": null,
+          "lon": null,
+          "price": 1750.0,
+          "contact": "7 967 230-20-20, 7 968 793-03-92"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-3-6",
+        "weight_per_item": 1.0,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "стройтехпск",
+          "lat": null,
+          "lon": null,
+          "price": 2840.0,
+          "contact": "7 967 230-20-20, 7 968 793-03-92"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-3-6",
+        "weight_per_item": 0.5,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "стройтехпск",
+          "lat": null,
+          "lon": null,
+          "price": 1840.0,
+          "contact": "7 967 230-20-20, 7 968 793-03-92"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-3-6",
+        "weight_per_item": 0.35,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "стройтехпск",
+          "lat": null,
+          "lon": null,
+          "price": 1500.0,
+          "contact": "7 967 230-20-20, 7 968 793-03-92"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-4-6",
+        "weight_per_item": 1.3,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "бетон-авто",
+          "lat": null,
+          "lon": null,
+          "price": 3900.0,
+          "contact": "7 926 877-00-17"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-4-6",
+        "weight_per_item": 0.65,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "бетон-авто",
+          "lat": null,
+          "lon": null,
+          "price": 2400.0,
+          "contact": "7 926 877-00-17"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-3-6",
+        "weight_per_item": 1.0,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "бетон-авто",
+          "lat": null,
+          "lon": null,
+          "price": 3200.0,
+          "contact": "7 926 877-00-17"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-6-6",
+        "weight_per_item": 1.96,
+        "special_threshold": 22.0,
+        "max_per_trip": 28.0,
+        "factory": {
+          "name": "дмитровский мжбк",
+          "lat": null,
+          "lon": null,
+          "price": 6050.0,
+          "contact": "7 495 993-94-22"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-6-6",
+        "weight_per_item": 0.96,
+        "special_threshold": 42.0,
+        "max_per_trip": 56.0,
+        "factory": {
+          "name": "дмитровский мжбк",
+          "lat": null,
+          "lon": null,
+          "price": 2960.0,
+          "contact": "7 495 993-94-22"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-6-6",
+        "weight_per_item": 0.7,
+        "special_threshold": 58.0,
+        "max_per_trip": 78.0,
+        "factory": {
+          "name": "дмитровский мжбк",
+          "lat": null,
+          "lon": null,
+          "price": 2180.0,
+          "contact": "7 495 993-94-22"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-5-6",
+        "weight_per_item": 1.63,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "дмитровский мжбк",
+          "lat": null,
+          "lon": null,
+          "price": 5050.0,
+          "contact": "7 495 993-94-22"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-5-6",
+        "weight_per_item": 0.79,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "дмитровский мжбк",
+          "lat": null,
+          "lon": null,
+          "price": 2460.0,
+          "contact": "7 495 993-94-22"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-5-6",
+        "weight_per_item": 0.59,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "дмитровский мжбк",
+          "lat": null,
+          "lon": null,
+          "price": 1810.0,
+          "contact": "7 495 993-94-22"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-4-6",
+        "weight_per_item": 1.3,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "дмитровский мжбк",
+          "lat": null,
+          "lon": null,
+          "price": 4030.0,
+          "contact": "7 495 993-94-22"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-4-6",
+        "weight_per_item": 0.65,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "дмитровский мжбк",
+          "lat": null,
+          "lon": null,
+          "price": 1970.0,
+          "contact": "7 495 993-94-22"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-4-6",
+        "weight_per_item": 0.5,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "дмитровский мжбк",
+          "lat": null,
+          "lon": null,
+          "price": 1450.0,
+          "contact": "7 495 993-94-22"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 24-3-6",
+        "weight_per_item": 1.0,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "дмитровский мжбк",
+          "lat": null,
+          "lon": null,
+          "price": 3020.0,
+          "contact": "7 495 993-94-22"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 12-3-6",
+        "weight_per_item": 0.5,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "дмитровский мжбк",
+          "lat": null,
+          "lon": null,
+          "price": 1420.0,
+          "contact": "7 495 993-94-22"
+        }
+      },
+      {
+        "category": "ФБС БЛОКИ",
+        "subtype": "ФБС 9-3-6",
+        "weight_per_item": 0.35,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "factory": {
+          "name": "дмитровский мжбк",
+          "lat": null,
+          "lon": null,
+          "price": 1090.0,
+          "contact": "7 495 993-94-22"
+        }
+      }
+    ]
+  },
+  "tariffs": [
+    {
+      "название": "Манипулятор NEXT",
+      "тип": "10",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 0.0,
+      "max_load": 30.0,
+      "tag": "16000"
+    },
+    {
+      "название": "Манипулятор NEXT",
+      "тип": "10",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 30.0,
+      "max_load": 60.0,
+      "tag": "18000"
+    },
+    {
+      "название": "Манипулятор NEXT",
+      "тип": "10",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 60.0,
+      "max_load": 80.0,
+      "tag": "20000"
+    },
+    {
+      "название": "Манипулятор NEXT",
+      "тип": "10",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 80.0,
+      "max_load": 100.0,
+      "tag": "22000"
+    },
+    {
+      "название": "Манипулятор NEXT",
+      "тип": "10",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 100.0,
+      "max_load": 120.0,
+      "tag": "24000"
+    },
+    {
+      "название": "Манипулятор NEXT",
+      "тип": "10",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 120.0,
+      "max_load": 120.0,
+      "tag": "24000"
+    },
+    {
+      "название": "Длинномер MAN TSG",
+      "тип": "40",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 0.0,
+      "max_load": 30.0,
+      "tag": "19000"
+    },
+    {
+      "название": "Длинномер MAN TSG",
+      "тип": "40",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 30.0,
+      "max_load": 60.0,
+      "tag": "22000"
+    },
+    {
+      "название": "Длинномер MAN TSG",
+      "тип": "40",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 60.0,
+      "max_load": 80.0,
+      "tag": "24000"
+    },
+    {
+      "название": "Длинномер MAN TSG",
+      "тип": "40",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 80.0,
+      "max_load": 100.0,
+      "tag": "25000"
+    },
+    {
+      "название": "Длинномер MAN TSG",
+      "тип": "40",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 100.0,
+      "max_load": 120.0,
+      "tag": "28000"
+    },
+    {
+      "название": "Длинномер MAN TSG",
+      "тип": "40",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 120.0,
+      "max_load": 120.0,
+      "tag": "28000"
+    },
+    {
+      "название": "Длинномер MAN TSG",
+      "тип": "40",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 0.0,
+      "max_load": 30.0,
+      "tag": "23000"
+    },
+    {
+      "название": "Длинномер MAN TSG",
+      "тип": "40",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 30.0,
+      "max_load": 60.0,
+      "tag": "26000"
+    },
+    {
+      "название": "Длинномер MAN TSG",
+      "тип": "40",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 60.0,
+      "max_load": 80.0,
+      "tag": "28000"
+    },
+    {
+      "название": "Длинномер MAN TSG",
+      "тип": "40",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 80.0,
+      "max_load": 100.0,
+      "tag": "30000"
+    },
+    {
+      "название": "Длинномер MAN TSG",
+      "тип": "40",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 100.0,
+      "max_load": 120.0,
+      "tag": "33000"
+    },
+    {
+      "название": "Длинномер MAN TSG",
+      "тип": "40",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 120.0,
+      "max_load": 120.0,
+      "tag": "33000"
+    },
+    {
+      "название": "Манипутор SPECIAL",
+      "тип": "39.5",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 0.0,
+      "max_load": 30.0,
+      "tag": "20000"
+    },
+    {
+      "название": "Манипутор SPECIAL",
+      "тип": "39.5",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 30.0,
+      "max_load": 60.0,
+      "tag": "23000"
+    },
+    {
+      "название": "Манипутор SPECIAL",
+      "тип": "39.5",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 60.0,
+      "max_load": 80.0,
+      "tag": "25000"
+    },
+    {
+      "название": "Манипутор SPECIAL",
+      "тип": "39.5",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 80.0,
+      "max_load": 100.0,
+      "tag": "27000"
+    },
+    {
+      "название": "Манипутор SPECIAL",
+      "тип": "39.5",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 100.0,
+      "max_load": 120.0,
+      "tag": "30000"
+    },
+    {
+      "название": "Манипутор SPECIAL",
+      "тип": "39.5",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 120.0,
+      "max_load": 120.0,
+      "tag": "30000"
+    },
+    {
+      "название": "Длинномер DAF",
+      "тип": "55",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 0.0,
+      "max_load": 30.0,
+      "tag": "19000"
+    },
+    {
+      "название": "Длинномер DAF",
+      "тип": "55",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 30.0,
+      "max_load": 60.0,
+      "tag": "22000"
+    },
+    {
+      "название": "Длинномер DAF",
+      "тип": "55",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 60.0,
+      "max_load": 80.0,
+      "tag": "24000"
+    },
+    {
+      "название": "Длинномер DAF",
+      "тип": "55",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 80.0,
+      "max_load": 100.0,
+      "tag": "25000"
+    },
+    {
+      "название": "Длинномер DAF",
+      "тип": "55",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 100.0,
+      "max_load": 120.0,
+      "tag": "28000"
+    },
+    {
+      "название": "Длинномер DAF",
+      "тип": "55",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 120.0,
+      "max_load": 120.0,
+      "tag": "28000"
+    },
+    {
+      "название": "Длинномер DAF",
+      "тип": "55",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 0.0,
+      "max_load": 30.0,
+      "tag": "23000"
+    },
+    {
+      "название": "Длинномер DAF",
+      "тип": "55",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 30.0,
+      "max_load": 60.0,
+      "tag": "26000"
+    },
+    {
+      "название": "Длинномер DAF",
+      "тип": "55",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 60.0,
+      "max_load": 80.0,
+      "tag": "28000"
+    },
+    {
+      "название": "Длинномер DAF",
+      "тип": "55",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 80.0,
+      "max_load": 100.0,
+      "tag": "30000"
+    },
+    {
+      "название": "Длинномер DAF",
+      "тип": "55",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 100.0,
+      "max_load": 120.0,
+      "tag": "33000"
+    },
+    {
+      "название": "Длинномер DAF",
+      "тип": "55",
+      "base": 0.0,
+      "per_km": 0.0,
+      "min_distance": 120.0,
+      "max_load": 120.0,
+      "tag": "33000"
+    }
+  ]
+}

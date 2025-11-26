@@ -2,7 +2,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-from backend.service.factories_service import init_factories_cache
+from backend.core.data_loader import load_factories_products
 from backend.app.routes_quote import router as quote_router
 from backend.core.logger import get_logger
 
@@ -30,10 +30,10 @@ log.info(f"ENV GOOGLE_APPLICATION_CREDENTIALS: {os.getenv('GOOGLE_APPLICATION_CR
 @app.on_event("startup")
 async def startup_event():
     try:
-        init_factories_cache(force_reload=False)
-        log.info("✅ factories_products.json загружен и кэширован.")
+        factories_data = load_factories_products(force_reload=True)
+        print("✅ factories_products.json загружен и кэширован.")
     except Exception as e:
-        log.error(f"❌ Ошибка при инициализации данных: {e}")
+        print(f"❌ Ошибка при старте: {e}")
 
 # === Роуты ===
 app.include_router(quote_router, prefix="/quote", tags=["Quote"])
