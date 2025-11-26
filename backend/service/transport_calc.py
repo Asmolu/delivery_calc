@@ -11,18 +11,6 @@ import math
 
 
 def evaluate_scenario_transport(scenario, req, calc_tariffs):
-    from backend.core.data_loader import load_json
-    import math
-
-    def get_product_spec(category, subtype):
-        """Возвращает данные по товару (вес, порог, максимум на рейс)"""
-        for c, data in product_specs.items():
-            if c.lower() == category.lower():
-                for s_name, s_data in data.items():
-                    if s_name.lower() == subtype.lower():
-                        return s_data
-        return None
-
     def _extend_result(base_dict):
         trips = base_dict.get("plans", [])
         base_dict["trip_count"] = len(trips)
@@ -193,43 +181,6 @@ def evaluate_scenario_transport(scenario, req, calc_tariffs):
             qty = finfo["items"][0]["quantity"]
             print(f"   🔎 Проверяем спецтариф: {item['subtype']} (qty={qty})")
 
-            total_weight = weight_per_item * qty
-
-            # 🔥 Корректный special-tariff: если общий вес > 20т — выбираем тариф ">20т"
-            if special_threshold > 0 and total_weight > special_threshold:
-                # Находим правильный тариф >20т
-                long_haul_tariffs = [
-                    t for t in usable_tariffs
-                    if (t.get("tag") or t.get("тег")) == "long_haul"
-                ]
-
-                if long_haul_tariffs:
-                    # Берём тариф для ЛЮБОГО расстояния, покрывающий dist
-                    best = min(
-                        long_haul_tariffs,
-                        key=lambda t: abs(
-                            (t.get("capacity_ton") or 20) - total_weight
-                        ),
-                    )
-
-                    base_price = float(best.get("price") or best.get("цена") or 0)
-                    per_km = float(best.get("per_km") or best.get("за_км") or 0)
-                    adjusted_tariff = base_price + per_km * dist
-
-                    trips_needed = math.ceil(total_weight / (weight_per_item * max_per_trip))
-
-                    finfo["adjusted_delivery_cost"] = adjusted_tariff
-                    finfo["adjusted_trips"] = trips_needed
-                    finfo["adjusted_trips_list"] = []
-
-                    for i in range(trips_needed):
-                        finfo["adjusted_trips_list"].append({
-                            "тип": "long_haul",
-                            "реальное_имя": best.get("name"),
-                            "вес_перевезено": round(min(max_per_trip * weight_per_item, total_weight), 2),
-                            "стоимость": round(adjusted_tariff / trips_needed, 2),
-                            "описание": f"Особый тариф >{special_threshold}т (рейс {i+1}/{trips_needed})",
-                        })
         # если веса нет — пропускаем
         if weight <= 0:
             continue
@@ -523,8 +474,7 @@ def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_t
     подбираются только такие рейсы.
     Если require_one_mani=True — добавляем хотя бы один манипулятор.
     """
-    import itertools
-    import math
+    import itertools 
 
     # === Нормализуем теги тарифов ===
     for t in tariffs:

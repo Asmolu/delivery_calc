@@ -1,28 +1,23 @@
 import os
-import json
 import gspread
 from dotenv import load_dotenv
+import math
+from functools import lru_cache
+import re
 
 load_dotenv()
 
 SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
 CREDENTIALS_PATH = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
-STORAGE_DIR = os.path.join("backend", "storage")
-os.makedirs(STORAGE_DIR, exist_ok=True)
 
-FACTORIES_PRODUCTS_PATH = os.path.join(STORAGE_DIR, "factories_products.json")
-TARIFFS_PATH = os.path.join(STORAGE_DIR, "tariffs.json")
-
-# Какие листы реально парсим
-ALLOWED_SHEETS = ["Дорожные ПЛИТЫ/ПАГИ", "ФБС БЛОКИ", "Vehicles"]
-
-
-def parse_google_sheet():
+def parse_google_sheet(ALLOWED_SHEETS=None):
     """
-    Загружает данные из Google Sheets и создаёт:
-      - factories_products.json — товары+заводы
-      - tariffs.json — тарифы (из листа Vehicles)
+    Загружает данные из Google Sheets и возвращает структуру:
+    {
+        "products": {...},  # словарь категорий и заводов
+        "tariffs": [...]    # список тарифов машин
+    }
     """
     gc = gspread.service_account(filename=CREDENTIALS_PATH)
     sh = gc.open_by_key(SHEET_ID)
@@ -32,112 +27,176 @@ def parse_google_sheet():
 
     for worksheet in sh.worksheets():
         category_name = worksheet.title.strip()
-        if category_name not in ALLOWED_SHEETS:
+        if ALLOWED_SHEETS and category_name not in ALLOWED_SHEETS:
             print(f"⚙️ Пропускаем лист {category_name} — не входит в ALLOWED_SHEETS")
             continue
 
         print(f"📄 Загружаем лист: {category_name}")
         data = worksheet.get_all_values()
 
-        if not data or len(data) < 4:
+        if not data or len(data) < 3:
             print(f"⚠️ Пропущен лист {category_name} — слишком мало строк.")
             continue
 
-        # === Тарифы ===
         if category_name.lower() == "vehicles":
+            vehicles = []
             for row in data[1:]:
-                if not any(row):
+                if not any(row) or len(row) < 7:
                     continue
                 try:
-                    parsed_tariffs.append({
-                        "название": row[0].strip(),
-                        "тип": row[1].strip() if len(row) > 1 else "",
-                        "base": _safe_float(row[2]),
-                        "per_km": _safe_float(row[3]),
-                        "min_distance": _safe_float(row[4]),
-                        "max_load": _safe_float(row[5]),
-                        "tag": row[6].strip().lower() if len(row) > 6 else "",
-                    })
+                    # Вес/условие — может быть числом или текстом вроде ">20", "any", "≤10"
+                    raw_weight = str(row[3]).strip() if len(row) > 3 else ""
+                    if raw_weight.lower() in ["", "any", "все", "любая", "-"]:
+                        weight_if = "any"
+                    else:
+                        weight_if = raw_weight
+
+                    vehicle = {
+                        "название": str(row[0]).strip(),             # Название
+                        "грузоподъёмность": _to_float_safe(row[1]),   # Грузоподъёмность (тонны)
+                        "tag": str(row[2]).strip().lower(),           # Тег (manipulator / long_haul / special)
+                        "weight_if": weight_if,                       # Весовое условие (any, >20, ≤10 и т.д.)
+                        "min_distance": _to_float_safe(row[4]),       # Мин дистанция
+                        "max_distance": _to_float_safe(row[5]),       # Макс дистанция
+                        "base": _to_float_safe(row[6]),               # Базовая цена
+                        "per_km": _to_float_safe(row[7]),             # За каждый км
+                        "описание": str(row[8]).strip() if len(row) > 8 else "",
+                        "заметки": str(row[9]).strip() if len(row) > 9 else ""
+                    }
+                    vehicles.append(vehicle)
                 except Exception as e:
                     print(f"⚠️ Ошибка парсинга строки в Vehicles: {e}")
-            print(f"🚛 Vehicles: добавлено {len(parsed_tariffs)} тарифов")
+            parsed_tariffs.extend(vehicles)
+            print(f"🚛 Vehicles: добавлено {len(vehicles)} тарифов")
             continue
 
-        # === Продукты ===
-        try:
-            weights_row = data[0]
-            special_row = data[1]
-            max_row = data[2]
-            subtypes_row = data[3]
-        except IndexError:
-            print(f"⚠️ Недостаточно строк в листе {category_name}")
+
+        # === Парсинг товаров и заводов ===
+        if len(data) < 5:
+            print(f"⚠️ Пропущен лист {category_name} — недостаточно строк для парсинга.")
             continue
+
+        weights_row = data[0]
+        special_row = data[1]
+        max_row = data[2]
+        subtypes_row = data[3]
 
         col_start = 3
-        subtypes = [
-            (col, subtypes_row[col].strip())
-            for col in range(col_start, len(subtypes_row))
-            if subtypes_row[col].strip()
-        ]
+        col_end = len(subtypes_row)
+
+        subtypes = []
+        for col in range(col_start, col_end):
+            subtype_name = subtypes_row[col].strip()
+            if subtype_name:
+                subtypes.append((col, subtype_name))
 
         category_items = []
         for row in data[4:]:
-            if len(row) < 4 or not row[0].strip():
+            if not row or len(row) < 4:
+                continue
+            factory_name = row[0].strip()
+            if not factory_name:
                 continue
 
-            factory_name = row[0].strip()
+            lat = lon = None
+            if len(row) > 2 and row[2]:
+                coords = str(row[2]).strip()
+                # Разделяем по запятой или пробелу
+                if "," in coords:
+                    parts = coords.replace(";", ",").split(",")
+                elif " " in coords:
+                    parts = coords.split()
+                else:
+                    parts = [coords]
+                try:
+                    lat = float(parts[0].strip().replace(",", "."))
+                    if len(parts) > 1:
+                        lon = float(parts[1].strip().replace(",", "."))
+                except Exception:
+                    pass
+
             contact = row[1].strip() if len(row) > 1 else ""
-            lat, lon = _safe_coords(row)
 
             for col, subtype in subtypes:
-                price = _safe_float(row[col])
+                try:
+                    price = float(row[col].replace(" ", "").replace(",", "."))
+                except Exception:
+                    price = None
                 if not price:
                     continue
 
-                item = {
+                weight_val = _to_float(weights_row[col])
+                special_val = _to_float(special_row[col])
+                max_val = _to_float(max_row[col])
+
+                category_items.append({
                     "category": category_name,
                     "subtype": subtype,
-                    "weight_per_item": _safe_float(weights_row[col]),
-                    "special_threshold": _safe_float(special_row[col]),
-                    "max_per_trip": _safe_float(max_row[col]),
+                    "weight_per_item": weight_val,
+                    "special_threshold": special_val,
+                    "max_per_trip": max_val,
                     "factory": {
                         "name": factory_name,
                         "lat": lat,
                         "lon": lon,
                         "price": price,
-                        "contact": contact,
-                    },
-                }
-                category_items.append(item)
+                        "contact": contact
+                    }
+                })
 
         parsed_products[category_name] = category_items
         print(f"🔹 {category_name}: добавлено {len(category_items)} связок 'товар+завод'")
 
-    # === Сохраняем файлы ===
-    with open(FACTORIES_PRODUCTS_PATH, "w", encoding="utf-8") as f:
-        json.dump(parsed_products, f, ensure_ascii=False, indent=2)
-    print(f"✅ factories_products.json сохранён ({len(parsed_products)} категорий).")
-
-    with open(TARIFFS_PATH, "w", encoding="utf-8") as f:
-        json.dump(parsed_tariffs, f, ensure_ascii=False, indent=2)
-    print(f"✅ tariffs.json сохранён ({len(parsed_tariffs)} тарифов).")
-
     return {"products": parsed_products, "tariffs": parsed_tariffs}
 
 
-# ==== ХЕЛПЕРЫ =====================================================
+# === Вспомогательные функции ===
 
-def _safe_float(value):
+import re  # если не было ранее
+
+def _parse_coord(value):
+    """Безопасное извлечение координат из строки"""
+    if not value:
+        return None
     try:
-        return float(str(value).replace(",", ".").replace(" ", ""))
+        clean = re.sub(r"[^0-9,\.\-]", "", str(value))
+        clean = clean.replace(",", ".")
+        return float(clean)
+    except Exception:
+        return None
+
+
+def _to_float_safe(x):
+    """Безопасное преобразование строки в число"""
+    try:
+        return float(str(x).replace(",", "."))
     except Exception:
         return 0.0
 
 
-def _safe_coords(row):
+def _norm_str(s):
+    if s is None:
+        return ""
+    return str(s).replace("\xa0", " ").strip().lower()
+
+def _to_float(x):
+    if x is None or x == "":
+        return 0.0
     try:
-        lat = float(str(row[2]).replace(",", "."))
-        lon = float(str(row[3]).replace(",", "."))
-        return lat, lon
+        return float(str(x).replace(" ", "").replace("\xa0", "").replace(",", "."))
     except Exception:
-        return None, None
+        return 0.0
+
+
+# === Гео-хелперы ===
+
+@lru_cache(maxsize=2000)
+def get_cached_distance(lat1, lon1, lat2, lon2):
+    R = 6371.0
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return round(R * c, 2)

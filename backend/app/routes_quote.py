@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 
 from backend.core.logger import get_logger
 from backend.models.dto import QuoteRequest
-from backend.core.data_loader import load_factories_products
+from backend.core.data_loader import load_factories_and_tariffs
 from backend.service.scenario_builder import build_factory_scenarios
 from backend.service.transport_calc import evaluate_scenario_transport, build_shipment_details_from_result
 
@@ -20,7 +20,7 @@ async def make_quote(req: QuoteRequest):
     log.info("Запрос на расчёт: %s", req.dict())
 
     # ✅ загружаем объединённые данные (товары + заводы)
-    factories_products = factories_data = load_factories_products()
+    factories_products, tariffs = load_factories_and_tariffs()
     if not factories_products:
         return JSONResponse(
             status_code=500,
@@ -73,3 +73,24 @@ async def make_quote(req: QuoteRequest):
     print("==================================\n")
 
     return JSONResponse({"success": True, "variants": variants})
+
+from fastapi import APIRouter
+from backend.core.data_loader import load_factories_and_tariffs
+
+router = APIRouter()
+
+@router.get("/factories")
+def get_factories():
+    factories, _ = load_factories_and_tariffs()
+    return {"factories": factories}
+
+@router.get("/tariffs")
+def get_tariffs():
+    _, tariffs = load_factories_and_tariffs()
+    return {"tariffs": tariffs}
+
+@router.get("/categories")
+def get_categories():
+    factories, _ = load_factories_and_tariffs()
+    categories = sorted(set(f.get("category") for f in factories if f.get("category")))
+    return {"categories": categories}
