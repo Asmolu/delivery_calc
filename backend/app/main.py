@@ -1,38 +1,17 @@
+import os
 from fastapi import FastAPI
-from dotenv import load_dotenv
-from pathlib import Path
-import os
-
-# ===== LOAD .env ======
-BASE_DIR = Path(__file__).resolve().parents[2]
-env_path = BASE_DIR / ".env"
-if env_path.exists():
-    load_dotenv(env_path)
-
-print("Loaded ENV from:", env_path)
-print("ENV GOOGLE_SHEET_ID:", os.getenv("GOOGLE_SHEET_ID"))
-print("ENV GOOGLE_APPLICATION_CREDENTIALS:", os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
-
-# ===== CORRECT ABSOLUTE IMPORTS =====
-from backend.core.logger import get_logger
-from backend.app.routes_quote import router as quote_router
-from backend.app.routes_info import router as info_router
-from backend.app.routes_admin import router as admin_router
-
-
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+from backend.service.factories_service import init_factories_cache
+from backend.app.routes_quote import router as quote_router
+from backend.core.logger import get_logger
 
-import os
+log = get_logger("main")
 
-from backend.core.data_loader import fetch_all_product_specs
+# === Настройка приложения ===
+app = FastAPI(title="Delivery Backend")
 
-GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
-
-
-app = FastAPI()
-
-app.include_router(quote_router)
-
+# === CORS ===
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -41,31 +20,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# === ENV ===
+load_dotenv()
+log.info("🚀 Backend has started")
+log.info(f"ENV GOOGLE_SHEET_ID: {os.getenv('GOOGLE_SHEET_ID')}")
+log.info(f"ENV GOOGLE_APPLICATION_CREDENTIALS: {os.getenv('GOOGLE_APPLICATION_CREDENTIALS')}")
 
-log = get_logger("app.main")
-
-
+# === Инициализация данных ===
 @app.on_event("startup")
-async def startup():
-    log.info("🚀 Backend has started")
+async def startup_event():
+    try:
+        init_factories_cache(force_reload=False)
+        log.info("✅ factories_products.json загружен и кэширован.")
+    except Exception as e:
+        log.error(f"❌ Ошибка при инициализации данных: {e}")
 
-@app.on_event("startup")
-async def startup():
-    log.info("🚀 Backend has started")
-
-    GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
-    if GOOGLE_SHEET_ID:
-        fetch_all_product_specs(
-            sheet_id=GOOGLE_SHEET_ID,
-            sheet_names=[
-                "Дорожные ПЛИТЫ/ПАГИ",
-                "ФБС БЛОКИ",
-            ]
-        )
-
-# ------------------------
-# 4) РОУТЫ
-# ------------------------
-app.include_router(quote_router)
-app.include_router(info_router)
-app.include_router(admin_router)
+# === Роуты ===
+app.include_router(quote_router, prefix="/quote", tags=["Quote"])

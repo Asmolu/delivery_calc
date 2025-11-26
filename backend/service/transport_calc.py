@@ -1,47 +1,18 @@
 from backend.service.factories_service import (
-    get_cached_distance,
     _norm_str,
     _to_float,
     _detect_standard_for_factory_items,
     _plan_special_single_heavy_long_haul,
     calculate_tariff_cost,
-    set_current_tariffs,   # ← добавили
+    set_current_tariffs,
 )
-from backend.core.data_loader import load_json
-import json
-from pathlib import Path
-import os
-
-PRODUCT_SPECS_FILE = os.path.join(os.path.dirname(__file__), "..", "storage", "product_specs.json")
-
-def load_product_specs():
-    """Загружает product_specs.json из storage"""
-    try:
-        with open(PRODUCT_SPECS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            print(f"✅ Загружено product_specs.json — {len(data)} позиций")
-            return data
-    except Exception as e:
-        print("⚠️ Ошибка при загрузке product_specs.json:", e)
-        return {}
-
-# Загружаем один раз при старте модуля
-product_specs = load_product_specs()
+from backend.service.osrm_client import get_osrm_distance_km  # ✅ расстояния через OSRM
+import math
 
 
 def evaluate_scenario_transport(scenario, req, calc_tariffs):
     from backend.core.data_loader import load_json
     import math
-
-    # Загружаем спецификации товаров (особые тарифы, лимиты и веса)
-    try:
-        from pathlib import Path
-        PRODUCT_SPECS_FILE = Path("backend/storage/product_specs.json")
-        product_specs = load_json(PRODUCT_SPECS_FILE)
-
-    except Exception as e:
-        print(f"⚠️ Не удалось загрузить product_specs.json: {e}")
-        product_specs = {}
 
     def get_product_spec(category, subtype):
         """Возвращает данные по товару (вес, порог, максимум на рейс)"""
@@ -90,6 +61,8 @@ def evaluate_scenario_transport(scenario, req, calc_tariffs):
     if not usable_tariffs:
         print("⚠️ Нет доступных тарифов после фильтрации по forbidden_types")
         return None
+    else:
+        print(f"✅ Тарифов доступно после фильтрации: {len(usable_tariffs)}")
 
     # сообщаем factories_service, по каким тарифам нужно считать
     set_current_tariffs(usable_tariffs)
@@ -107,8 +80,9 @@ def evaluate_scenario_transport(scenario, req, calc_tariffs):
         lat = f_obj.get("lat")
         lon = f_obj.get("lon")
 
-        dist = get_cached_distance(lat, lon, req.upload_lat, req.upload_lon)
+        dist = get_osrm_distance_km(lon, lat, req.upload_lon, req.upload_lat)
         factory_distances[fname] = dist
+        print(f"  📍 расстояние до клиента: {dist} км")
 
         weight = sum(x["weight_total"] for x in items)
         mat_cost = 0.0
@@ -217,40 +191,45 @@ def evaluate_scenario_transport(scenario, req, calc_tariffs):
         if finfo["items"]:
             item = finfo["items"][0]["product"]
             qty = finfo["items"][0]["quantity"]
-            spec = get_product_spec(item["category"], item["subtype"])
+            print(f"   🔎 Проверяем спецтариф: {item['subtype']} (qty={qty})")
 
-            if spec:
-                weight_per_item = spec.get("weight_t") or 0
-                special_threshold = spec.get("special_threshold") or 0
-                max_per_trip = spec.get("max_per_trip") or 0
+            total_weight = weight_per_item * qty
 
-                if special_threshold and qty > special_threshold:
-                    base_tariff = 0
-                    # берём примерную цену базового рейса для long_haul
-                    for t in usable_tariffs:
-                        if "long" in (t.get("tag") or ""):
-                            base_tariff = float(t.get("base_cost") or t.get("цена") or 0)
-                            break
-                    if base_tariff:
-                        price_per_item = base_tariff / special_threshold
-                        adjusted_tariff = price_per_item * qty
-                        trip_weight = weight_per_item * max_per_trip
-                        trips_needed = math.ceil((weight_per_item * qty) / trip_weight)
-                        print(f"⚙️ Особый тариф применён: {item['subtype']} — {qty}>{special_threshold}, доставка {adjusted_tariff}₽ ({trips_needed} рейс.)")
-                        # 🔸 Обновляем доставку по особому тарифу
+            # 🔥 Корректный special-tariff: если общий вес > 20т — выбираем тариф ">20т"
+            if special_threshold > 0 and total_weight > special_threshold:
+                # Находим правильный тариф >20т
+                long_haul_tariffs = [
+                    t for t in usable_tariffs
+                    if (t.get("tag") or t.get("тег")) == "long_haul"
+                ]
 
-                        finfo["adjusted_delivery_cost"] = adjusted_tariff
-                        finfo["adjusted_trips"] = trips_needed
-                        # Создаём фиктивные рейсы, чтобы отображались в деталях
-                        finfo.setdefault("adjusted_trips_list", [])
-                        for i in range(trips_needed):
-                            finfo["adjusted_trips_list"].append({
-                                "тип": "long_haul",
-                                "реальное_имя": "Длинномер MAN TSG",
-                                "вес_перевезено": round(min(trip_weight, weight_per_item * qty), 2),
-                                "стоимость": round(adjusted_tariff / trips_needed, 2),
-                                "описание": f"Особый тариф {item['subtype']} (рейс {i+1}/{trips_needed})"
-                            })
+                if long_haul_tariffs:
+                    # Берём тариф для ЛЮБОГО расстояния, покрывающий dist
+                    best = min(
+                        long_haul_tariffs,
+                        key=lambda t: abs(
+                            (t.get("capacity_ton") or 20) - total_weight
+                        ),
+                    )
+
+                    base_price = float(best.get("price") or best.get("цена") or 0)
+                    per_km = float(best.get("per_km") or best.get("за_км") or 0)
+                    adjusted_tariff = base_price + per_km * dist
+
+                    trips_needed = math.ceil(total_weight / (weight_per_item * max_per_trip))
+
+                    finfo["adjusted_delivery_cost"] = adjusted_tariff
+                    finfo["adjusted_trips"] = trips_needed
+                    finfo["adjusted_trips_list"] = []
+
+                    for i in range(trips_needed):
+                        finfo["adjusted_trips_list"].append({
+                            "тип": "long_haul",
+                            "реальное_имя": best.get("name"),
+                            "вес_перевезено": round(min(max_per_trip * weight_per_item, total_weight), 2),
+                            "стоимость": round(adjusted_tariff / trips_needed, 2),
+                            "описание": f"Особый тариф >{special_threshold}т (рейс {i+1}/{trips_needed})",
+                        })
         # если веса нет — пропускаем
         if weight <= 0:
             continue
@@ -301,6 +280,7 @@ def evaluate_scenario_transport(scenario, req, calc_tariffs):
                     selected_tag=selected_tag,
                     require_one_mani=True
                 )
+        print(f"⚙️ План по {fname}: cost_no={cost_no}, cost_with={cost_with}")
 
         if cost_no is None and cost_with is None:
             # с этим заводом сценарий нереализуем
@@ -349,14 +329,14 @@ def evaluate_scenario_transport(scenario, req, calc_tariffs):
             if finfo and "adjusted_delivery_cost" in finfo:
                 delivery_cost += finfo["adjusted_delivery_cost"]
                 all_trips.extend(finfo.get("adjusted_trips_list", []))
-                print(f"⚙️ Применён особый тариф для {v['name']}: {finfo['adjusted_delivery_cost']}₽ ({finfo.get('adjusted_trips', '?')} рейс.)")
+                print(...)
             else:
                 delivery_cost += float(use_cost or 0)
-                all_trips.extend(extract_trips(use_pack))
 
             all_trips.extend(extract_trips(use_pack))
 
         if not all_trips:
+            print(f"❌ Нет ни одного рейса (заводы={len(per_factory_variants)})")
             return None
 
         transport_name = ", ".join(sorted({t["реальное_имя"] for t in all_trips}))
@@ -436,6 +416,7 @@ def evaluate_scenario_transport(scenario, req, calc_tariffs):
             delivery_cost += float(cost_no or 0)
             all_trips.extend(extract_trips(pack_no))
         if not all_trips:
+            print("❌ evaluate_scenario_transport вернул None (нет подходящих тарифов или ошибка в планах)")
             return None
         transport_name = ", ".join(sorted({t["реальное_имя"] for t in all_trips}))
         total_cost = material_sum + delivery_cost
@@ -462,23 +443,9 @@ def evaluate_scenario_transport(scenario, req, calc_tariffs):
         "transport_name": transport_name,
         "factory_distances": factory_distances,
     }
+    print(f"✅ Успешный расчёт сценария: total_cost={result['total_cost']}, delivery={result['delivery_cost']}, рейсов={len(result['plans'])}")
+    return _extend_result(result)
 
-    # --- Добавляем количество рейсов и детали транспорта ---
-    result["trip_count"] = len(best_trips)
-    result["transport_details"] = {
-        "доп": [
-            {
-                "тип": trip.get("тип"),
-                "реальное_имя": trip.get("реальное_имя"),
-                "вес_перевезено": trip.get("вес_перевезено"),
-                "стоимость": trip.get("стоимость"),
-                "описание": trip.get("описание", "")
-            }
-            for trip in best_trips
-        ]
-    }
-
-    return result
 
 
 def build_shipment_details_from_result(best_result, req):
@@ -493,6 +460,7 @@ def build_shipment_details_from_result(best_result, req):
     # сначала собираем все строки без стоимости доставки
     rows = []
     for fname, items in factories_map.items():
+        print(f"🏭 Завод: {fname}, товаров: {len(items)}")
         dist = factory_distances.get(fname, 0.0)
         for x in items:
             f_obj = x["factory"]
@@ -536,36 +504,18 @@ def build_shipment_details_from_result(best_result, req):
 
     return rows
 
-from pathlib import Path
-PRODUCT_SPECS = load_json(Path("backend/storage/product_specs.json"))
-
 def calculate_daf_tariff(base_tariff: float, subtype: str, item_count: int):
-    """Расчет тарифа для ДАФ 55т с учетом порога особого тарифа."""
-    cfg = PRODUCT_SPECS.get(subtype)
-    if not cfg:
-        return base_tariff, f"нет спец-данных для {subtype}"
-
-    weight_per_item = cfg.get("weight_per_item") or 0
-    special_threshold = cfg.get("special_threshold") or 0
-    max_per_trip = cfg.get("max_per_trip") or 0
-
-    total_weight = weight_per_item * item_count
-
+    """Упрощённый расчёт тарифа для DAF 55т."""
+    total_weight = item_count * 2.2  # предположительно 2.2т за плиту
     if total_weight > 55:
-        return None, f"требуется разбивка: {total_weight:.1f}т > 55т"
-
-    if item_count <= special_threshold:
-        return base_tariff, f"обычный тариф ({item_count} шт, {total_weight:.1f}т)"
-
-    if special_threshold < item_count <= max_per_trip:
-        per_item = base_tariff / special_threshold
-        cost = round(per_item * item_count, 2)
-        return cost, f"особый тариф {special_threshold}->{item_count} шт ({total_weight:.1f}т)"
-
-    return None, f"перегруз: {item_count} шт ({total_weight:.1f}т)"
+        return None, f"перегруз: {total_weight:.1f}т > 55т"
+    return base_tariff, f"DAF тариф ({item_count} шт, {total_weight:.1f}т)"
 
 
 def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_tag=None, require_one_mani=False):
+    print(f"\n🔍 compute_best_plan: total_weight={total_weight}т, distance={distance_km} км, selected_tag={selected_tag}, allow_mani={allow_mani}, require_one_mani={require_one_mani}")
+    print(f"   Тарифов получено: {len(tariffs)}")
+
     """
     Полный расчёт оптимального плана доставки.
     Манипулятор и длинномер участвуют на равных.
@@ -635,11 +585,13 @@ def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_t
 
     # === Подготовка тарифов ===
     capacities = {tag: tag_capacity(tag) for tag in allowed_tags}
+    print(f"   Доступные теги и грузоподъёмность: {capacities}")
     if not capacities or all(v <= 0 for v in capacities.values()):
         return None, None
 
     # === Функция для расчёта стоимости комбинации ===
     def evaluate_combo(combo_counts):
+        print(f"      🔸 Проверяем комбинацию: {combo_counts}")
         total = 0.0
         plan = []
         weight_left = total_weight
@@ -655,6 +607,14 @@ def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_t
                     if (t.get("tag") == tag or t.get("тег") == tag)
                     and _to_float(t.get("capacity_ton") or t.get("грузоподъёмность") or 0) >= load
                 ]
+
+                # ❗ Гарантия выбора тарифа >20т
+                # запрещаем подбор тарифа, если груз превышает его лимит
+                matching_tariffs = [
+                    t for t in matching_tariffs
+                    if load <= _to_float(t.get("capacity_ton") or 0)
+                ]
+                print(f"         ➡️ {tag}: груз={load}, cap={cap}, найдено тарифов={len(matching_tariffs)}")
                 if not matching_tariffs:
                     return None, None
 
@@ -683,12 +643,14 @@ def compute_best_plan(total_weight, distance_km, tariffs, allow_mani, selected_t
         for combo in itertools.combinations_with_replacement(allowed_tags, n):
             combo_counts = {t: combo.count(t) for t in allowed_tags}
             total_weight_possible = sum(capacities[t] * combo_counts[t] for t in allowed_tags)
+            print(f"   ⚖️ Комбинация {combo_counts}: вместимость={total_weight_possible} < нужно {total_weight}? -> {total_weight_possible < total_weight}")
             if total_weight_possible < total_weight:
                 continue
             total, plan = evaluate_combo(combo_counts)
             if total and total < best_cost:
                 best_cost = total
                 best_plan = plan
+    print(f"✅ Результат: best_cost={best_cost}, есть план={best_plan is not None}")
 
     # === Если ничего не подошло, вернём None ===
     if not best_plan:

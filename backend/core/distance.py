@@ -37,7 +37,7 @@ def calculate_road_distance(lat1: float, lon1: float, lat2: float, lon2: float) 
             f"http://router.project-osrm.org/route/v1/driving/"
             f"{lon1},{lat1};{lon2},{lat2}?overview=false"
         )
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, timeout=5)
         data = response.json()
 
         if "routes" in data and data["routes"]:
