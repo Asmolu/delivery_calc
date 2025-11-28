@@ -305,10 +305,19 @@ def _daf_plan(
 
         while remaining > 0:
             load_items = min(remaining, max_per_trip)
+
+            # Корректно ограничиваем загрузку вместимостью DAF с учётом плавающей арифметики
+            if weight_per_item > 0:
+                max_by_capacity = int((daf_capacity + 1e-6) / weight_per_item)
+                if max_by_capacity <= 0:
+                    max_by_capacity = 1
+                load_items = min(load_items, max_by_capacity)
+
             load_weight = weight_per_item * load_items
-            if load_weight > daf_capacity:
-                load_items = max(int(daf_capacity // weight_per_item), 1)
+            if load_weight > daf_capacity + 1e-6 and load_items > 1:
+                load_items -= 1
                 load_weight = weight_per_item * load_items
+            load_weight = min(load_weight, daf_capacity)
 
             trip_tariff = _select_tariff_for_load(
                 tariffs, "long_haul", distance_km, load_weight, name_contains="daf"
