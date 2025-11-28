@@ -116,7 +116,7 @@ export default function Admin() {
           ) : (
             <div className="space-y-6 max-h-[70vh] overflow-auto pr-1">
               {factoriesList.map(([name, items], idx) => (
-                <div key={idx} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                <div key={idx} className="bg-slate-900/60 rounded-xl border border-slate-200 p-4 shadow-sm">
                   <div className="flex items-center justify-between mb-3">
                     <div>
                       <h3 className="text-lg font-semibold text-slate-900">🏢 {name}</h3>
@@ -127,8 +127,8 @@ export default function Admin() {
                     </span>
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left text-slate-800 border border-slate-200 rounded-lg">
-                      <thead className="bg-slate-50 text-slate-600">
+                    <table className="w-full text-sm text-left text-slate-200 border border-slate-200 rounded-lg">
+                      <thead className="bg-slate-900/50 text-slate-300 border-b border-slate-700">
                         <tr>
                           <th className="px-3 py-2">Подтип</th>
                           <th className="px-3 py-2">Вес (т)</th>
@@ -142,12 +142,12 @@ export default function Admin() {
                           .slice()
                           .sort((a, b) => (a.subtype || "").localeCompare(b.subtype || ""))
                           .map((item, i) => (
-                            <tr key={i} className="border-t border-slate-200 hover:bg-indigo-50/40 transition-colors">
+                            <tr key={i} className="border-t border-slate-800 hover:bg-slate-800/60 transition-colors">
                               <td className="px-3 py-2">{item.subtype || "—"}</td>
                               <td className="px-3 py-2">{item.weight_per_item ?? 0}</td>
                               <td className="px-3 py-2">{item.max_per_trip ?? 0}</td>
                               <td className="px-3 py-2">{item.special_threshold ?? 0}</td>
-                              <td className="px-3 py-2 font-medium text-slate-900">{item.price ?? 0}</td>
+                              <td className="px-3 py-2 font-medium text-slate-100">{item.price ?? 0}</td>
                             </tr>
                           ))}
                       </tbody>
@@ -186,8 +186,8 @@ export default function Admin() {
                   </div>
 
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left text-slate-800 border border-slate-200 rounded-lg">
-                      <thead className="bg-slate-50 text-slate-600">
+                    <table className="w-full text-sm text-left text-slate-200 border border-slate-200 rounded-lg">
+                      <thead className="bg-slate-900/50 text-slate-300 border-b border-slate-700">
                         <tr>
                           <th className="px-3 py-2">Мин. дистанция (км)</th>
                           <th className="px-3 py-2">Макс. дистанция (км)</th>
@@ -205,15 +205,15 @@ export default function Admin() {
                             return (
                               <tr
                                 key={i}
-                                className={`border-t border-slate-200 transition-colors ${
-                                  isExtraKm ? "bg-emerald-50/60" : "hover:bg-indigo-50/40"
+                                className={`border-t border-slate-800 transition-colors ${
+                                  isExtraKm ? "bg-emerald-900/30" : "hover:bg-slate-800/60"
                                 }`}
                               >
                                 <td className="px-3 py-2">{t.distance_min ?? 0}</td>
                                 <td className="px-3 py-2">{t.distance_max ?? 0}</td>
-                                <td className="px-3 py-2 font-medium text-slate-900">{t.price ?? t.base ?? 0}</td>
+                                <td className="px-3 py-2 font-medium text-slate-100">{t.price ?? t.base ?? 0}</td>
                                 <td className="px-3 py-2">{t.per_km > 0 ? `+${t.per_km} ₽/км` : "—"}</td>
-                                <td className="px-3 py-2 text-slate-500 italic">
+                                <td className="px-3 py-2 text-slate-400 italic">
                                   {t.notes || (isExtraKm ? "расстояние свыше — с доплатой" : "—")}
                                 </td>
                               </tr>

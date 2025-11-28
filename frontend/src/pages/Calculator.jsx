@@ -273,7 +273,7 @@ export default function Calculator() {
                   {items.length > 1 && (
                     <button
                       onClick={() => handleRemoveItem(i)}
-                      className="px-3 py-2 bg-red-50 text-red-600 border border-red-100 rounded-lg"
+                      className="px-3 py-2 rounded-lg bg-red-900/40 text-red-100 border border-red-500/40 hover:bg-red-800/50"
                     >
                       Удалить
                     </button>
@@ -350,9 +350,9 @@ export default function Calculator() {
 
             return (
               <div className="mt-10 space-y-6">
-                <div className="overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-                  <table className="w-full text-sm">
-                    <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                <div className="overflow-auto rounded-xl border border-slate-200 bg-slate-900/70 shadow-sm">
+                  <table className="w-full text-sm text-slate-200">
+                    <thead className="bg-slate-900/50 text-slate-300 border-b border-slate-800">
                       <tr>
                         <th className="p-3 text-left">Производство</th>
                         <th className="p-3 text-left">Контакт</th>
@@ -366,15 +366,15 @@ export default function Calculator() {
                     </thead>
                     <tbody>
                       {detailRows.map((d, idx) => (
-                        <tr key={idx} className="border-b border-slate-100">
+                        <tr key={idx} className="border-b border-slate-800">
                           <td className="p-3 whitespace-nowrap">{d["завод"]}</td>
-                          <td className="p-3 whitespace-pre-line text-slate-600">{d["контакт"] || "—"}</td>
+                          <td className="p-3 whitespace-pre-line text-slate-400">{d["контакт"] || "—"}</td>
                           <td className="p-3">{d["товар"]}</td>
                           <td className="p-3">{d["машина"]}</td>
                           <td className="p-3">{d["расстояние_км"]}</td>
                           <td className="p-3">{d["стоимость_материала"]?.toLocaleString()}</td>
                           <td className="p-3">{d["стоимость_доставки"]?.toLocaleString()}</td>
-                          <td className="p-3 text-indigo-700 font-semibold">{d["итого"]?.toLocaleString()}</td>
+                          <td className="p-3 text-indigo-300 font-semibold">{d["итого"]?.toLocaleString()}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -382,12 +382,12 @@ export default function Calculator() {
                 </div>
 
                 {Array.isArray(tripItems) && tripItems.length > 0 && (
-                  <div className="overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-                    <div className="p-4 border-b border-slate-200 flex items-center gap-2 text-slate-700">
+                  <div className="overflow-auto rounded-xl border border-slate-200 bg-slate-900/70 shadow-sm">
+                    <div className="p-4 border-b border-slate-800 flex items-center gap-2 text-slate-200">
                       🚚 Что везёт каждая машина
                     </div>
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                    <table className="w-full text-sm text-slate-200">
+                      <thead className="bg-slate-900/50 text-slate-300 border-b border-slate-800">
                         <tr>
                           <th className="p-3 text-left">Производство</th>
                           <th className="p-3 text-left">Машина</th>
@@ -400,13 +400,13 @@ export default function Calculator() {
                       </thead>
                       <tbody>
                         {tripItems.map((trip, i) => (
-                          <tr key={i} className="border-b border-slate-100 align-top">
+                          <tr key={i} className="border-b border-slate-800 align-top">
                             <td className="p-3 whitespace-nowrap">{trip["завод"]}</td>
                             <td className="p-3">{trip["машина"]}</td>
-                            <td className="p-3 text-slate-700 whitespace-pre-line">{trip["тариф"] || "—"}</td>
+                            <td className="p-3 text-slate-300 whitespace-pre-line">{trip["тариф"] || "—"}</td>
                             <td className="p-3">{trip["расстояние_км"]}</td>
                             <td className="p-3">{trip["загрузка_т"]}</td>
-                            <td className="p-3 text-slate-800">{trip["товары"]}</td>
+                            <td className="p-3 text-slate-100">{trip["товары"]}</td>
                             <td className="p-3">{Number(trip["стоимость_доставки"] || 0).toLocaleString()}</td>
                           </tr>
                         ))}
