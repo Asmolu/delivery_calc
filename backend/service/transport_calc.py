@@ -108,6 +108,32 @@ def _select_tariff_for_load(
     return min(candidates, key=lambda x: _trip_cost(x, distance_km))
 
 
+def _calc_daf_step_cost(base_cost: float, loaded_meta: List[Dict[str, Any]]) -> float:
+    """Расчёт ступенчатой цены для DAF по количеству единиц с порогом."""
+
+    thresholds = [
+        _to_float(m.get("special_threshold"))
+        for m in loaded_meta
+        if _to_float(m.get("special_threshold")) > 0
+    ]
+    if not thresholds:
+        return base_cost
+
+    qty_sum = sum(
+        _to_float(m.get("qty"))
+        for m in loaded_meta
+        if _to_float(m.get("special_threshold")) > 0
+    )
+    if qty_sum <= 0:
+        return base_cost
+
+    threshold = min(thresholds)
+    if qty_sum >= threshold:
+        return base_cost / threshold * qty_sum
+
+    return base_cost
+
+
 def _linear_plan(
     total_weight: float,
     distance_km: float,
@@ -116,18 +142,32 @@ def _linear_plan(
     require_manipulator: bool,
     items: List[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
-    """Простая жадная стратегия: заполняем самыми выгодными машинами."""
-    candidates: List[Tuple[str, Dict[str, Any]]] = []
-    for tag in allowed_tags:
-        tariff = _select_tariff_for_load(tariffs, tag, distance_km, 1)
-        if not tariff:
+    """Жадно заполняем самыми выгодными машинами, сравнивая тарифы по цене/тонне."""
+    candidates: List[Dict[str, Any]] = []
+
+    for t in tariffs:
+        tag = _norm_str(t.get("tag"))
+        if tag not in allowed_tags:
             continue
-        capacity = _to_float(tariff.get("грузоподъёмность")) or 0
+        if not _distance_in_range(t, distance_km):
+            continue
+
+        capacity = _to_float(t.get("грузоподъёмность")) or 0
         if capacity <= 0:
             continue
-        cost = _trip_cost(tariff, distance_km)
-        cost_per_ton = cost / capacity if capacity else float("inf")
-        candidates.append((tag, {"tariff": tariff, "capacity": capacity, "cost": cost, "cpt": cost_per_ton}))
+
+        weight_if = _norm_str(t.get("weight_if") or "any")
+
+        cost = _trip_cost(t, distance_km)
+        cpt = cost / capacity if capacity else float("inf")
+        candidates.append({
+            "tag": tag,
+            "tariff": t,
+            "capacity": capacity,
+            "cost": cost,
+            "cpt": cpt,
+            "weight_if": weight_if,
+        })
 
     if not candidates:
         return None
@@ -147,13 +187,16 @@ def _linear_plan(
                 "category": it.get("category"),
                 "subtype": it.get("subtype"),
                 "weight_per_item": _to_float(it.get("weight_per_item")),
+                "special_threshold": _to_float(it.get("special_threshold")),
                 "remaining_qty": qty,
             }
         )
 
-    def _allocate_items_for_trip(load_limit: float) -> Tuple[List[str], float]:
-        """Возвращает список товаров, помещённых в рейс, и фактический вес."""
+    def _allocate_items_for_trip(load_limit: float) -> Tuple[List[str], List[Dict[str, Any]], float]:
+        """Возвращает список товаров, помещённых в рейс, их мета и фактический вес."""
+
         assigned: List[str] = []
+        assigned_meta: List[Dict[str, Any]] = []
         load_used = 0.0
         if load_limit <= 0:
             return assigned, load_used
@@ -175,6 +218,14 @@ def _linear_plan(
                     assigned.append(
                         f"{item.get('category')} {item.get('subtype')}: {take_qty} шт"
                     )
+                    assigned_meta.append(
+                        {
+                            "category": item.get("category"),
+                            "subtype": item.get("subtype"),
+                            "qty": take_qty,
+                            "special_threshold": item.get("special_threshold"),
+                        }
+                    )
                 continue
 
             max_qty_by_weight = int((load_limit - load_used + 1e-6) // weight_per_item)
@@ -190,22 +241,34 @@ def _linear_plan(
             assigned.append(
                 f"{item.get('category')} {item.get('subtype')}: {int(take_qty)} шт"
             )
-
-        return assigned, load_used
+            assigned_meta.append(
+                {
+                    "category": item.get("category"),
+                    "subtype": item.get("subtype"),
+                    "qty": take_qty,
+                    "special_threshold": item.get("special_threshold"),
+                }
+            )
+        return assigned, assigned_meta, load_used
 
     def _assign_trip(tag: str, info: Dict[str, Any], load: float, tariff: Dict[str, Any], base_cost: float) -> bool:
         nonlocal weight_left
 
-        items_loaded, real_weight = _allocate_items_for_trip(load)
+        items_loaded, meta_loaded, real_weight = _allocate_items_for_trip(load)
         if real_weight <= 0 and weight_left > 0:
             return False
         
+        tariff_name_norm = _norm_str(tariff.get("название") or tariff.get("name") or "")
+        trip_cost = base_cost
+        if "daf" in tariff_name_norm:
+            trip_cost = _calc_daf_step_cost(base_cost, meta_loaded)
+
         trips.append(
             {
                 "tag": tag,
                 "tariff_name": tariff.get("название") or tariff.get("name") or tag,
                 "tariff_label": _tariff_label(tariff),
-                "trip_cost": base_cost,
+                "trip_cost": trip_cost,
                 "load_ton": round(real_weight, 2),
                 "distance_km": distance_km,
                 "items": items_loaded or [f"Смешанная загрузка ({round(load,2)}т)"],
@@ -216,15 +279,16 @@ def _linear_plan(
 
     # Гарантируем обязательный манипулятор, если он нужен
     if require_manipulator:
-        mani = next((c for c in candidates if c[0] == "manipulator"), None)
+        mani = min(
+            (c for c in candidates if c["tag"] == "manipulator"),
+            key=lambda x: x["cpt"],
+            default=None,
+        )
         if not mani:
             return None
-        load_plan = min(weight_left, mani[1]["capacity"])
-        tariff = _select_tariff_for_load(tariffs, "manipulator", distance_km, load_plan or 1)
-        if not tariff:
-            return None
-        cost = _trip_cost(tariff, distance_km)
-        _assign_trip("manipulator", mani[1], load_plan, tariff, cost)
+        load_plan = min(weight_left, mani["capacity"])
+        cost = _trip_cost(mani["tariff"], distance_km)
+        _assign_trip("manipulator", mani, load_plan, mani["tariff"], cost)
 
     safety_guard = 0
     while weight_left > 0.01:
@@ -233,21 +297,26 @@ def _linear_plan(
             return None
 
         best_choice = None
-        for tag, info in candidates:
+        for info in candidates:
+            tag = info["tag"]
             load = min(weight_left, info["capacity"])
             if load <= 0:
                 continue
-            tariff = _select_tariff_for_load(tariffs, tag, distance_km, load)
-            if not tariff:
+
+            weight_if = info.get("weight_if", "any")
+            if weight_if == "≤20" and load > 20:
                 continue
-            cost = _trip_cost(tariff, distance_km)
+            if weight_if == ">20" and load <= 20:
+                continue
+
+            cost = _trip_cost(info["tariff"], distance_km)
             eff_cpt = cost / load if load > 0 else float("inf")
             if best_choice is None or eff_cpt < best_choice["eff_cpt"]:
                 best_choice = {
                     "tag": tag,
                     "info": info,
                     "load": load,
-                    "tariff": tariff,
+                    "tariff": info["tariff"],
                     "cost": cost,
                     "eff_cpt": eff_cpt,
                 }
@@ -265,7 +334,7 @@ def _linear_plan(
 
         if not success:
             # если не удалось погрузить ни одного товара, убираем этот тип транспорта из списка
-            candidates = [c for c in candidates if c[0] != best_choice["tag"]]
+            candidates = [c for c in candidates if c.get("tag") != best_choice["tag"]]
             if not candidates:
                 return None
             continue
