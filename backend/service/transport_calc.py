@@ -122,12 +122,13 @@ def _linear_plan(
     while weight_left > 0.01:
         progress = False
         for tag, info in candidates:
-            if weight_left <= 0.01:
-                break
             before = weight_left
             _assign_trip(tag, info)
             if weight_left < before:
                 progress = True
+                # продолжаем бить груз этой же наиболее выгодной машиной,
+                # не перебирая остальные, чтобы не добавлять лишние типы транспорта
+                break
         # если ничего не изменилось — выходим, чтобы избежать бесконечного цикла
         if weight_left > 0.01 and not progress:
             return None
