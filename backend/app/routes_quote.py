@@ -1,12 +1,13 @@
-import json
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from backend.core.logger import get_logger
 from backend.models.dto import QuoteRequest
 from backend.core.data_loader import load_factories_and_tariffs
-from backend.service.scenario_builder import build_factory_scenarios
-from backend.service.transport_calc import evaluate_scenario_transport, build_shipment_details_from_result
+from backend.service.transport_calc import (
+    build_shipment_details_from_result,
+    evaluate_scenario_transport,
+)
 from backend.service.scenario_builder import build_factory_scenarios_v2
 
 router = APIRouter(tags=["quote"])
@@ -42,10 +43,6 @@ async def make_quote(req: QuoteRequest):
     items_data = [item.dict() for item in req.items]
 
     scenarios = build_factory_scenarios_v2(factories_list, items_data)
-    import json
-    print("🧩 FACTORIES SAMPLE:", json.dumps(factories_list[:3], ensure_ascii=False, indent=2))
-    print("📦 ITEMS REQUESTED:", json.dumps(items_data, ensure_ascii=False, indent=2))
-    print(f"✅ Всего товаров в базе: {len(factories_list)}, в запросе: {len(items_data)}")
 
     if not scenarios:
         return JSONResponse(
@@ -54,22 +51,9 @@ async def make_quote(req: QuoteRequest):
         )
 
     results = []
-    # В начало файла добавь импорт:
-    import json
-    from pathlib import Path
-
-    # А перед циклом расчёта (перед evaluate_scenario_transport)
-    tariffs_path = Path(__file__).resolve().parent.parent / "storage" / "tariffs.json"
-    if tariffs_path.exists():
-        with open(tariffs_path, "r", encoding="utf-8") as f:
-            calc_tariffs = json.load(f)
-        print(f"📊 Загружено тарифов: {len(calc_tariffs)}")
-    else:
-        print("⚠️ Файл tariffs.json не найден, тарифы не будут использованы.")
-        calc_tariffs = []
 
     for sc in scenarios:
-        r = evaluate_scenario_transport(sc, req, calc_tariffs)
+        r = evaluate_scenario_transport(sc, req, tariffs)
         if r:
             results.append(r)
 
@@ -93,14 +77,15 @@ async def make_quote(req: QuoteRequest):
     for r in results:
         shipment_details = build_shipment_details_from_result(r, req)
         transport_title = r.get("transport_name", "Неизвестный транспорт")
+        scenario_weight = r.get("scenario", {}).get("total_weight", 0)
         variants.append({
             "totalCost": round(r["material_sum"] + r["delivery_cost"], 2),
             "materialCost": round(r["material_sum"], 2),
             "deliveryCost": round(r["delivery_cost"], 2),
-            "totalWeight": round(r["scenario"]["total_weight"], 2),
+            "totalWeight": round(scenario_weight, 2),
             "transportName": transport_title,
             "tripCount": r.get("trip_count", 0),
-            "transportDetails": r.get("transport_details", {}),
+            "transportDetails": r.get("factory_plans", []),
             "details": shipment_details,
         })
 
