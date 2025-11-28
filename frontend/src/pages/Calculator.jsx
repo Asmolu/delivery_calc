@@ -322,7 +322,7 @@ export default function Calculator() {
                   🚛 {variant.transportName}
                 </h3>
                 <p className="text-blue-400 font-bold text-xl mb-1">
-                  {variant.totalCost.toLocaleString()} ₽
+                  {variant.totalCost != null ? variant.totalCost.toLocaleString() + " ₽" : "—"}
                 </p>
                 <p>📦 {variant.totalWeight} т, 🔁 {variant.tripCount} рейс(ов)</p>
                 <p className="text-sm text-gray-400 mt-1">

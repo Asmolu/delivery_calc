@@ -37,7 +37,7 @@ export async function reloadAll() {
 }
 
 export async function getQuote(payload) {
-  const data = await request("POST", "/quote", payload);
+  const data = await request("POST", "/api/quote", payload);
   // если сервер возвращает объект с полем result, разворачиваем
   return data.result || data;
 }

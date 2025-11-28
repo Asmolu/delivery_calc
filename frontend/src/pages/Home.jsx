@@ -76,7 +76,7 @@ export default function Home() {
             to="/admin"
             className="px-6 py-3 bg-green-600 hover:bg-green-500 rounded-xl font-semibold shadow-lg shadow-green-500/30"
           >
-            ⚙️ Админка
+            ⚙️ Управление данными
           </Link>
         </div>
       </div>

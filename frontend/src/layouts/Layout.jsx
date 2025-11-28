@@ -12,7 +12,7 @@ export default function Layout({ children }) {
           <nav className="flex gap-6 text-sm">
             <Link to="/" className="hover:text-blue-400 transition">Главная</Link>
             <Link to="/calculator" className="hover:text-blue-400 transition">Калькулятор</Link>
-            <Link to="/admin" className="hover:text-blue-400 transition">Админка</Link>
+            <Link to="/admin" className="hover:text-blue-400 transition">Управление данными</Link>
           </nav>
         </div>
       </header>

@@ -8,7 +8,6 @@ from backend.core.data_loader import (
     load_factories_and_tariffs
 )
 from backend.core.logger import get_logger
-from backend.app.routes_quote import router as quote_router
 
 # === ЛОГГЕР ===
 log = get_logger("main")
@@ -46,4 +45,6 @@ async def startup_event():
     log.info(f"✅ tariffs.json загружен ({len(tariffs)} тарифов)")
 
 # === РОУТЫ ===
+
+from backend.app.routes_quote import router as quote_router
 app.include_router(quote_router, prefix="/api")

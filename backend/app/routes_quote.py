@@ -7,6 +7,7 @@ from backend.models.dto import QuoteRequest
 from backend.core.data_loader import load_factories_and_tariffs
 from backend.service.scenario_builder import build_factory_scenarios
 from backend.service.transport_calc import evaluate_scenario_transport, build_shipment_details_from_result
+from backend.service.scenario_builder import build_factory_scenarios_v2
 
 router = APIRouter(tags=["quote"])
 log = get_logger("routes.quote")
@@ -28,7 +29,24 @@ async def make_quote(req: QuoteRequest):
         )
 
     # 🧩 строим сценарии (используем товары с вложенными заводами)
-    scenarios = build_factory_scenarios(factories_products, req.items)
+    # Приводим factories_products в список объектов
+    if isinstance(factories_products, dict):
+        factories_list = []
+        for sheet, items in factories_products.items():
+            if isinstance(items, list):
+                factories_list.extend(items)
+    else:
+        factories_list = factories_products
+
+    # Преобразуем Pydantic-модели в обычные словари
+    items_data = [item.dict() for item in req.items]
+
+    scenarios = build_factory_scenarios_v2(factories_list, items_data)
+    import json
+    print("🧩 FACTORIES SAMPLE:", json.dumps(factories_list[:3], ensure_ascii=False, indent=2))
+    print("📦 ITEMS REQUESTED:", json.dumps(items_data, ensure_ascii=False, indent=2))
+    print(f"✅ Всего товаров в базе: {len(factories_list)}, в запросе: {len(items_data)}")
+
     if not scenarios:
         return JSONResponse(
             status_code=400,
@@ -36,8 +54,22 @@ async def make_quote(req: QuoteRequest):
         )
 
     results = []
+    # В начало файла добавь импорт:
+    import json
+    from pathlib import Path
+
+    # А перед циклом расчёта (перед evaluate_scenario_transport)
+    tariffs_path = Path(__file__).resolve().parent.parent / "storage" / "tariffs.json"
+    if tariffs_path.exists():
+        with open(tariffs_path, "r", encoding="utf-8") as f:
+            calc_tariffs = json.load(f)
+        print(f"📊 Загружено тарифов: {len(calc_tariffs)}")
+    else:
+        print("⚠️ Файл tariffs.json не найден, тарифы не будут использованы.")
+        calc_tariffs = []
+
     for sc in scenarios:
-        r = evaluate_scenario_transport(sc, req, None)
+        r = evaluate_scenario_transport(sc, req, calc_tariffs)
         if r:
             results.append(r)
 
@@ -47,8 +79,14 @@ async def make_quote(req: QuoteRequest):
             content={"detail": "Не удалось подобрать подходящий вариант"},
         )
 
-    # сортируем по общей стоимости и берём топ-3
-    results = sorted(results, key=lambda x: x["total_cost"])[:3]
+    # --- фильтруем результаты, у которых нет total_cost ---
+    valid_results = [r for r in results if isinstance(r, dict) and "total_cost" in r]
+
+    if not valid_results:
+        print("⚠️ Нет валидных результатов с total_cost")
+        return {"ok": False, "reason": "Не удалось рассчитать стоимость"}
+
+    results = sorted(valid_results, key=lambda x: x["total_cost"])[:3]
 
     # формируем детализированные варианты
     variants = []
@@ -74,23 +112,59 @@ async def make_quote(req: QuoteRequest):
 
     return JSONResponse({"success": True, "variants": variants})
 
-from fastapi import APIRouter
-from backend.core.data_loader import load_factories_and_tariffs
-
-router = APIRouter()
 
 @router.get("/factories")
 def get_factories():
-    factories, _ = load_factories_and_tariffs()
-    return {"factories": factories}
+    factories_products, _ = load_factories_and_tariffs()
+
+    factories = []
+    for category, items in factories_products.items():
+        for item in items:
+            f = item.get("factory", {})
+            if not f.get("name"):
+                continue
+
+            factories.append({
+                "name": f.get("name"),
+                "lat": f.get("lat"),
+                "lon": f.get("lon"),
+                "contact": f.get("contact"),
+                "category": category,
+                "subtype": item.get("subtype"),
+                "weight_per_item": item.get("weight_per_item"),
+                "special_threshold": item.get("special_threshold"),
+                "max_per_trip": item.get("max_per_trip"),
+                "price": f.get("price"),
+            })
+
+    # возвращаем массив напрямую, без ключа "factories"
+    return factories
+
 
 @router.get("/tariffs")
 def get_tariffs():
     _, tariffs = load_factories_and_tariffs()
-    return {"tariffs": tariffs}
+    # возвращаем массив напрямую, без ключа "tariffs"
+    return tariffs
+
 
 @router.get("/categories")
 def get_categories():
-    factories, _ = load_factories_and_tariffs()
-    categories = sorted(set(f.get("category") for f in factories if f.get("category")))
-    return {"categories": categories}
+    factories_products, _ = load_factories_and_tariffs()
+
+    result = {}
+    if isinstance(factories_products, dict):
+        for category, items in factories_products.items():
+            if not isinstance(items, list):
+                continue
+
+            # Берём список уникальных подтипов
+            subtypes = sorted({
+                str(item.get("subtype"))
+                for item in items
+                if item.get("subtype")
+            })
+            if subtypes:
+                result[category] = subtypes
+
+    return result
