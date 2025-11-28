@@ -354,6 +354,7 @@ export default function Calculator() {
                       <thead className="text-gray-400 border-b border-gray-700">
                         <tr>
                           <th className="p-2 text-left">Производство</th>
+                          <th className="p-2 text-left">Контакт</th>
                           <th className="p-2 text-left">Товар</th>
                           <th className="p-2 text-left">Машина</th>
                           <th className="p-2 text-left">Расстояние (км)</th>
@@ -366,6 +367,7 @@ export default function Calculator() {
                         {detailRows.map((d, idx) => (
                           <tr key={idx} className="border-b border-gray-800">
                             <td className="p-2">{d["завод"]}</td>
+                            <td className="p-2 whitespace-pre-line">{d["контакт"] || "—"}</td>
                             <td className="p-2">{d["товар"]}</td>
                             <td className="p-2">{d["машина"]}</td>
                             <td className="p-2">{d["расстояние_км"]}</td>
@@ -386,19 +388,21 @@ export default function Calculator() {
                         <table className="w-full text-sm">
                           <thead className="text-gray-400 border-b border-gray-700">
                             <tr>
-                              <th className="p-2 text-left">Производство</th>
-                              <th className="p-2 text-left">Машина</th>
-                              <th className="p-2 text-left">Расстояние (км)</th>
-                              <th className="p-2 text-left">Загрузка (т)</th>
-                              <th className="p-2 text-left">Товары</th>
-                              <th className="p-2 text-left">Доставка (₽)</th>
-                            </tr>
+                          <th className="p-2 text-left">Производство</th>
+                          <th className="p-2 text-left">Машина</th>
+                          <th className="p-2 text-left">Тариф</th>
+                          <th className="p-2 text-left">Расстояние (км)</th>
+                          <th className="p-2 text-left">Загрузка (т)</th>
+                          <th className="p-2 text-left">Товары</th>
+                          <th className="p-2 text-left">Доставка (₽)</th>
+                        </tr>
                           </thead>
                           <tbody>
                             {tripItems.map((trip, i) => (
                               <tr key={i} className="border-b border-gray-800 align-top">
                                 <td className="p-2">{trip["завод"]}</td>
                                 <td className="p-2">{trip["машина"]}</td>
+                                <td className="p-2 text-gray-300 whitespace-pre-line">{trip["тариф"] || "—"}</td>
                                 <td className="p-2">{trip["расстояние_км"]}</td>
                                 <td className="p-2">{trip["загрузка_т"]}</td>
                                 <td className="p-2 text-gray-200">{trip["товары"]}</td>

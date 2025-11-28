@@ -33,6 +33,39 @@ def _trip_cost(tariff: Dict[str, Any], distance_km: float) -> float:
     return base
 
 
+def _tariff_label(tariff: Dict[str, Any]) -> str:
+    """Читабельная подпись выбранного тарифа."""
+
+    name = tariff.get("название") or tariff.get("name") or "Тариф"
+    descr = tariff.get("описание") or tariff.get("description") or ""
+    if descr:
+        return f"{name} — {descr}"
+
+    min_d = _to_float(tariff.get("min_distance"))
+    max_d = _to_float(tariff.get("max_distance"))
+    weight_if = _norm_str(tariff.get("weight_if") or "any")
+
+    range_descr = ""
+    if max_d and max_d != min_d:
+        range_descr = f"{min_d}-{max_d} км"
+    elif max_d == min_d and max_d > 0:
+        range_descr = f">={max_d} км"
+
+    weight_descr = ""
+    if weight_if == "≤20":
+        weight_descr = "≤20т"
+    elif weight_if == ">20":
+        weight_descr = ">20т"
+
+    if range_descr and weight_descr:
+        return f"{name} — {range_descr}, {weight_descr}"
+    if range_descr:
+        return f"{name} — {range_descr}"
+    if weight_descr:
+        return f"{name} — {weight_descr}"
+    return name
+
+
 def _select_tariff_for_load(
     tariffs: List[Dict[str, Any]], tag: str, distance_km: float, load_ton: float
 ) -> Optional[Dict[str, Any]]:
@@ -158,6 +191,7 @@ def _linear_plan(
             {
                 "tag": tag,
                 "tariff_name": tariff.get("название") or tariff.get("name") or tag,
+                "tariff_label": _tariff_label(tariff),
                 "trip_cost": base_cost,
                 "load_ton": round(real_weight, 2),
                 "distance_km": distance_km,
@@ -274,6 +308,7 @@ def _daf_plan(
                 {
                     "tag": "long_haul",
                     "tariff_name": trip_tariff.get("название") or "DAF",
+                    "tariff_label": _tariff_label(trip_tariff),
                     "trip_cost": cost,
                     "load_ton": round(load_weight, 2),
                     "distance_km": distance_km,
@@ -298,6 +333,7 @@ def _daf_plan(
             {
                 "tag": "manipulator",
                 "tariff_name": mani_tariff.get("название") or "Манипулятор",
+                "tariff_label": _tariff_label(mani_tariff),
                 "trip_cost": mani_cost,
                 "load_ton": min(10.0, sum(i.get("load_ton", 0) for i in trips)),
                 "distance_km": distance_km,
@@ -437,10 +473,16 @@ def build_shipment_details_from_result(best_result, req):
 
         # Описание товаров, которые забираем с этого завода
         products = []
+        contact = ""
         for item in scenario_factories.get(factory_name, []):
             qty = item.get("quantity") or item.get("count") or 0
             title = f"{item.get('category')} {item.get('subtype')}"
             products.append(f"{title} × {qty}")
+
+            # Берём первый доступный контакт завода
+            if not contact:
+                fact = item.get("factory") or {}
+                contact = fact.get("contact") or ""
 
         # Сгруппированное описание машин и рейсов
         machine_map = {}
@@ -456,6 +498,7 @@ def build_shipment_details_from_result(best_result, req):
         rows.append(
             {
                 "завод": factory_name,
+                "контакт": contact,
                 "товар": "; ".join(products) or "—",
                 "машина": machine_desc,
                 "расстояние_км": distance,
@@ -478,6 +521,7 @@ def build_trip_items_details(best_result):
                 {
                     "завод": factory_name,
                     "машина": trip.get("tariff_name") or trip.get("tag"),
+                    "тариф": trip.get("tariff_label") or trip.get("tariff_name"),
                     "расстояние_км": round(trip.get("distance_km", 0), 2),
                     "загрузка_т": round(trip.get("load_ton", 0), 2),
                     "товары": "; ".join(trip.get("items") or []),
