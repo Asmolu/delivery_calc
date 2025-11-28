@@ -46,6 +46,9 @@ frontend/.vite/
 frontend/.DS_Store
 *.log
 
+# === NODE.JS (корень репозитория) ===
+node_modules/
+
 # === CREDENTIALS / SECRETS ===
 .env
 .env.local

@@ -86,52 +86,142 @@ def _linear_plan(
     if not candidates:
         return None
 
-    # сортируем по выгодности (стоимость за тонну)
-    candidates.sort(key=lambda x: x[1]["cpt"])
 
     weight_left = total_weight
     trips: List[Dict[str, Any]] = []
 
-    def _assign_trip(tag: str, info: Dict[str, Any]):
+    # готовим остатки по позициям, чтобы понимать, что едет в каждой машине
+    remaining_items: List[Dict[str, Any]] = []
+    for it in items:
+        qty = _to_float(it.get("quantity") or it.get("count") or 0)
+        if qty <= 0:
+            continue
+        remaining_items.append(
+            {
+                "category": it.get("category"),
+                "subtype": it.get("subtype"),
+                "weight_per_item": _to_float(it.get("weight_per_item")),
+                "remaining_qty": qty,
+            }
+        )
+
+    def _allocate_items_for_trip(load_limit: float) -> Tuple[List[str], float]:
+        """Возвращает список товаров, помещённых в рейс, и фактический вес."""
+        assigned: List[str] = []
+        load_used = 0.0
+        if load_limit <= 0:
+            return assigned, load_used
+
+        for item in remaining_items:
+            if load_limit - load_used < 0.01:
+                break
+
+            qty_left = item.get("remaining_qty", 0)
+            if qty_left <= 0:
+                continue
+
+            weight_per_item = _to_float(item.get("weight_per_item"))
+            if weight_per_item <= 0:
+                # Нулевой вес — просто отгружаем остаток
+                take_qty = int(qty_left)
+                if take_qty > 0:
+                    item["remaining_qty"] = qty_left - take_qty
+                    assigned.append(
+                        f"{item.get('category')} {item.get('subtype')}: {take_qty} шт"
+                    )
+                continue
+
+            max_qty_by_weight = int((load_limit - load_used + 1e-6) // weight_per_item)
+            if max_qty_by_weight <= 0:
+                continue
+
+            take_qty = min(qty_left, max_qty_by_weight)
+            if take_qty <= 0:
+                continue
+
+            load_used += take_qty * weight_per_item
+            item["remaining_qty"] = qty_left - take_qty
+            assigned.append(
+                f"{item.get('category')} {item.get('subtype')}: {int(take_qty)} шт"
+            )
+
+        return assigned, load_used
+
+    def _assign_trip(tag: str, info: Dict[str, Any], load: float, tariff: Dict[str, Any], base_cost: float) -> bool:
         nonlocal weight_left
-        load = min(weight_left, info["capacity"])
-        tariff = _select_tariff_for_load(tariffs, tag, distance_km, load)
-        if not tariff:
+
+        items_loaded, real_weight = _allocate_items_for_trip(load)
+        if real_weight <= 0 and weight_left > 0:
             return False
-        cost = _trip_cost(tariff, distance_km)
+        
         trips.append(
             {
                 "tag": tag,
                 "tariff_name": tariff.get("название") or tariff.get("name") or tag,
-                "trip_cost": cost,
-                "load_ton": round(load, 2),
+                "trip_cost": base_cost,
+                "load_ton": round(real_weight, 2),
                 "distance_km": distance_km,
-                "items": [f"Смешанная загрузка ({round(load,2)}т)"],
+                "items": items_loaded or [f"Смешанная загрузка ({round(load,2)}т)"],
             }
         )
-        weight_left -= load
+        weight_left = max(weight_left - real_weight, 0.0)
         return True
 
-    # гарантируем хотя бы один манипулятор, если требуется
+    # Гарантируем обязательный манипулятор, если он нужен
     if require_manipulator:
         mani = next((c for c in candidates if c[0] == "manipulator"), None)
         if not mani:
             return None
-        _assign_trip(mani[0], mani[1])
-
-    while weight_left > 0.01:
-        progress = False
-        for tag, info in candidates:
-            before = weight_left
-            _assign_trip(tag, info)
-            if weight_left < before:
-                progress = True
-                # продолжаем бить груз этой же наиболее выгодной машиной,
-                # не перебирая остальные, чтобы не добавлять лишние типы транспорта
-                break
-        # если ничего не изменилось — выходим, чтобы избежать бесконечного цикла
-        if weight_left > 0.01 and not progress:
+        load_plan = min(weight_left, mani[1]["capacity"])
+        tariff = _select_tariff_for_load(tariffs, "manipulator", distance_km, load_plan or 1)
+        if not tariff:
             return None
+        cost = _trip_cost(tariff, distance_km)
+        _assign_trip("manipulator", mani[1], load_plan, tariff, cost)
+
+    safety_guard = 0
+    while weight_left > 0.01:
+        safety_guard += 1
+        if safety_guard > 50:
+            return None
+
+        best_choice = None
+        for tag, info in candidates:
+            load = min(weight_left, info["capacity"])
+            if load <= 0:
+                continue
+            tariff = _select_tariff_for_load(tariffs, tag, distance_km, load)
+            if not tariff:
+                continue
+            cost = _trip_cost(tariff, distance_km)
+            eff_cpt = cost / load if load > 0 else float("inf")
+            if best_choice is None or eff_cpt < best_choice["eff_cpt"]:
+                best_choice = {
+                    "tag": tag,
+                    "info": info,
+                    "load": load,
+                    "tariff": tariff,
+                    "cost": cost,
+                    "eff_cpt": eff_cpt,
+                }
+        # если ничего не изменилось — выходим, чтобы избежать бесконечного цикла
+        if not best_choice:
+            return None
+
+        success = _assign_trip(
+            best_choice["tag"],
+            best_choice["info"],
+            best_choice["load"],
+            best_choice["tariff"],
+            best_choice["cost"],
+        )
+
+        if not success:
+            # если не удалось погрузить ни одного товара, убираем этот тип транспорта из списка
+            candidates = [c for c in candidates if c[0] != best_choice["tag"]]
+            if not candidates:
+                return None
+            continue
 
     total_cost = sum(t["trip_cost"] for t in trips)
     return {
@@ -376,3 +466,23 @@ def build_shipment_details_from_result(best_result, req):
         )
 
     return rows
+
+def build_trip_items_details(best_result):
+    """Возвращает детализацию погрузки по каждой машине."""
+
+    trip_rows = []
+    for f_plan in best_result.get("factory_plans", []):
+        factory_name = f_plan.get("factory_name")
+        for trip in f_plan.get("trips", []):
+            trip_rows.append(
+                {
+                    "завод": factory_name,
+                    "машина": trip.get("tariff_name") or trip.get("tag"),
+                    "расстояние_км": round(trip.get("distance_km", 0), 2),
+                    "загрузка_т": round(trip.get("load_ton", 0), 2),
+                    "товары": "; ".join(trip.get("items") or []),
+                    "стоимость_доставки": round(trip.get("trip_cost", 0), 2),
+                }
+            )
+
+    return trip_rows

@@ -6,6 +6,7 @@ from backend.models.dto import QuoteRequest
 from backend.core.data_loader import load_factories_and_tariffs
 from backend.service.transport_calc import (
     build_shipment_details_from_result,
+    build_trip_items_details,
     evaluate_scenario_transport,
 )
 from backend.service.scenario_builder import build_factory_scenarios_v2
@@ -76,6 +77,7 @@ async def make_quote(req: QuoteRequest):
     variants = []
     for r in results:
         shipment_details = build_shipment_details_from_result(r, req)
+        trip_items = build_trip_items_details(r)
         transport_title = r.get("transport_name", "Неизвестный транспорт")
         scenario_weight = r.get("scenario", {}).get("total_weight", 0)
         variants.append({
@@ -87,6 +89,7 @@ async def make_quote(req: QuoteRequest):
             "tripCount": r.get("trip_count", 0),
             "transportDetails": r.get("factory_plans", []),
             "details": shipment_details,
+            "tripItems": trip_items,
         })
 
     # выводим в лог лучший результат
