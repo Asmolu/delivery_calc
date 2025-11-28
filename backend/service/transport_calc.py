@@ -67,15 +67,28 @@ def _tariff_label(tariff: Dict[str, Any]) -> str:
 
 
 def _select_tariff_for_load(
-    tariffs: List[Dict[str, Any]], tag: str, distance_km: float, load_ton: float
+    tariffs: List[Dict[str, Any]],
+    tag: str,
+    distance_km: float,
+    load_ton: float,
+    name_contains: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Возвращает лучшую строку тарифа под указанный тег/нагрузку."""
+    """Возвращает лучшую строку тарифа под указанный тег/нагрузку.
+
+    name_contains: если задано, оставляет только строки, где название содержит
+    указанную подстроку (регистр игнорируется).
+    """
     candidates = []
     for t in tariffs:
         if _norm_str(t.get("tag")) != _norm_str(tag):
             continue
         if not _distance_in_range(t, distance_km):
             continue
+
+        if name_contains:
+            name = _norm_str(t.get("название") or t.get("name") or "")
+            if name_contains.lower() not in name:
+                continue
 
         weight_if = _norm_str(t.get("weight_if") or "any")
         if weight_if == "≤20" and load_ton > 20:
@@ -272,8 +285,10 @@ def _daf_plan(
 ) -> Optional[Dict[str, Any]]:
     """Расчёт с опорой на DAF (ступенчатый тариф по special_threshold)."""
     daf_capacity = 55.0
-    daf_tariff = _select_tariff_for_load(tariffs, "long_haul", distance_km, 30)
-    if not daf_tariff or "DAF" not in (daf_tariff.get("название") or ""):
+    daf_tariff = _select_tariff_for_load(
+        tariffs, "long_haul", distance_km, 30, name_contains="daf"
+    )
+    if not daf_tariff:
         return None
 
     trips = []
@@ -295,7 +310,9 @@ def _daf_plan(
                 load_items = max(int(daf_capacity // weight_per_item), 1)
                 load_weight = weight_per_item * load_items
 
-            trip_tariff = _select_tariff_for_load(tariffs, "long_haul", distance_km, load_weight)
+            trip_tariff = _select_tariff_for_load(
+                tariffs, "long_haul", distance_km, load_weight, name_contains="daf"
+            )
             if not trip_tariff:
                 return None
             base_cost = _trip_cost(trip_tariff, distance_km)
