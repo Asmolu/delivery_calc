@@ -339,65 +339,79 @@ export default function Calculator() {
               animate={{ opacity: 1 }}
               className="mt-10 p-4 bg-gray-900/80 rounded-lg"
             >
-              <h3 className="text-xl font-semibold mb-3">
-                📊 Детали варианта #{result.selectedVariant + 1}
-              </h3>
+              {(() => {
+                const activeVariant = result.variants[result.selectedVariant] || {};
+                const tripItems = activeVariant.tripItems || [];
+                const detailRows = activeVariant.details || [];
 
-              <table className="w-full text-sm border-collapse">
-                <thead className="text-gray-400 border-b border-gray-700">
-                  <tr>
-                    <th className="p-2 text-left">Производство</th>
-                    <th className="p-2 text-left">Товар</th>
-                    <th className="p-2 text-left">Машина</th>
-                    <th className="p-2 text-left">Расстояние (км)</th>
-                    <th className="p-2 text-left">Материал (₽)</th>
-                    <th className="p-2 text-left">Доставка (₽)</th>
-                    <th className="p-2 text-left">Итого (₽)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.variants[result.selectedVariant].details.map((d, idx) => (
-                    <tr key={idx} className="border-b border-gray-800">
-                      <td className="p-2">{d["завод"]}</td>
-                      <td className="p-2">{d["товар"]}</td>
-                      <td className="p-2">{d["машина"]}</td>
-                      <td className="p-2">{d["расстояние_км"]}</td>
-                      <td className="p-2">{d["стоимость_материала"]?.toLocaleString()}</td>
-                      <td className="p-2">{d["стоимость_доставки"]?.toLocaleString()}</td>
-                      <td className="p-2 text-blue-400 font-semibold">
-                        {d["итого"]?.toLocaleString()}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                return (
+                  <>
+                    <h3 className="text-xl font-semibold mb-3">
+                      📊 Детали варианта #{result.selectedVariant + 1}
+                    </h3>
 
-              {/* таблица деталей рейсов */}
-              {Array.isArray(result.variants[result.selectedVariant].transportDetails?.["доп"]) && (
-                <div className="mt-6 bg-gray-800/40 p-4 rounded-lg">
-                  <h4 className="text-lg font-semibold mb-2">🚚 Детали рейсов</h4>
-                  <table className="w-full text-sm">
-                    <thead className="text-gray-400 border-b border-gray-700">
-                      <tr>
-                        <th className="p-2 text-left">Машина</th>
-                        <th className="p-2 text-left">Вес (т)</th>
-                        <th className="p-2 text-left">Стоимость (₽)</th>
-                        <th className="p-2 text-left">Описание тарифа</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {result.variants[result.selectedVariant].transportDetails["доп"].map((trip, i) => (
-                        <tr key={i} className="border-b border-gray-800">
-                          <td className="p-2">{trip["реальное_имя"]}</td>
-                          <td className="p-2">{trip["вес_перевезено"]}</td>
-                          <td className="p-2">{Number(trip["стоимость"] || 0).toLocaleString()}</td>
-                          <td className="p-2 text-gray-400">{trip["описание"]}</td>
+                    <table className="w-full text-sm border-collapse">
+                      <thead className="text-gray-400 border-b border-gray-700">
+                        <tr>
+                          <th className="p-2 text-left">Производство</th>
+                          <th className="p-2 text-left">Товар</th>
+                          <th className="p-2 text-left">Машина</th>
+                          <th className="p-2 text-left">Расстояние (км)</th>
+                          <th className="p-2 text-left">Материал (₽)</th>
+                          <th className="p-2 text-left">Доставка (₽)</th>
+                          <th className="p-2 text-left">Итого (₽)</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                      </thead>
+                      <tbody>
+                        {detailRows.map((d, idx) => (
+                          <tr key={idx} className="border-b border-gray-800">
+                            <td className="p-2">{d["завод"]}</td>
+                            <td className="p-2">{d["товар"]}</td>
+                            <td className="p-2">{d["машина"]}</td>
+                            <td className="p-2">{d["расстояние_км"]}</td>
+                            <td className="p-2">{d["стоимость_материала"]?.toLocaleString()}</td>
+                            <td className="p-2">{d["стоимость_доставки"]?.toLocaleString()}</td>
+                            <td className="p-2 text-blue-400 font-semibold">
+                              {d["итого"]?.toLocaleString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+
+                    {/* таблица погрузки по рейсам */}
+                    {Array.isArray(tripItems) && tripItems.length > 0 && (
+                      <div className="mt-6 bg-gray-800/40 p-4 rounded-lg">
+                        <h4 className="text-lg font-semibold mb-2">🚚 Что везёт каждая машина</h4>
+                        <table className="w-full text-sm">
+                          <thead className="text-gray-400 border-b border-gray-700">
+                            <tr>
+                              <th className="p-2 text-left">Производство</th>
+                              <th className="p-2 text-left">Машина</th>
+                              <th className="p-2 text-left">Расстояние (км)</th>
+                              <th className="p-2 text-left">Загрузка (т)</th>
+                              <th className="p-2 text-left">Товары</th>
+                              <th className="p-2 text-left">Доставка (₽)</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {tripItems.map((trip, i) => (
+                              <tr key={i} className="border-b border-gray-800 align-top">
+                                <td className="p-2">{trip["завод"]}</td>
+                                <td className="p-2">{trip["машина"]}</td>
+                                <td className="p-2">{trip["расстояние_км"]}</td>
+                                <td className="p-2">{trip["загрузка_т"]}</td>
+                                <td className="p-2 text-gray-200">{trip["товары"]}</td>
+                                <td className="p-2">{Number(trip["стоимость_доставки"] || 0).toLocaleString()}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </motion.div>
           )}
         </motion.div>
