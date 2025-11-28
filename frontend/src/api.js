@@ -1,6 +1,7 @@
 // === API base URL ===
-const isDev = window.location.port === "5173";
-export const API_BASE = isDev ? "http://127.0.0.1:8000" : window.location.origin;
+const envBase = import.meta?.env?.VITE_API_BASE;
+const isDev = window.location.port === "5173" || window.location.port === "4173";
+export const API_BASE = envBase || (isDev ? "http://127.0.0.1:8000" : window.location.origin);
 console.log("🌍 API_BASE =", API_BASE);
 
 // === Универсальная обёртка для fetch ===

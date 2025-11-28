@@ -10,26 +10,22 @@ export default function Calculator() {
   const [transportType, setTransportType] = useState("auto");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
-
-  // 🔹 новые состояния
   const [addManipulator, setAddManipulator] = useState(false);
   const [selectedSpecial, setSelectedSpecial] = useState("");
-  const [specialVehicles, setSpecialVehicles] = useState([]); // <-- добавили
+  const [specialVehicles, setSpecialVehicles] = useState([]);
 
   useEffect(() => {
     async function load() {
       const data = await getCategories();
       setCategories(data || {});
 
-      // подгружаем тарифы, чтобы достать список машин с тегом 'special'
-      
       try {
         const res = await fetch(`${API_BASE}/api/tariffs`);
         const tariffs = await res.json();
 
         // поддержка русских и английских ключей
         const specials = (tariffs || []).filter(
-          t => t.tag === "special" || t["тег"] === "special"
+          (t) => t.tag === "special" || t["тег"] === "special"
         );
 
         const uniqueSpecials = [];
@@ -47,8 +43,6 @@ export default function Calculator() {
         }
 
         setSpecialVehicles(uniqueSpecials);
-
-
       } catch (err) {
         console.error("Ошибка загрузки тарифов:", err);
       }
@@ -94,18 +88,14 @@ export default function Calculator() {
         items: items.map((it) => ({
           category: it.category,
           subtype: it.subtype,
-          quantity: parseInt(it.quantity),
+          quantity: parseInt(it.quantity, 10),
         })),
       };
-      console.log("📤 Payload отправляется в /quote:", payload);
-      
+
       const data = await getQuote(payload);
-      console.log("📥 Ответ от сервера:", data);
       if (data?.variants) {
-        // если сервер вернул несколько вариантов (новый формат)
         setResult({ ...data, selectedVariant: 0 });
       } else {
-        // старый формат (на всякий случай, чтобы не сломать обратную совместимость)
         const localized = {
           variants: [
             {
@@ -133,291 +123,300 @@ export default function Calculator() {
 
   return (
     <motion.div
-      className="min-h-screen bg-neutral-900 text-gray-100 px-6 py-10"
+      className="space-y-8"
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: "easeOut" }}
     >
-      <button
-        onClick={() => (window.location.href = "/")}
-        className="mb-6 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded"
-      >
-        ← Назад
-      </button>
-
-      <h1 className="text-4xl font-bold mb-6 flex items-center gap-2">
-        📦 Калькулятор доставки
-      </h1>
-
-      {/* Координаты одной строкой */}
-      <div className="mb-6 flex items-center gap-3">
-        <input
-          type="text"
-          placeholder="Например: 55.7558, 37.6173"
-          value={coords}
-          onChange={(e) => setCoords(e.target.value)}
-          className="flex-1 bg-gray-800 border border-gray-700 rounded px-4 py-2"
-        />
-        <button
-          onClick={() =>
-            navigator.geolocation.getCurrentPosition(
-              (pos) => {
-                const { latitude, longitude } = pos.coords;
-                setCoords(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
-              },
-              () => alert("Не удалось определить координаты"),
-              { enableHighAccuracy: true }
-            )
-          }
-          className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded"
-        >
-          📍 Определить
-        </button>
-      </div>
-
-      {/* Тип транспорта */}
-      <div className="mb-8">
-        <label className="block mb-2 text-lg font-semibold">
-          Тип транспорта:
-        </label>
-        <select
-          value={transportType}
-          onChange={(e) => setTransportType(e.target.value)}
-          className="px-3 py-2 rounded bg-gray-800 border border-gray-700 w-1/3"
-        >
-          <option value="auto">Автоматически</option>
-          <option value="manipulator">Манипулятор</option>
-          <option value="long_haul">Длинномер</option>
-        </select>
-      </div>
-
-      <label className="flex items-center gap-2 mt-2">
-        <input
-          type="checkbox"
-          checked={addManipulator}
-          onChange={(e) => setAddManipulator(e.target.checked)}
-          className="w-4 h-4 accent-green-500"
-        />
-        <span>+1 манипулятор</span>
-      </label>
-
-      <div className="mt-2">
-        <label className="text-sm text-gray-300">🛠 Спецтранспорт:</label>
-        <select
-          value={selectedSpecial}
-          onChange={(e) => setSelectedSpecial(e.target.value)}
-          className="bg-gray-800 text-white rounded-lg px-3 py-2 ml-2"
-        >
-          <option value="">Не выбирать</option>
-          {/* опции подгрузи из /api/tariffs (фильтр по тегу 'special') если у тебя есть эти данные на фронте; 
-            если не хранишь — просто отправь выбранное имя строкой, а на бэке найдём */}
-          {specialVehicles.map((v) => (
-            <option key={v.name} value={v.name}>
-              {v.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-
-      {/* === Выбор товаров === */}
-      <div className="space-y-4">
-        {items.map((it, i) => (
-          <motion.div
-            key={i}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="card-glass p-5 rounded-xl flex flex-col md:flex-row gap-3 md:items-center"
+      <div className="card-glass p-6 md:p-8">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="pill mb-3">Полный контроль стоимости</p>
+            <h1 className="text-3xl md:text-4xl font-bold mb-2 flex items-center gap-2">
+              📦 Калькулятор доставки
+            </h1>
+            <p className="text-slate-600 max-w-2xl">
+              Сравниваем все заводы, тарифы и типы транспорта. Данные легко вводить с телефона, а таблицы
+              удобно просматривать на десктопе.
+            </p>
+          </div>
+          <button
+            onClick={() => (window.location.href = "/")}
+            className="px-4 py-2 bg-white border border-slate-200 rounded-lg shadow-sm text-sm font-semibold hover:border-indigo-200"
           >
-            <select
-              value={it.category}
-              onChange={(e) => handleChangeItem(i, "category", e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded px-3 py-2 flex-1"
-            >
-              <option value="">Категория</option>
-              {Object.keys(categories).map((cat) => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
+            ← На главную
+          </button>
+        </div>
+      </div>
 
-            <select
-              value={it.subtype}
-              onChange={(e) => handleChangeItem(i, "subtype", e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded px-3 py-2 flex-1"
-              disabled={!it.category}
-            >
-              <option value="">Подтип</option>
-              {it.category &&
-                categories[it.category]?.map((sub) => (
-                  <option key={sub} value={sub}>{sub}</option>
-                ))}
-            </select>
-
-            <input
-              type="number"
-              min="1"
-              value={it.quantity}
-              onChange={(e) => handleChangeItem(i, "quantity", e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded px-3 py-2 w-24"
-            />
-
-            {items.length > 1 && (
+      <div className="grid gap-6 md:grid-cols-3">
+        <div className="card-glass p-5 md:p-6 md:col-span-2 space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center md:gap-3">
+            <label className="text-sm font-semibold text-slate-700">Координаты выгрузки</label>
+            <div className="flex flex-col sm:flex-row gap-3 w-full">
+              <input
+                type="text"
+                placeholder="Например: 55.7558, 37.6173"
+                value={coords}
+                onChange={(e) => setCoords(e.target.value)}
+                className="flex-1 bg-white border border-slate-200 rounded-lg px-4 py-3 text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              />
               <button
-                onClick={() => handleRemoveItem(i)}
-                className="px-3 py-2 bg-red-700 hover:bg-red-600 rounded"
+                onClick={() =>
+                  navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                      const { latitude, longitude } = pos.coords;
+                      setCoords(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+                    },
+                    () => alert("Не удалось определить координаты"),
+                    { enableHighAccuracy: true }
+                  )
+                }
+                className="px-4 py-3 bg-indigo-50 text-indigo-700 font-semibold rounded-lg border border-indigo-100 hover:bg-indigo-100"
               >
-                ✖
+                📍 Определить
               </button>
-            )}
-          </motion.div>
-        ))}
+            </div>
+          </div>
 
-        <button
-          onClick={handleAddItem}
-          className="mt-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded"
-        >
-          ➕ Добавить товар
-        </button>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block mb-2 text-sm font-semibold text-slate-700">Тип транспорта</label>
+              <select
+                value={transportType}
+                onChange={(e) => setTransportType(e.target.value)}
+                className="w-full px-3 py-3 rounded-lg bg-white border border-slate-200 text-slate-800 shadow-sm"
+              >
+                <option value="auto">Автоматически</option>
+                <option value="manipulator">Манипулятор</option>
+                <option value="long_haul">Длинномер</option>
+              </select>
+            </div>
+            <div className="space-y-3">
+              <label className="block text-sm font-semibold text-slate-700">Дополнительно</label>
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={addManipulator}
+                  onChange={(e) => setAddManipulator(e.target.checked)}
+                  className="w-4 h-4 accent-indigo-600"
+                />
+                <span>Обязательный +1 манипулятор</span>
+              </label>
+
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-slate-600">🛠 Спецтранспорт:</span>
+                <select
+                  value={selectedSpecial}
+                  onChange={(e) => setSelectedSpecial(e.target.value)}
+                  className="bg-white text-slate-800 rounded-lg px-3 py-2 border border-slate-200"
+                >
+                  <option value="">Не выбирать</option>
+                  {specialVehicles.map((v) => (
+                    <option key={v.name} value={v.name}>
+                      {v.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="card-glass p-5 md:p-6">
+          <h3 className="text-lg font-semibold mb-3">Товары</h3>
+          <p className="text-sm text-slate-600 mb-3">
+            Можно добавлять несколько строк, система рассчётит комбинированные перевозки.
+          </p>
+          <div className="space-y-3">
+            {items.map((it, i) => (
+              <div
+                key={i}
+                className="rounded-xl border border-slate-200 bg-white p-3 flex flex-col gap-3"
+              >
+                <select
+                  value={it.category}
+                  onChange={(e) => handleChangeItem(i, "category", e.target.value)}
+                  className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-800"
+                >
+                  <option value="">Категория</option>
+                  {Object.keys(categories).map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={it.subtype}
+                  onChange={(e) => handleChangeItem(i, "subtype", e.target.value)}
+                  className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-800"
+                  disabled={!it.category}
+                >
+                  <option value="">Подтип</option>
+                  {it.category &&
+                    categories[it.category]?.map((sub) => (
+                      <option key={sub} value={sub}>
+                        {sub}
+                      </option>
+                    ))}
+                </select>
+
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min="1"
+                    value={it.quantity}
+                    onChange={(e) => handleChangeItem(i, "quantity", e.target.value)}
+                    className="bg-white border border-slate-200 rounded-lg px-3 py-2 w-24"
+                  />
+                  {items.length > 1 && (
+                    <button
+                      onClick={() => handleRemoveItem(i)}
+                      className="px-3 py-2 bg-red-50 text-red-600 border border-red-100 rounded-lg"
+                    >
+                      Удалить
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            <button
+              onClick={handleAddItem}
+              className="w-full px-4 py-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded-lg border border-indigo-100"
+            >
+              ➕ Добавить товар
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* === Кнопка расчёта === */}
-      <div className="mt-10">
-        <button
-          onClick={handleCalculate}
-          disabled={loading}
-          className={`px-6 py-3 rounded-xl text-lg font-semibold transition ${
-            loading
-              ? "bg-gray-700 cursor-wait"
-              : "bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-500/20"
-          }`}
-        >
-          {loading ? "🔄 Расчёт..." : "🚚 Рассчитать стоимость"}
-        </button>
+      <div className="card-glass p-6 md:p-8 flex flex-col gap-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div>
+            <h2 className="text-2xl font-semibold">Готовы посчитать?</h2>
+            <p className="text-slate-600">Запускаем расчёт по всем комбинациям транспорта и заводов.</p>
+          </div>
+          <button
+            onClick={handleCalculate}
+            disabled={loading}
+            className={`px-6 py-3 rounded-xl text-lg font-semibold transition shadow-lg shadow-indigo-200 bg-indigo-600 text-white hover:bg-indigo-500 ${
+              loading ? "opacity-70 cursor-wait" : ""
+            }`}
+          >
+            {loading ? "🔄 Расчёт..." : "🚚 Рассчитать стоимость"}
+          </button>
+        </div>
       </div>
 
-      {/* === Результаты === */}
       {result?.variants ? (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="card-glass mt-12 p-6 rounded-xl overflow-x-auto"
-        >
-          <h2 className="text-2xl font-semibold mb-4">
-            🧾 Найдено {result.variants.length} вариантов
-          </h2>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card-glass p-6 md:p-8">
+          <div className="flex flex-col gap-3 mb-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="pill mb-2">Найдено {result.variants.length} вариантов</p>
+              <h3 className="text-2xl font-semibold">Сравнение предложений</h3>
+              <p className="text-slate-600">Кликните на карточку, чтобы увидеть детали рейсов и тарифов.</p>
+            </div>
+          </div>
 
-          {/* карточки вариантов */}
           <div className="grid md:grid-cols-3 gap-4">
             {result.variants.map((variant, idx) => (
-              <div
+              <button
+                type="button"
                 key={idx}
                 onClick={() => setResult({ ...result, selectedVariant: idx })}
-                className={`cursor-pointer rounded-xl p-4 transition shadow-lg ${
+                className={`text-left rounded-xl p-4 transition shadow-sm border ${
                   result.selectedVariant === idx
-                    ? "bg-blue-700/40 border border-blue-400"
-                    : "bg-gray-800/60 hover:bg-gray-700/60"
+                    ? "bg-indigo-50 border-indigo-200 shadow-md"
+                    : "bg-white border-slate-200 hover:border-indigo-200"
                 }`}
               >
-                <h3 className="text-lg font-semibold mb-1">
-                  🚛 {variant.transportName}
-                </h3>
-                <p className="text-blue-400 font-bold text-xl mb-1">
-                  {variant.totalCost != null ? variant.totalCost.toLocaleString() + " ₽" : "—"}
+                <div className="text-sm text-slate-500 mb-1">Вариант #{idx + 1}</div>
+                <div className="text-lg font-semibold mb-1">🚛 {variant.transportName || "Комбинация"}</div>
+                <p className="text-indigo-700 font-bold text-xl mb-1">
+                  {variant.totalCost != null ? `${variant.totalCost.toLocaleString()} ₽` : "—"}
                 </p>
-                <p>📦 {variant.totalWeight} т, 🔁 {variant.tripCount} рейс(ов)</p>
-                <p className="text-sm text-gray-400 mt-1">
-                  Доставка: {variant.deliveryCost.toLocaleString()} ₽
-                </p>
-              </div>
+                <p className="text-sm text-slate-600">📦 {variant.totalWeight} т · 🔁 {variant.tripCount} рейс(ов)</p>
+                <p className="text-xs text-slate-500 mt-1">Доставка: {variant.deliveryCost.toLocaleString()} ₽</p>
+              </button>
             ))}
           </div>
 
-          {/* таблица выбранного варианта */}
-          {result.selectedVariant !== undefined && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="mt-10 p-4 bg-gray-900/80 rounded-lg"
-            >
-              {(() => {
-                const activeVariant = result.variants[result.selectedVariant] || {};
-                const tripItems = activeVariant.tripItems || [];
-                const detailRows = activeVariant.details || [];
+          {result.selectedVariant !== undefined && (() => {
+            const activeVariant = result.variants[result.selectedVariant] || {};
+            const tripItems = activeVariant.tripItems || [];
+            const detailRows = activeVariant.details || [];
 
-                return (
-                  <>
-                    <h3 className="text-xl font-semibold mb-3">
-                      📊 Детали варианта #{result.selectedVariant + 1}
-                    </h3>
+            return (
+              <div className="mt-10 space-y-6">
+                <div className="overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                      <tr>
+                        <th className="p-3 text-left">Производство</th>
+                        <th className="p-3 text-left">Контакт</th>
+                        <th className="p-3 text-left">Товар</th>
+                        <th className="p-3 text-left">Машина</th>
+                        <th className="p-3 text-left">Расстояние (км)</th>
+                        <th className="p-3 text-left">Материал (₽)</th>
+                        <th className="p-3 text-left">Доставка (₽)</th>
+                        <th className="p-3 text-left">Итого (₽)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detailRows.map((d, idx) => (
+                        <tr key={idx} className="border-b border-slate-100">
+                          <td className="p-3 whitespace-nowrap">{d["завод"]}</td>
+                          <td className="p-3 whitespace-pre-line text-slate-600">{d["контакт"] || "—"}</td>
+                          <td className="p-3">{d["товар"]}</td>
+                          <td className="p-3">{d["машина"]}</td>
+                          <td className="p-3">{d["расстояние_км"]}</td>
+                          <td className="p-3">{d["стоимость_материала"]?.toLocaleString()}</td>
+                          <td className="p-3">{d["стоимость_доставки"]?.toLocaleString()}</td>
+                          <td className="p-3 text-indigo-700 font-semibold">{d["итого"]?.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
 
-                    <table className="w-full text-sm border-collapse">
-                      <thead className="text-gray-400 border-b border-gray-700">
+                {Array.isArray(tripItems) && tripItems.length > 0 && (
+                  <div className="overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+                    <div className="p-4 border-b border-slate-200 flex items-center gap-2 text-slate-700">
+                      🚚 Что везёт каждая машина
+                    </div>
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
                         <tr>
-                          <th className="p-2 text-left">Производство</th>
-                          <th className="p-2 text-left">Контакт</th>
-                          <th className="p-2 text-left">Товар</th>
-                          <th className="p-2 text-left">Машина</th>
-                          <th className="p-2 text-left">Расстояние (км)</th>
-                          <th className="p-2 text-left">Материал (₽)</th>
-                          <th className="p-2 text-left">Доставка (₽)</th>
-                          <th className="p-2 text-left">Итого (₽)</th>
+                          <th className="p-3 text-left">Производство</th>
+                          <th className="p-3 text-left">Машина</th>
+                          <th className="p-3 text-left">Тариф</th>
+                          <th className="p-3 text-left">Расстояние (км)</th>
+                          <th className="p-3 text-left">Загрузка (т)</th>
+                          <th className="p-3 text-left">Товары</th>
+                          <th className="p-3 text-left">Доставка (₽)</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {detailRows.map((d, idx) => (
-                          <tr key={idx} className="border-b border-gray-800">
-                            <td className="p-2">{d["завод"]}</td>
-                            <td className="p-2 whitespace-pre-line">{d["контакт"] || "—"}</td>
-                            <td className="p-2">{d["товар"]}</td>
-                            <td className="p-2">{d["машина"]}</td>
-                            <td className="p-2">{d["расстояние_км"]}</td>
-                            <td className="p-2">{d["стоимость_материала"]?.toLocaleString()}</td>
-                            <td className="p-2">{d["стоимость_доставки"]?.toLocaleString()}</td>
-                            <td className="p-2 text-blue-400 font-semibold">
-                              {d["итого"]?.toLocaleString()}
-                            </td>
+                        {tripItems.map((trip, i) => (
+                          <tr key={i} className="border-b border-slate-100 align-top">
+                            <td className="p-3 whitespace-nowrap">{trip["завод"]}</td>
+                            <td className="p-3">{trip["машина"]}</td>
+                            <td className="p-3 text-slate-700 whitespace-pre-line">{trip["тариф"] || "—"}</td>
+                            <td className="p-3">{trip["расстояние_км"]}</td>
+                            <td className="p-3">{trip["загрузка_т"]}</td>
+                            <td className="p-3 text-slate-800">{trip["товары"]}</td>
+                            <td className="p-3">{Number(trip["стоимость_доставки"] || 0).toLocaleString()}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-
-                    {/* таблица погрузки по рейсам */}
-                    {Array.isArray(tripItems) && tripItems.length > 0 && (
-                      <div className="mt-6 bg-gray-800/40 p-4 rounded-lg">
-                        <h4 className="text-lg font-semibold mb-2">🚚 Что везёт каждая машина</h4>
-                        <table className="w-full text-sm">
-                          <thead className="text-gray-400 border-b border-gray-700">
-                            <tr>
-                          <th className="p-2 text-left">Производство</th>
-                          <th className="p-2 text-left">Машина</th>
-                          <th className="p-2 text-left">Тариф</th>
-                          <th className="p-2 text-left">Расстояние (км)</th>
-                          <th className="p-2 text-left">Загрузка (т)</th>
-                          <th className="p-2 text-left">Товары</th>
-                          <th className="p-2 text-left">Доставка (₽)</th>
-                        </tr>
-                          </thead>
-                          <tbody>
-                            {tripItems.map((trip, i) => (
-                              <tr key={i} className="border-b border-gray-800 align-top">
-                                <td className="p-2">{trip["завод"]}</td>
-                                <td className="p-2">{trip["машина"]}</td>
-                                <td className="p-2 text-gray-300 whitespace-pre-line">{trip["тариф"] || "—"}</td>
-                                <td className="p-2">{trip["расстояние_км"]}</td>
-                                <td className="p-2">{trip["загрузка_т"]}</td>
-                                <td className="p-2 text-gray-200">{trip["товары"]}</td>
-                                <td className="p-2">{Number(trip["стоимость_доставки"] || 0).toLocaleString()}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
-            </motion.div>
-          )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </motion.div>
       ) : null}
     </motion.div>

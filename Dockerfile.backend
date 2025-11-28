@@ -1,0 +1,19 @@
+FROM python:3.11-slim AS base
+WORKDIR /app
+
+# Системные зависимости для gspread/google-auth
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY backend/requirements.txt /app/backend/requirements.txt
+RUN pip install --no-cache-dir -r /app/backend/requirements.txt
+
+COPY backend /app/backend
+COPY backend/storage /app/backend/storage
+
+ENV PYTHONPATH=/app
+ENV GOOGLE_APPLICATION_CREDENTIALS=/app/google_credentials.json
+
+CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
