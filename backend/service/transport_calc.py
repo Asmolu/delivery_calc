@@ -336,20 +336,42 @@ def evaluate_scenario_transport(
 def build_shipment_details_from_result(best_result, req):
     """Формирует детальный список по каждому рейсу и товарам."""
     rows = []
+    scenario_factories = (best_result.get("scenario") or {}).get("factories") or {}
+
     for f_plan in best_result.get("factory_plans", []):
         factory_name = f_plan.get("factory_name")
-        distance = f_plan.get("distance_km", 0)
+        distance = round(f_plan.get("distance_km", 0), 2)
+        material_cost = round(f_plan.get("material_cost", 0), 2)
+        delivery_cost = round(f_plan.get("transport_cost", 0), 2)
+
+        # Описание товаров, которые забираем с этого завода
+        products = []
+        for item in scenario_factories.get(factory_name, []):
+            qty = item.get("quantity") or item.get("count") or 0
+            title = f"{item.get('category')} {item.get('subtype')}"
+            products.append(f"{title} × {qty}")
+
+        # Сгруппированное описание машин и рейсов
+        machine_map = {}
         for trip in f_plan.get("trips", []):
-            rows.append(
-                {
-                    "машина": trip.get("tariff_name"),
-                    "tag": trip.get("tag"),
-                    "завод": factory_name,
-                    "расстояние_км": round(distance, 2),
-                    "вес_тонн": trip.get("load_ton"),
-                    "стоимость_доставки": round(trip.get("trip_cost", 0), 2),
-                    "содержимое": trip.get("items", []),
-                }
-            )
+            name = trip.get("tariff_name") or trip.get("tag") or "Транспорт"
+            machine_map.setdefault(name, 0)
+            machine_map[name] += 1
+
+        machine_desc = "; ".join(
+            f"{name} — {count} рейс(ов)" for name, count in machine_map.items()
+        ) or "—"
+
+        rows.append(
+            {
+                "завод": factory_name,
+                "товар": "; ".join(products) or "—",
+                "машина": machine_desc,
+                "расстояние_км": distance,
+                "стоимость_материала": material_cost,
+                "стоимость_доставки": delivery_cost,
+                "итого": round(material_cost + delivery_cost, 2),
+            }
+        )
 
     return rows
