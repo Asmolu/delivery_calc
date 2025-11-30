@@ -1,7 +1,14 @@
 import os
 import json
-from backend.service.factories_parser import parse_google_sheet
 from backend.core.logger import get_logger
+from backend.service.factories_parser import parse_google_sheet
+
+__all__ = [
+    "load_factories_from_google",
+    "load_tariffs_from_google",
+    "rebuild_factories_and_tariffs_from_google",
+    "load_factories_and_tariffs",
+]
 
 log = get_logger("data_loader")
 
@@ -9,6 +16,47 @@ log = get_logger("data_loader")
 STORAGE_PATH = os.path.join("backend", "storage")
 FACTORIES_FILE = os.path.join(STORAGE_PATH, "factories_products.json")
 TARIFFS_FILE = os.path.join(STORAGE_PATH, "tariffs.json")
+
+def _ensure_storage_dir() -> None:
+    os.makedirs(STORAGE_PATH, exist_ok=True)
+
+
+def _save_factories(factories_products: dict) -> None:
+    _ensure_storage_dir()
+    with open(FACTORIES_FILE, "w", encoding="utf-8") as f:
+        json.dump(factories_products, f, ensure_ascii=False, indent=2)
+
+
+def _save_tariffs(tariffs: list) -> None:
+    _ensure_storage_dir()
+    with open(TARIFFS_FILE, "w", encoding="utf-8") as f:
+        json.dump(tariffs, f, ensure_ascii=False, indent=2)
+
+
+def load_factories_from_google():
+    """Загружает товары+заводы из Google Sheets и сохраняет их в storage."""
+    result = parse_google_sheet()
+    factories_products = result.get("products", {})
+
+    _save_factories(factories_products)
+    log.info(
+        "✅ Обновлены factories_products.json из Google Sheets (%s записей)",
+        len(factories_products),
+    )
+
+    return factories_products
+
+
+def load_tariffs_from_google():
+    """Загружает тарифы из Google Sheets и сохраняет их в storage."""
+    result = parse_google_sheet()
+    tariffs = result.get("tariffs", [])
+
+    _save_tariffs(tariffs)
+    log.info("✅ Обновлены tariffs.json из Google Sheets (%s тарифов)", len(tariffs))
+
+    return tariffs
+
 
 
 def rebuild_factories_and_tariffs_from_google(google_sheet_id: str) -> None:
