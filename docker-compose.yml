@@ -23,3 +23,11 @@ services:
     ports:
       - "5173:80"
     restart: unless-stopped
+  osrm:
+    image: osrm/osrm-backend
+    container_name: osrm
+    command: osrm-routed --algorithm mld /data/russia-latest.osrm
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./osrm-data:/data
