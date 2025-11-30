@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 from backend.service.factories_service import _norm_str, _to_float
-from backend.service.osrm_client import get_osrm_distance_km
+from backend.service.osrm_client import OSRMUnavailableError, get_osrm_distance_km
 logger = logging.getLogger(__name__)
 
 
@@ -494,10 +494,15 @@ def evaluate_scenario_transport(
             logger.warning("⚠️ У завода %s отсутствуют координаты.", factory_name)
             continue
 
-        distance_km = get_osrm_distance_km(lon, lat, req.upload_lon, req.upload_lat)
-        if distance_km is None:
-            logger.warning("⚠️ Не удалось получить расстояние до клиента для %s", factory_name)
-            continue
+        try:
+            distance_km = get_osrm_distance_km(lon, lat, req.upload_lon, req.upload_lat)
+        except OSRMUnavailableError as exc:
+            logger.warning(
+                "⚠️ Не удалось получить расстояние до клиента для %s: %s",
+                factory_name,
+                exc,
+            )
+            raise
 
         factory_distances[factory_name] = distance_km
 

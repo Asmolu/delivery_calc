@@ -1,6 +1,7 @@
 import os
 import gspread
 from dotenv import load_dotenv
+from backend.service.osrm_client import get_osrm_distance_km
 
 load_dotenv()
 
@@ -124,7 +125,6 @@ def parse_google_sheet(ALLOWED_SHEETS=None):
 
 
 
-import math
 from functools import lru_cache
 
 # === ПРОСТЫЕ ХЕЛПЕРЫ ======================================================
@@ -167,19 +167,8 @@ def _detect_standard_for_factory_items(name: str) -> str:
 
 @lru_cache(maxsize=2000)
 def get_cached_distance(lat1, lon1, lat2, lon2):
-    """Заглушка: вычисление расстояния через гаверсин."""
-    R = 6371.0
-    phi1 = math.radians(lat1)
-    phi2 = math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lon2 - lon1)
-
-    a = (
-        math.sin(dphi / 2) ** 2
-        + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
-    )
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return round(R * c, 2)
+    """Дорожное расстояние через OSRM."""
+    return round(get_osrm_distance_km(lon1, lat1, lon2, lat2), 2)
 
 # === ТАРИФЫ (ПРОСТАЯ ОБЁРТКА) ============================================
 

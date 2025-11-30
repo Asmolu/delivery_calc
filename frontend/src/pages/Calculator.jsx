@@ -115,7 +115,8 @@ export default function Calculator() {
       }
     } catch (err) {
       console.error("Ошибка расчёта:", err);
-      alert("Ошибка при расчёте стоимости");
+      const message = err?.message || "Ошибка при расчёте стоимости";
+      alert(message);
     } finally {
       setLoading(false);
     }

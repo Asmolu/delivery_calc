@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from backend.core.logger import get_logger
 from backend.models.dto import QuoteRequest
 from backend.core.data_loader import load_factories_and_tariffs
+from backend.service.osrm_client import OSRMUnavailableError
 from backend.service.transport_calc import (
     build_shipment_details_from_result,
     build_trip_items_details,
@@ -53,10 +54,16 @@ async def make_quote(req: QuoteRequest):
 
     results = []
 
-    for sc in scenarios:
-        r = evaluate_scenario_transport(sc, req, tariffs)
-        if r:
-            results.append(r)
+    try:
+        for sc in scenarios:
+            r = evaluate_scenario_transport(sc, req, tariffs)
+            if r:
+                results.append(r)
+    except OSRMUnavailableError:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "OSRM недоступен, попробуйте позже"},
+        )
 
     if not results:
         return JSONResponse(

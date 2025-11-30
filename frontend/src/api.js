@@ -16,12 +16,26 @@ async function request(method, path, body) {
   }
 
   const resp = await fetch(url, options);
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => "");
-    throw new Error(`Ошибка запроса ${method} ${path}: ${resp.status} ${resp.statusText} ${text}`);
+  const rawText = await resp.text().catch(() => "");
+
+  let parsed = null;
+  if (rawText) {
+    try {
+      parsed = JSON.parse(rawText);
+    } catch (e) {
+      // оставляем parsed = null
+    }
   }
-  if (resp.status === 204) return null;
-  return resp.json();
+
+  if (!resp.ok) {
+    const detail = parsed?.detail || parsed?.message || rawText || resp.statusText;
+    const error = new Error(detail || "Ошибка запроса");
+    error.status = resp.status;
+    throw error;
+  }
+
+  if (resp.status === 204 || rawText === "") return null;
+  return parsed;
 }
 
 // === Основные функции API ===
