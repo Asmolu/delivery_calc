@@ -1,40 +1,56 @@
-version: "3.9"
+version: '3.9'
 
 services:
   backend:
     build:
       context: .
       dockerfile: Dockerfile.backend
-    env_file:
-      - .env
-    environment:
-      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/app/secrets/google_credentials.json}
-      OSRM_BASE_URL: ${OSRM_BASE_URL:-http://osrm:5000}
+    env_file: .env
+    ports:
+      - "8000:8000"
     volumes:
       - ./google_credentials.json:/app/secrets/google_credentials.json:ro
       - ./backend/storage:/app/backend/storage
-    ports:
-      - "8000:8000"
-    restart: unless-stopped
+    restart: always
+    healthcheck:
+      # Проверяем, отвечает ли FastAPI на эндпоинт factories
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/factories"]
+      interval: 30s       # интервал между проверками
+      timeout: 5s         # ожидание ответа
+      retries: 3          # после 3 неудач контейнер считается unhealthy
+      start_period: 15s   # ждём 15 сек перед первой проверкой
 
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
       args:
-        VITE_API_BASE: ${VITE_API_BASE:-http://localhost:8000}
-    depends_on:
-      - backend
+        - VITE_API_BASE=${VITE_API_BASE:-http://62.113.36.49:8000}
     ports:
       - "80:80"
-    restart: unless-stopped
+    depends_on:
+      - backend
+    restart: always
+    healthcheck:
+      # Проверяем, что nginx возвращает 200 OK на главную страницу
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   osrm:
     image: osrm/osrm-backend
-    profiles: ["with-osrm"]
-    command: osrm-routed --algorithm mld /data/osrm/russia-latest.osrm
-    volumes:
-      - ./osrm-data:/data/osrm
+    command: osrm-routed --algorithm mld /data/russia-latest.osrm
     ports:
       - "5000:5000"
-    restart: unless-stopped
+    volumes:
+      - ./osrm-data:/data
+    restart: always
+    healthcheck:
+      # Проверяем, что OSRM отвечает на корневой маршрут
+      test: ["CMD", "curl", "-f", "http://localhost:5000"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
