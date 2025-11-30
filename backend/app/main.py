@@ -47,4 +47,6 @@ async def startup_event():
 # === РОУТЫ ===
 
 from backend.app.routes_quote import router as quote_router
+from backend.app.routes_admin import router as admin_router
 app.include_router(quote_router, prefix="/api")
+app.include_router(admin_router)
