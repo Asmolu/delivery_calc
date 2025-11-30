@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   backend:
     build:
@@ -5,6 +7,9 @@ services:
       dockerfile: Dockerfile.backend
     env_file:
       - .env
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/app/secrets/google_credentials.json}
+      OSRM_BASE_URL: ${OSRM_BASE_URL:-http://osrm:5000}
     volumes:
       - ./google_credentials.json:/app/secrets/google_credentials.json:ro
       - ./backend/storage:/app/backend/storage
@@ -17,17 +22,19 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
       args:
-        - VITE_API_BASE=http://backend:8000
+        VITE_API_BASE: ${VITE_API_BASE:-http://localhost:8000}
     depends_on:
       - backend
     ports:
-      - "5173:80"
+      - "80:80"
     restart: unless-stopped
+
   osrm:
     image: osrm/osrm-backend
-    container_name: osrm
-    command: osrm-routed --algorithm mld /data/russia-latest.osrm
+    profiles: ["with-osrm"]
+    command: osrm-routed --algorithm mld /data/osrm/russia-latest.osrm
+    volumes:
+      - ./osrm-data:/data/osrm
     ports:
       - "5000:5000"
-    volumes:
-      - ./osrm-data:/data
+    restart: unless-stopped
