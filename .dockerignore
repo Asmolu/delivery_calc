@@ -15,3 +15,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 tmp
+node_modules
+render.yaml
+run.ps1
+package-lock.json
+package.json
+temp_safe

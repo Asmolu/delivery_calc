@@ -70,3 +70,11 @@ __pypackages__/
 # === RENDER / DEPLOY ===
 # (если используешь Render или аналог, можно игнорить эти служебные файлы)
 render.yaml
+
+# Для чистоты 
+node_modules
+render.yaml
+run.ps1
+package-lock.json
+package.json
+temp_safe
