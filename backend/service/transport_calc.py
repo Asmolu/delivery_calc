@@ -550,7 +550,16 @@ def evaluate_scenario_transport(
 
     total_cost = total_material + total_delivery
     trip_count = sum(len(f["trips"]) for f in factory_plans)
-    transport_names = sorted({t.get("tariff_name") for f in factory_plans for t in f["trips"]})
+    transport_names = sorted(
+        {
+            t.get("tariff_label")
+            or t.get("tariff_name")
+            or t.get("tag")
+            for f in factory_plans
+            for t in f["trips"]
+        }
+    )
+
 
     factories_output = [
         {
