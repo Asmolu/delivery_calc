@@ -139,18 +139,30 @@ def build_factory_scenarios_v2(
     - Комбинации с одинаковым набором заводов и количеств объединяются.
     """
 
-    # --- 1. Индекс по (category, subtype) ---
+    # --- 1. Индекс по (category, subtype) и fallback по категории ---
     catalog: Dict[tuple, List[Dict[str, Any]]] = {}
+    catalog_by_category: Dict[str, List[Dict[str, Any]]] = {}
     for prod in factories_products:
-        key = (prod.get("category"), prod.get("subtype"))
+        category = prod.get("category")
+        subtype = prod.get("subtype")
+        key = (category, subtype)
+
         catalog.setdefault(key, []).append(prod)
+        if category:
+            catalog_by_category.setdefault(category, []).append(prod)
 
     # --- 2. Для каждого запрошенного товара собираем варианты заводов ---
     candidates: List[List[Dict[str, Any]]] = []
     for item in items:
-        key = (item.get("category"), item.get("subtype"))
-        possible = catalog.get(key, [])
+        category = item.get("category")
+        subtype = item.get("subtype")
+        key = (category, subtype)
 
+        possible = catalog.get(key, [])
+        # Если subtype не указан, пробуем взять любые товары этой категории
+        if not possible and not subtype:
+            possible = catalog_by_category.get(category, [])
+            
         if not possible:
             log.warning(
                 "⚠️ Не найден ни один завод для товара %s / %s",
