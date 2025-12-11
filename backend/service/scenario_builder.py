@@ -1,7 +1,9 @@
-from typing import List, Any, Dict
-from backend.core.logger import get_logger
-from itertools import product
+"""Tools for generating purchase scenarios across factories."""
 
+from itertools import product
+from typing import Any, Dict, Iterable, List, Tuple
+
+from backend.core.logger import get_logger
 
 log = get_logger("scenario_builder")
 
@@ -96,28 +98,45 @@ def build_factory_scenarios(factories_products: dict, items: list):
     return scenarios
 
 
+def _unique_variants_by_factory(variants: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Deduplicate product variants by factory, keeping the cheapest option."""
+
+    best_by_factory: Dict[str, Dict[str, Any]] = {}
+    for option in variants:
+        factory = option.get("factory") or {}
+        name = (factory.get("name") or "").lower()
+        current_best = best_by_factory.get(name)
+        price = float(factory.get("price") or 0.0)
+        if current_best is None:
+            best_by_factory[name] = option
+            continue
+
+        existing_price = float((current_best.get("factory") or {}).get("price") or 0.0)
+        if price < existing_price:
+            best_by_factory[name] = option
+
+    return list(best_by_factory.values())
+
+
+def _scenario_signature(factories: Dict[str, List[Dict[str, Any]]]) -> Tuple[Tuple[str, int], ...]:
+    """Create a stable signature for deduplicating scenarios."""
+
+    signature: List[Tuple[str, int]] = []
+    for fname, items in factories.items():
+        qty_sum = sum(int(i.get("quantity") or i.get("count") or 0) for i in items)
+        signature.append((fname, qty_sum))
+    return tuple(sorted(signature))
+
+
 def build_factory_scenarios_v2(
     factories_products: List[Dict[str, Any]],
-    items: List[Dict[str, Any]]
+    items: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
-    """
-    Генерация всех осмысленных комбинаций товаров по заводам
-    под формат НОВОГО парсера, где структура такая:
+    """Создать осмысленные комбинации распределения товаров по заводам.
 
-    {
-        "category": "ФБС БЛОКИ",
-        "subtype": "ФБС 9-3-6",
-        "weight_per_item": 0.35,
-        "special_threshold": 0.0,
-        "max_per_trip": 0.0,
-        "factory": {
-            "name": "дмитровский мжбк",
-            "lat": 56.331169,
-            "lon": 37.540919,
-            "price": 1090.0,
-            "contact": "..."
-        }
-    }
+    - Каждому запрошенному товару сопоставляется список заводов-поставщиков.
+    - Дубли по одному и тому же заводу отфильтровываются, оставляя минимальную цену.
+    - Комбинации с одинаковым набором заводов и количеств объединяются.
     """
 
     # --- 1. Индекс по (category, subtype) ---
@@ -133,7 +152,6 @@ def build_factory_scenarios_v2(
         possible = catalog.get(key, [])
 
         if not possible:
-            # Если ни один завод не производит этот товар — сценариев нет
             log.warning(
                 "⚠️ Не найден ни один завод для товара %s / %s",
                 item.get("category"),
@@ -141,70 +159,77 @@ def build_factory_scenarios_v2(
             )
             return []
 
-        # Сортируем по цене за единицу (цену берём из вложенного factory)
-        def _price(p: Dict[str, Any]) -> float:
-            f = p.get("factory") or {}
-            return float(f.get("price") or 0)
-
-        possible_sorted = sorted(possible, key=_price)
-
         item_quantity = item.get("quantity") or 0
 
+        # Сортируем по цене и оставляем одно предложение на завод
+        possible_sorted = sorted(
+            possible,
+            key=lambda p: float((p.get("factory") or {}).get("price") or 0.0),
+        )
+        filtered_variants = _unique_variants_by_factory(possible_sorted)
+
         item_variants: List[Dict[str, Any]] = []
-        for p in possible_sorted:
-            factory_info = p.get("factory") or {}
-
-            weight_per_item = p.get("weight_per_item") or 0.0
+        for prod in filtered_variants:
+            factory_info = prod.get("factory") or {}
+            weight_per_item = prod.get("weight_per_item") or 0.0
             weight_total = weight_per_item * item_quantity
-
             price_per_item = factory_info.get("price") or 0.0
 
-            variant = {
-                # Полная информация о заводе
-                "factory": {
-                    "name": factory_info.get("name") or "Неизвестно",
+            item_variants.append(
+                {
+                    "factory": {
+                        "name": factory_info.get("name") or "Неизвестно",
+                        "lat": factory_info.get("lat"),
+                        "lon": factory_info.get("lon"),
+                        "contact": factory_info.get("contact"),
+                        "price": price_per_item,
+                    },
+                    "category": prod.get("category"),
+                    "subtype": prod.get("subtype"),
+                    "quantity": item_quantity,
+                    "price_per_item": price_per_item,
+                    "weight_per_item": weight_per_item,
+                    "special_threshold": prod.get("special_threshold") or 0.0,
+                    "max_per_trip": prod.get("max_per_trip") or 0.0,
                     "lat": factory_info.get("lat"),
                     "lon": factory_info.get("lon"),
-                    "contact": factory_info.get("contact"),
-                    "price": price_per_item,
-                },
-                # Сам товар
-                "category": p.get("category"),
-                "subtype": p.get("subtype"),
-                "quantity": item_quantity,
-                "price_per_item": price_per_item,
-                "weight_per_item": weight_per_item,
-                "special_threshold": p.get("special_threshold") or 0.0,
-                "max_per_trip": p.get("max_per_trip") or 0.0,
-                "lat": factory_info.get("lat"),
-                "lon": factory_info.get("lon"),
-                "weight_total": weight_total,
-            }
-
-            item_variants.append(variant)
+                    "weight_total": weight_total,
+                }
+            )
 
         candidates.append(item_variants)
+    if not candidates:
+        return []
+
 
     # --- 3. Генерируем все комбинации (один выбор завода на каждый товар) ---
     scenarios: List[Dict[str, Any]] = []
+    seen_signatures: set[Tuple[Tuple[str, int], ...]] = set()
 
     for combo_id, combo in enumerate(product(*candidates), start=1):
         factories_map: Dict[str, List[Dict[str, Any]]] = {}
 
-        for c in combo:
-            f_obj = c.get("factory") or {}
-            factory_name = f_obj.get("name") or "Неизвестно"
-            factories_map.setdefault(factory_name, []).append(c)
+        for selection in combo:
+            factory_info = selection.get("factory") or {}
+            factory_name = factory_info.get("name") or "Неизвестно"
+            factories_map.setdefault(factory_name, []).append(selection)
+
+        signature = _scenario_signature(factories_map)
+        if signature in seen_signatures:
+            continue
+        seen_signatures.add(signature)
 
         total_cost = sum(x["price_per_item"] * x["quantity"] for x in combo)
         total_weight = sum(x["weight_per_item"] * x["quantity"] for x in combo)
 
-        scenarios.append({
-            "scenario_id": combo_id,
-            "factories": factories_map,
-            "total_material_cost": total_cost,
-            "total_weight": total_weight,
-        })
+        scenarios.append(
+            {
+                "scenario_id": combo_id,
+                "factories": factories_map,
+                "total_material_cost": total_cost,
+                "total_weight": total_weight,
+            }
+        )
 
     # --- 4. Сортировка по стоимости материалов ---
     scenarios.sort(key=lambda x: x["total_material_cost"])

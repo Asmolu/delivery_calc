@@ -1,8 +1,11 @@
-import logging
+"""Transport planning and tariff selection utilities."""
+
 from typing import Any, Dict, List, Optional, Tuple
+from backend.core.logger import get_logger
 from backend.service.factories_service import _norm_str, _to_float
 from backend.service.osrm_client import OSRMUnavailableError, get_osrm_distance_km
-logger = logging.getLogger(__name__)
+
+logger = get_logger(__name__)
 
 
 # === БАЗОВЫЕ УТИЛИТЫ =========================================================
@@ -73,11 +76,7 @@ def _select_tariff_for_load(
     load_ton: float,
     name_contains: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Возвращает лучшую строку тарифа под указанный тег/нагрузку.
-
-    name_contains: если задано, оставляет только строки, где название содержит
-    указанную подстроку (регистр игнорируется).
-    """
+    """Возвращает лучшую строку тарифа под указанный тег/нагрузку."""
     candidates = []
     for t in tariffs:
         if _norm_str(t.get("tag")) != _norm_str(tag):
@@ -451,7 +450,7 @@ def evaluate_scenario_transport(
     req,
     calc_tariffs: Optional[List[Dict[str, Any]]],
 ) -> Optional[Dict[str, Any]]:
-    """Считает лучший вариант доставки для сценария (комбинация заводов)."""
+    """Подобрать оптимальный транспортный план для выбранного сценария."""
 
     if not calc_tariffs:
         logger.warning("⚠️ calc_tariffs пуст или None, расчёт невозможен.")
@@ -471,7 +470,7 @@ def evaluate_scenario_transport(
         require_mani = False
     elif transport_type == "manipulator":
         allowed_tags = ["manipulator"]
-        require_mani = True if add_manipulator else False
+        require_mani = add_manipulator
     elif transport_type == "long_haul":
         allowed_tags = ["long_haul"] + (["manipulator"] if add_manipulator else [])
         require_mani = add_manipulator
@@ -479,10 +478,10 @@ def evaluate_scenario_transport(
         allowed_tags = ["long_haul", "manipulator"]
         require_mani = add_manipulator
 
-    factory_plans = []
+    factory_plans: List[Dict[str, Any]] = []
     total_material = 0.0
     total_delivery = 0.0
-    factory_distances = {}
+    factory_distances: Dict[str, float] = {}
 
     for factory_name, items in factories_map.items():
         if not items:
@@ -497,29 +496,33 @@ def evaluate_scenario_transport(
         try:
             distance_km = get_osrm_distance_km(lon, lat, req.upload_lon, req.upload_lat)
         except OSRMUnavailableError as exc:
-            logger.warning(
-                "⚠️ Не удалось получить расстояние до клиента для %s: %s",
-                factory_name,
-                exc,
-            )
-            raise
+            logger.error("OSRM недоступен для %s: %s", factory_name, exc)
+            return None
 
         factory_distances[factory_name] = distance_km
 
         total_weight = sum(_to_float(x.get("weight_total")) for x in items)
-        material_cost = sum(_to_float(x.get("price_per_item") or x.get("price")) * _to_float(x.get("quantity") or x.get("count")) for x in items)
+        material_cost = sum(
+            _to_float(x.get("price_per_item") or x.get("price"))
+            * _to_float(x.get("quantity") or x.get("count"))
+            for x in items
+        )
         total_material += material_cost
 
         # варианты планов
-        plans = []
+        plans: List[Dict[str, Any]] = []
         linear_allowed = [t for t in allowed_tags if t in ("manipulator", "long_haul", "special")]
         if linear_allowed:
-            linear_plan = _linear_plan(total_weight, distance_km, calc_tariffs, linear_allowed, require_mani, items)
+            linear_plan = _linear_plan(
+                total_weight, distance_km, calc_tariffs, linear_allowed, require_mani, items
+            )
             if linear_plan:
                 plans.append(linear_plan)
 
-        # DAF применяется только если доступен длинномер и есть товары с порогом
-        has_threshold_items = any(_to_float(x.get("special_threshold")) > 0 and _to_float(x.get("max_per_trip")) > 0 for x in items)
+        has_threshold_items = any(
+            _to_float(x.get("special_threshold")) > 0 and _to_float(x.get("max_per_trip")) > 0
+            for x in items
+        )
         if "long_haul" in allowed_tags and has_threshold_items:
             daf_plan = _daf_plan(items, distance_km, calc_tariffs, require_mani)
             if daf_plan:
@@ -549,6 +552,15 @@ def evaluate_scenario_transport(
     trip_count = sum(len(f["trips"]) for f in factory_plans)
     transport_names = sorted({t.get("tariff_name") for f in factory_plans for t in f["trips"]})
 
+    factories_output = [
+        {
+            "factory_name": plan.get("factory_name"),
+            "distance_km": plan.get("distance_km"),
+            "trips": plan.get("trips", []),
+        }
+        for plan in factory_plans
+    ]
+
     return {
         "scenario": scenario,
         "material_sum": total_material,
@@ -558,6 +570,7 @@ def evaluate_scenario_transport(
         "transport_name": ", ".join(transport_names),
         "factory_distances": factory_distances,
         "factory_plans": factory_plans,
+        "factories": factories_output,
     }
 
 def build_shipment_details_from_result(best_result, req):
@@ -565,7 +578,7 @@ def build_shipment_details_from_result(best_result, req):
     rows = []
     scenario_factories = (best_result.get("scenario") or {}).get("factories") or {}
 
-    for f_plan in best_result.get("factory_plans", []):
+    for f_plan in best_result.get("factory_plans", best_result.get("factories", [])):
         factory_name = f_plan.get("factory_name")
         distance = round(f_plan.get("distance_km", 0), 2)
         material_cost = round(f_plan.get("material_cost", 0), 2)
@@ -610,11 +623,11 @@ def build_shipment_details_from_result(best_result, req):
 
     return rows
 
-def build_trip_items_details(best_result):
+def build_trip_items_details(best_result: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Возвращает детализацию погрузки по каждой машине."""
 
     trip_rows = []
-    for f_plan in best_result.get("factory_plans", []):
+    for f_plan in best_result.get("factory_plans", best_result.get("factories", [])):
         factory_name = f_plan.get("factory_name")
         for trip in f_plan.get("trips", []):
             trip_rows.append(
