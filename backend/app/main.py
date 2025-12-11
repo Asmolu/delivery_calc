@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 from backend.core.data_loader import (
     rebuild_factories_and_tariffs_from_google,
-    load_factories_and_tariffs
+    load_factories_and_tariffs,
 )
 from backend.core.logger import get_logger
 
@@ -30,6 +30,7 @@ app.add_middleware(
 GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
 GOOGLE_CREDS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
+
 @app.on_event("startup")
 async def startup_event():
     log.info("🚀 Backend has started")
@@ -44,9 +45,11 @@ async def startup_event():
     log.info(f"✅ factories_products.json загружен ({len(factories)} записей)")
     log.info(f"✅ tariffs.json загружен ({len(tariffs)} тарифов)")
 
-# === РОУТЫ ===
 
-from backend.app.routes_quote import router as quote_router
+# === РОУТЫ ===
 from backend.app.routes_admin import router as admin_router
+from backend.app.routes_fibonacci import router as fibonacci_router
+from backend.app.routes_quote import router as quote_router
 app.include_router(quote_router, prefix="/api")
+app.include_router(fibonacci_router, prefix="/api")
 app.include_router(admin_router)
