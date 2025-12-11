@@ -6,6 +6,8 @@ services:
       context: .
       dockerfile: Dockerfile.backend
     env_file: .env
+    environment:
+      OSRM_BASE_URL: ${OSRM_BASE_URL:-http://osrm:5000}
     ports:
       - "8000:8000"
     volumes:
