@@ -1,7 +1,9 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 
 from backend.core.logger import get_logger
+from backend.core.database import get_db
 from backend.models.dto import QuoteRequest
 from backend.core.data_loader import load_factories_and_tariffs
 from backend.service.osrm_client import OSRMUnavailableError
@@ -17,14 +19,22 @@ log = get_logger("routes.quote")
 
 
 @router.post("/quote")
-async def make_quote(req: QuoteRequest):
+async def make_quote(
+    req: QuoteRequest,
+    db: Session = Depends(get_db)
+):
     """
     Основной эндпоинт расчёта маршрутов.
     """
     log.info("Запрос на расчёт: %s", req.dict())
 
-    # ✅ загружаем объединённые данные (товары + заводы)
-    factories_products, tariffs = load_factories_and_tariffs()
+    # Бизнес-правило: если в заказе товары из разных категорий — требуется проверка логистом
+    req_categories = sorted({(i.category or "").strip() for i in req.items if (i.category or "").strip()})
+    needs_logistics_check = len(req_categories) > 1
+    logistics_warning_text = "Выполнить проверку логистом!" if needs_logistics_check else None
+
+    # ✅ загружаем объединённые данные (товары + заводы) из БД
+    factories_products, tariffs = load_factories_and_tariffs(db)
     if not factories_products:
         return JSONResponse(
             status_code=500,
@@ -105,12 +115,19 @@ async def make_quote(req: QuoteRequest):
         print(f"{i}) {v['transportName']}: {v['totalCost']}₽ ({v['deliveryCost']} доставка)")
     print("==================================\n")
 
-    return JSONResponse({"success": True, "variants": variants})
+    return JSONResponse(
+        {
+            "success": True,
+            "variants": variants,
+            "needsLogisticsCheck": needs_logistics_check,
+            "warningText": logistics_warning_text,
+        }
+    )
 
 
 @router.get("/factories")
-def get_factories():
-    factories_products, _ = load_factories_and_tariffs()
+def get_factories(db: Session = Depends(get_db)):
+    factories_products, _ = load_factories_and_tariffs(db)
 
     factories = []
     for category, items in factories_products.items():
@@ -137,15 +154,15 @@ def get_factories():
 
 
 @router.get("/tariffs")
-def get_tariffs():
-    _, tariffs = load_factories_and_tariffs()
+def get_tariffs(db: Session = Depends(get_db)):
+    _, tariffs = load_factories_and_tariffs(db)
     # возвращаем массив напрямую, без ключа "tariffs"
     return tariffs
 
 
 @router.get("/categories")
-def get_categories():
-    factories_products, _ = load_factories_and_tariffs()
+def get_categories(db: Session = Depends(get_db)):
+    factories_products, _ = load_factories_and_tariffs(db)
 
     result = {}
     if isinstance(factories_products, dict):

@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 
 export default function Home() {
+  const MotionDiv = motion.div;
   const navigate = useNavigate();
 
   const handleDemo = () => {
@@ -11,7 +12,7 @@ export default function Home() {
   };
 
   return (
-    <motion.div
+    <MotionDiv
       className="space-y-10"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -86,6 +87,6 @@ export default function Home() {
           </p>
         </div>
       </div>
-    </motion.div>
+    </MotionDiv>
   );
 }

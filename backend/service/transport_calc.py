@@ -192,17 +192,43 @@ def _linear_plan(
         )
 
     def _allocate_items_for_trip(load_limit: float) -> Tuple[List[str], List[Dict[str, Any]], float]:
-        """Возвращает список товаров, помещённых в рейс, их мета и фактический вес."""
+        """Возвращает список товаров, помещённых в рейс, их мета и фактический вес.
+
+        ВАЖНО (бизнес-правило): в одной машине нельзя смешивать разные категории.
+        Поэтому один вызов аллоцирует товары только из ОДНОЙ категории.
+        """
 
         assigned: List[str] = []
         assigned_meta: List[Dict[str, Any]] = []
         load_used = 0.0
         if load_limit <= 0:
-            return assigned, load_used
+            return assigned, assigned_meta, load_used
+
+        # Выбираем категорию для этого рейса: берём ту, у которой больше всего
+        # оставшегося веса (или количества, если веса нет).
+        cat_candidates = []
+        for it in remaining_items:
+            qty_left = _to_float(it.get("remaining_qty", 0))
+            if qty_left <= 0:
+                continue
+            wpi = _to_float(it.get("weight_per_item"))
+            cat = it.get("category")
+            if not cat:
+                continue
+            cat_candidates.append((cat, qty_left * (wpi if wpi > 0 else 1.0)))
+
+        if not cat_candidates:
+            return assigned, assigned_meta, load_used
+
+        # категория с максимальным “объёмом” к отгрузке
+        target_category = max(cat_candidates, key=lambda x: x[1])[0]
 
         for item in remaining_items:
             if load_limit - load_used < 0.01:
                 break
+
+            if (item.get("category") or "") != target_category:
+                continue
 
             qty_left = item.get("remaining_qty", 0)
             if qty_left <= 0:

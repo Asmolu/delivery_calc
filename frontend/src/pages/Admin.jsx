@@ -1,77 +1,93 @@
-import React, { useEffect, useState } from "react";
-import { reloadFactories, fetchFactories, fetchTariffs } from "../api";
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { reloadAll, fetchFactories, fetchTariffs, logout, getCurrentUser } from "../api";
 import { motion } from "framer-motion";
 
 export default function Admin() {
-  const [factories, setFactories] = useState([]);
-  const [vehicles, setVehicles] = useState([]);
+  const MotionDiv = motion.div;
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [user, setUser] = useState(null);
+  const [factoriesCount, setFactoriesCount] = useState(null);
+  const [tariffsCount, setTariffsCount] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
+    getCurrentUser()
+      .then(setUser)
+      .catch(() => {
+        navigate("/login");
+      });
+
     async function load() {
       try {
-        setMessage("📦 Загружаем текущие данные...");
         const [f, t] = await Promise.all([fetchFactories(), fetchTariffs()]);
-        setFactories(f || []);
-        setVehicles(t || []);
-        setMessage("✅ Данные успешно загружены");
+        setFactoriesCount(Array.isArray(f) ? f.length : 0);
+        setTariffsCount(Array.isArray(t) ? t.length : 0);
       } catch (err) {
         console.error("Ошибка при загрузке данных:", err);
-        setMessage("❌ Ошибка при загрузке данных");
+        setFactoriesCount(null);
+        setTariffsCount(null);
       }
     }
     load();
-  }, []);
+  }, [navigate]);
 
   const handleReload = async () => {
     try {
       setLoading(true);
       setMessage("⏳ Обновление данных (заводы + тарифы) из Google Sheets...");
-      const res = await fetch("/admin/reload", { method: "POST" });
-      const data = await res.json();
-      setMessage(`✅ ${data.message} (${data.factories} заводов, ${data.tariffs} тарифов)`);
+      const data = await reloadAll();
+      setMessage(`✅ Обновлено: ${data.factories_count || 0} заводов, ${data.tariffs?.length || 0} тарифов`);
 
       const [f, t] = await Promise.all([fetchFactories(), fetchTariffs()]);
-      setFactories(f || []);
-      setVehicles(t || []);
+      setFactoriesCount(Array.isArray(f) ? f.length : 0);
+      setTariffsCount(Array.isArray(t) ? t.length : 0);
     } catch (err) {
       console.error("Ошибка обновления:", err);
-      setMessage("❌ Ошибка при обновлении данных");
+      setMessage(`❌ Ошибка при обновлении данных: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  const normalizedVehicles = vehicles.map((v) => ({
-    name: v.name || v.название || "Без названия",
-    capacity_ton: v.capacity_ton || v["грузоподъёмность"] || 0,
-    tag: v.tag || v["тэг"] || "",
-    distance_min: v.distance_min ?? v["min_distance"] ?? 0,
-    distance_max: v.distance_max ?? v["max_distance"] ?? 0,
-    price: v.price ?? v.base ?? 0,
-    per_km: v.per_km ?? 0,
-    notes: v.notes ?? v["заметки"] ?? "",
-  }));
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
 
-  const vehiclesByName = normalizedVehicles.reduce((acc, v) => {
-    const name = v.name || "Без названия";
-    if (!acc[name]) acc[name] = [];
-    acc[name].push(v);
-    return acc;
-  }, {});
-  const vehiclesList = Object.entries(vehiclesByName);
-
-  const factoriesByName = factories.reduce((acc, f) => {
-    const name = f.name || f["название"] || "Без названия";
-    if (!acc[name]) acc[name] = [];
-    acc[name].push(f);
-    return acc;
-  }, {});
-  const factoriesList = Object.entries(factoriesByName);
+  const tiles = useMemo(
+    () => [
+      {
+        title: "🏭 Заводы и товары",
+        desc: "Просмотр товаров, веса, лимитов и цен по производствам.",
+        to: "/admin/factories",
+        meta:
+          factoriesCount == null
+            ? "—"
+            : `позиций: ${Number(factoriesCount).toLocaleString()}`,
+      },
+      {
+        title: "🚛 Машины и тарифы перевозки",
+        desc: "Тарифные сетки по типам машин и диапазонам расстояний.",
+        to: "/admin/tariffs",
+        meta:
+          tariffsCount == null
+            ? "—"
+            : `строк: ${Number(tariffsCount).toLocaleString()}`,
+      },
+      {
+        title: "📋 Заказы",
+        desc: "Подтверждения/отклонения, ручные решения логиста, история.",
+        to: "/admin/orders",
+        meta: "admin-only",
+      },
+    ],
+    [factoriesCount, tariffsCount]
+  );
 
   return (
-    <motion.div
+    <MotionDiv
       className="space-y-8"
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
@@ -79,155 +95,67 @@ export default function Admin() {
     >
       <div className="card-glass p-6 md:p-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="pill mb-2">Данные из Google Sheets</p>
+          <div className="flex items-center gap-3 mb-2">
+            <p className="pill">Данные из Google Sheets</p>
+            {user && (
+              <span className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                {user.username} ({user.role})
+              </span>
+            )}
+          </div>
           <h1 className="text-3xl font-bold">⚙️ Управление данными</h1>
           <p className="text-slate-600 max-w-2xl">
             Обновляйте товары и тарифы из таблицы, сверяйте контакты заводов и следите за актуальностью цен.
           </p>
         </div>
-        <button
-          onClick={handleReload}
-          disabled={loading}
-          className={`px-5 py-3 rounded-xl text-sm font-semibold transition shadow-md shadow-emerald-100 ${
-            loading
-              ? "bg-slate-100 text-slate-500 cursor-wait"
-              : "bg-emerald-500 text-white hover:bg-emerald-400"
-          }`}
-        >
-          {loading ? "🔄 Обновление..." : "🔁 Обновить данные"}
-        </button>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={handleReload}
+            disabled={loading}
+            className={`px-5 py-3 rounded-xl text-sm font-semibold transition shadow-md shadow-emerald-100 ${
+              loading
+                ? "bg-slate-100 text-slate-500 cursor-wait"
+                : "bg-emerald-500 text-white hover:bg-emerald-400"
+            }`}
+          >
+            {loading ? "🔄 Обновление..." : "🔁 Обновить данные"}
+          </button>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="px-5 py-3 rounded-xl text-sm font-semibold transition bg-slate-200 text-slate-700 hover:bg-slate-300"
+          >
+            Выйти
+          </button>
+        </div>
       </div>
 
       {message && (
         <div className="card-glass p-4 text-sm text-slate-700 border border-slate-200 bg-white">{message}</div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          className="card-glass p-6 border border-slate-200"
-        >
-          <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">🏭 Заводы и товары</h2>
-
-          {factoriesList.length === 0 ? (
-            <p className="text-slate-500">Нет данных о заводах</p>
-          ) : (
-            <div className="space-y-6 max-h-[70vh] overflow-auto pr-1">
-              {factoriesList.map(([name, items], idx) => (
-                <div key={idx} className="bg-slate-900/60 rounded-xl border border-slate-200 p-4 shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <h3 className="text-lg font-semibold text-slate-900">🏢 {name}</h3>
-                      <p className="text-slate-500 text-sm">{items[0]?.category || "—"}</p>
-                    </div>
-                    <span className="text-xs px-2 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
-                      {items.length} позиций
-                    </span>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left text-slate-200 border border-slate-200 rounded-lg">
-                      <thead className="bg-slate-900/50 text-slate-300 border-b border-slate-700">
-                        <tr>
-                          <th className="px-3 py-2">Подтип</th>
-                          <th className="px-3 py-2">Вес (т)</th>
-                          <th className="px-3 py-2">Макс. за рейс</th>
-                          <th className="px-3 py-2">Особый тариф</th>
-                          <th className="px-3 py-2">Цена (₽)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items
-                          .slice()
-                          .sort((a, b) => (a.subtype || "").localeCompare(b.subtype || ""))
-                          .map((item, i) => (
-                            <tr key={i} className="border-t border-slate-800 hover:bg-slate-800/60 transition-colors">
-                              <td className="px-3 py-2">{item.subtype || "—"}</td>
-                              <td className="px-3 py-2">{item.weight_per_item ?? 0}</td>
-                              <td className="px-3 py-2">{item.max_per_trip ?? 0}</td>
-                              <td className="px-3 py-2">{item.special_threshold ?? 0}</td>
-                              <td className="px-3 py-2 font-medium text-slate-100">{item.price ?? 0}</td>
-                            </tr>
-                          ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ))}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {tiles.map((t) => (
+          <button
+            key={t.to}
+            type="button"
+            onClick={() => navigate(t.to)}
+            className="card-glass p-6 border border-slate-200 text-left hover:border-indigo-200 transition"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">{t.title}</h2>
+                <p className="text-sm text-slate-600 mt-2">{t.desc}</p>
+              </div>
+              <div className="text-xs px-2 py-1 rounded-full bg-white border border-slate-200 text-slate-600 whitespace-nowrap">
+                {t.meta}
+              </div>
             </div>
-          )}
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          className="card-glass p-6 border border-slate-200"
-        >
-          <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">🚛 Машины и тарифы перевозки</h2>
-
-          {vehiclesList.length === 0 ? (
-            <p className="text-slate-500">Нет данных о тарифах</p>
-          ) : (
-            <div className="space-y-6 max-h-[70vh] overflow-auto pr-1">
-              {vehiclesList.map(([name, tariffs], idx) => (
-                <div key={idx} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <h3 className="text-lg font-semibold text-slate-900">🚚 {name}</h3>
-                      <p className="text-slate-500 text-sm">
-                        {tariffs[0]?.tag || "-"} • {tariffs[0]?.capacity_ton || "?"} т
-                      </p>
-                    </div>
-                    <span className="text-xs px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-100">
-                      {tariffs.length} тарифов
-                    </span>
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left text-slate-200 border border-slate-200 rounded-lg">
-                      <thead className="bg-slate-900/50 text-slate-300 border-b border-slate-700">
-                        <tr>
-                          <th className="px-3 py-2">Мин. дистанция (км)</th>
-                          <th className="px-3 py-2">Макс. дистанция (км)</th>
-                          <th className="px-3 py-2">Цена (₽)</th>
-                          <th className="px-3 py-2">За км (₽/км)</th>
-                          <th className="px-3 py-2">Заметки</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {tariffs
-                          .slice()
-                          .sort((a, b) => (a.distance_min || 0) - (b.distance_min || 0))
-                          .map((t, i) => {
-                            const isExtraKm = t.distance_min === t.distance_max && t.per_km > 0;
-                            return (
-                              <tr
-                                key={i}
-                                className={`border-t border-slate-800 transition-colors ${
-                                  isExtraKm ? "bg-emerald-900/30" : "hover:bg-slate-800/60"
-                                }`}
-                              >
-                                <td className="px-3 py-2">{t.distance_min ?? 0}</td>
-                                <td className="px-3 py-2">{t.distance_max ?? 0}</td>
-                                <td className="px-3 py-2 font-medium text-slate-100">{t.price ?? t.base ?? 0}</td>
-                                <td className="px-3 py-2">{t.per_km > 0 ? `+${t.per_km} ₽/км` : "—"}</td>
-                                <td className="px-3 py-2 text-slate-400 italic">
-                                  {t.notes || (isExtraKm ? "расстояние свыше — с доплатой" : "—")}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </motion.div>
+            <div className="mt-4 text-sm font-semibold text-indigo-700">Открыть →</div>
+          </button>
+        ))}
       </div>
-    </motion.div>
+    </MotionDiv>
   );
 }

@@ -1,9 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { getCategories, getQuote } from "../api";
+import {
+  getCategories,
+  getQuote,
+  getCurrentUser,
+  isAuthenticated,
+  confirmOrderFromQuote,
+  rejectOrderForManual,
+  manualConfirmOrder,
+} from "../api";
 import { API_BASE } from "../api";
 
 export default function Calculator() {
+  const MotionDiv = motion.div;
   const [categories, setCategories] = useState({});
   const [items, setItems] = useState([{ category: "", subtype: "", quantity: 1 }]);
   const [coords, setCoords] = useState("");
@@ -13,6 +22,17 @@ export default function Calculator() {
   const [addManipulator, setAddManipulator] = useState(false);
   const [selectedSpecial, setSelectedSpecial] = useState("");
   const [specialVehicles, setSpecialVehicles] = useState([]);
+  const [tariffs, setTariffs] = useState([]);
+
+  const [currentUser, setCurrentUser] = useState(null);
+  const isAdmin = String(currentUser?.role || "").toLowerCase() === "admin";
+
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualOrderId, setManualOrderId] = useState(null);
+  const [manualTransportName, setManualTransportName] = useState("");
+  const [manualNotes, setManualNotes] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -21,10 +41,11 @@ export default function Calculator() {
 
       try {
         const res = await fetch(`${API_BASE}/api/tariffs`);
-        const tariffs = await res.json();
+        const t = await res.json();
+        setTariffs(Array.isArray(t) ? t : []);
 
         // поддержка русских и английских ключей
-        const specials = (tariffs || []).filter(
+        const specials = (t || []).filter(
           (t) => t.tag === "special" || t["тег"] === "special"
         );
 
@@ -55,6 +76,30 @@ export default function Calculator() {
     }
     load();
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated()) return;
+    getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
+  }, []);
+
+  const uniqueTransportNames = React.useMemo(() => {
+    const names = new Set();
+    for (const t of tariffs || []) {
+      const name = t?.name || t?.["название"];
+      if (name) names.add(name);
+    }
+    return Array.from(names).sort((a, b) => String(a).localeCompare(String(b)));
+  }, [tariffs]);
+
+  const buildOrderSnapshot = (quoteRequestPayload) => {
+    return {
+      request: quoteRequestPayload,
+      variants: result?.variants || [],
+      selectedVariant: result?.selectedVariant ?? 0,
+      warningText: result?.warningText || null,
+      needsLogisticsCheck: !!result?.needsLogisticsCheck,
+    };
+  };
 
   const handleAddItem = () => {
     setItems([...items, { category: "", subtype: "", quantity: 1 }]);
@@ -94,7 +139,7 @@ export default function Calculator() {
 
       const data = await getQuote(payload);
       if (data?.variants) {
-        setResult({ ...data, selectedVariant: 0 });
+        setResult({ ...data, selectedVariant: 0, _lastQuoteRequest: payload });
       } else {
         const localized = {
           variants: [
@@ -110,6 +155,7 @@ export default function Calculator() {
             },
           ],
           selectedVariant: 0,
+          _lastQuoteRequest: payload,
         };
         setResult(localized);
       }
@@ -122,8 +168,86 @@ export default function Calculator() {
     }
   };
 
+  const handleConfirmScenario = async () => {
+    if (!isAdmin || !result?.variants?.length) return;
+    const reqPayload = result?._lastQuoteRequest;
+    if (!reqPayload) {
+      alert("Не найден снимок запроса для сохранения заказа");
+      return;
+    }
+    try {
+      setActionBusy(true);
+      const snapshot = buildOrderSnapshot(reqPayload);
+      const resp = await confirmOrderFromQuote(snapshot);
+      if (resp?.id != null) {
+        sessionStorage.setItem("selected_order_id", String(resp.id));
+      }
+      setActionsOpen(false);
+      alert(`✅ Сценарий подтверждён. Заказ #${resp?.id}`);
+    } catch (e) {
+      alert(e?.message || "Ошибка сохранения заказа");
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleRejectAndOpenManual = async () => {
+    if (!isAdmin || !result?.variants?.length) return;
+    const reqPayload = result?._lastQuoteRequest;
+    if (!reqPayload) {
+      alert("Не найден снимок запроса для сохранения заказа");
+      return;
+    }
+    try {
+      setActionBusy(true);
+      const snapshot = buildOrderSnapshot(reqPayload);
+      const resp = await rejectOrderForManual(snapshot);
+      if (resp?.id != null) {
+        sessionStorage.setItem("selected_order_id", String(resp.id));
+      }
+      setManualOrderId(resp?.id || null);
+      setManualTransportName("");
+      setManualNotes("");
+      setManualOpen(true);
+      setActionsOpen(false);
+    } catch (e) {
+      alert(e?.message || "Ошибка отклонения сценария");
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleManualConfirm = async () => {
+    if (!manualOrderId) {
+      alert("Не найден orderId для ручного подтверждения");
+      return;
+    }
+    if (!manualTransportName.trim()) {
+      alert("Выберите транспорт");
+      return;
+    }
+    try {
+      setActionBusy(true);
+      await manualConfirmOrder(manualOrderId, {
+        transportName: manualTransportName.trim(),
+        notes: manualNotes || null,
+        payload: {
+          // можно дополнять: стоимости/рейсы/что именно было выбрано
+          selectedVariant: result?.selectedVariant ?? 0,
+        },
+      });
+      sessionStorage.setItem("selected_order_id", String(manualOrderId));
+      setManualOpen(false);
+      alert(`✅ Заказ #${manualOrderId} подтверждён вручную`);
+    } catch (e) {
+      alert(e?.message || "Ошибка ручного подтверждения");
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
   return (
-    <motion.div
+    <MotionDiv
       className="space-y-8"
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
@@ -312,7 +436,15 @@ export default function Calculator() {
       </div>
 
       {result?.variants ? (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card-glass p-6 md:p-8">
+        <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card-glass p-6 md:p-8">
+          {result.warningText ? (
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 px-4 py-3">
+              <div className="text-sm font-semibold">⚠️ {result.warningText}</div>
+              <div className="text-xs text-amber-800 mt-1">
+                Заказ содержит товары из разных категорий — перевозки будут рассчитаны раздельно.
+              </div>
+            </div>
+          ) : null}
           <div className="flex flex-col gap-3 mb-4 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="pill mb-2">Найдено {result.variants.length} вариантов</p>
@@ -418,8 +550,122 @@ export default function Calculator() {
               </div>
             );
           })()}
-        </motion.div>
+        </MotionDiv>
       ) : null}
-    </motion.div>
+
+      {/* Floating actions (admin-only, after quote) */}
+      {isAdmin && result?.variants?.length ? (
+        <div className="fixed bottom-6 right-6 z-50">
+          {actionsOpen ? (
+            <div className="mb-3 w-72 rounded-2xl border border-slate-200 bg-white shadow-xl p-3">
+              <div className="text-sm font-semibold text-slate-800 mb-2">Действия</div>
+              <button
+                disabled={actionBusy}
+                onClick={handleConfirmScenario}
+                className="w-full mb-2 px-4 py-3 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-500 disabled:opacity-60"
+              >
+                Подтвердить сценарий (в БД)
+              </button>
+              <button
+                disabled={actionBusy}
+                onClick={handleRejectAndOpenManual}
+                className="w-full px-4 py-3 rounded-xl bg-amber-600 text-white font-semibold hover:bg-amber-500 disabled:opacity-60"
+              >
+                Отклонить и заполнить вручную
+              </button>
+              <button
+                type="button"
+                onClick={() => setActionsOpen(false)}
+                className="w-full mt-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold hover:border-indigo-200"
+              >
+                Закрыть
+              </button>
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={() => setActionsOpen((v) => !v)}
+            className="px-5 py-4 rounded-full bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-500"
+            title="Действия"
+          >
+            Действия
+          </button>
+        </div>
+      ) : null}
+
+      {/* Manual modal */}
+      {manualOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-xl rounded-2xl bg-white border border-slate-200 shadow-2xl p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <div className="text-lg font-bold">Ручное заполнение (логист)</div>
+                <div className="text-xs text-slate-500">
+                  Заказ #{manualOrderId || "—"} • выберите транспорт и подтвердите
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setManualOpen(false)}
+                className="px-3 py-2 rounded-lg bg-white border border-slate-200 hover:border-indigo-200"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Транспорт</label>
+                <select
+                  value={manualTransportName}
+                  onChange={(e) => setManualTransportName(e.target.value)}
+                  className="w-full px-3 py-3 rounded-lg bg-white border border-slate-200 text-slate-800 shadow-sm"
+                >
+                  <option value="">Выберите транспорт…</option>
+                  {uniqueTransportNames.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+                <div className="text-xs text-slate-500 mt-1">
+                  Если списка мало — он берётся из тарифов (`/api/tariffs`).
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Комментарий</label>
+                <textarea
+                  value={manualNotes}
+                  onChange={(e) => setManualNotes(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 rounded-lg bg-white border border-slate-200 text-slate-800"
+                  placeholder="Например: согласовано с клиентом, требуется 2 рейса, и т.д."
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setManualOpen(false)}
+                className="px-4 py-3 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold hover:border-indigo-200"
+              >
+                Отмена
+              </button>
+              <button
+                disabled={actionBusy}
+                type="button"
+                onClick={handleManualConfirm}
+                className="px-4 py-3 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-500 disabled:opacity-60"
+              >
+                Подтвердить (в БД)
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </MotionDiv>
   );
 }

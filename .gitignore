@@ -11,6 +11,13 @@ ENV/
 env.bak/
 venv.bak/
 
+# Local env files (do not commit)
+backend.env
+*.env
+.env.*
+!.env.example
+!.env.sample
+
 # Build & Dist
 build/
 dist/
@@ -44,6 +51,8 @@ frontend/node_modules/
 frontend/dist/
 frontend/.vite/
 frontend/.DS_Store
+frontend/.env
+frontend/.env.*
 *.log
 
 # === NODE.JS (корень репозитория) ===
@@ -61,20 +70,14 @@ delivery_bot_2_credentials.json
 .DS_Store
 Thumbs.db
 
+# Heavy routing datasets
+osrm-data/
+
 # Timeweb deployment helper / tmp
 *.bak
 *.swp
 tmp/
 __pypackages__/
 
-# === RENDER / DEPLOY ===
-# (если используешь Render или аналог, можно игнорить эти служебные файлы)
-render.yaml
-
-# Для чистоты 
-node_modules
-render.yaml
-run.ps1
-package-lock.json
-package.json
-temp_safe
+# Misc local scratch
+temp_safe/

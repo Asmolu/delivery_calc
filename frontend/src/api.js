@@ -1,16 +1,38 @@
 // === API base URL ===
 const envBase = import.meta?.env?.VITE_API_BASE;
-const isDev = window.location.port === "5173" || window.location.port === "4173";
+const isDev = import.meta.env.DEV;
 export const API_BASE = envBase || (isDev ? "http://127.0.0.1:8000" : window.location.origin);
 console.log("🌍 API_BASE =", API_BASE);
 
+// === Управление токеном ===
+function getToken() {
+  return localStorage.getItem("auth_token");
+}
+
+function setToken(token) {
+  if (token) {
+    localStorage.setItem("auth_token", token);
+  } else {
+    localStorage.removeItem("auth_token");
+  }
+}
+
 // === Универсальная обёртка для fetch ===
-async function request(method, path, body) {
+async function request(method, path, body, requireAuth = false) {
   const url = `${API_BASE}${path}`;
   const options = {
     method,
     headers: { "Content-Type": "application/json" },
   };
+  
+  // Добавляем токен, если требуется аутентификация
+  if (requireAuth) {
+    const token = getToken();
+    if (token) {
+      options.headers["Authorization"] = `Bearer ${token}`;
+    }
+  }
+  
   if (body !== undefined) {
     options.body = JSON.stringify(body);
   }
@@ -22,12 +44,16 @@ async function request(method, path, body) {
   if (rawText) {
     try {
       parsed = JSON.parse(rawText);
-    } catch (e) {
+    } catch {
       // оставляем parsed = null
     }
   }
 
   if (!resp.ok) {
+    // Если 401, очищаем токен
+    if (resp.status === 401) {
+      setToken(null);
+    }
     const detail = parsed?.detail || parsed?.message || rawText || resp.statusText;
     const error = new Error(detail || "Ошибка запроса");
     error.status = resp.status;
@@ -47,14 +73,75 @@ export async function getTariffs() {
   return request("GET", "/api/tariffs");
 }
 
+// === Аутентификация ===
+export async function login(username, password) {
+  const resp = await fetch(`${API_BASE}/auth/login/json`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  
+  if (!resp.ok) {
+    const error = await resp.json().catch(() => ({}));
+    throw new Error(error.detail || "Ошибка входа");
+  }
+  
+  const data = await resp.json();
+  if (data.access_token) {
+    setToken(data.access_token);
+  }
+  return data;
+}
+
+export async function logout() {
+  setToken(null);
+}
+
+export async function getCurrentUser() {
+  return request("GET", "/auth/me", undefined, true);
+}
+
+export function isAuthenticated() {
+  return !!getToken();
+}
+
 export async function reloadAll() {
-  return request("POST", "/admin/reload", {});
+  return request("POST", "/admin/reload", {}, true);
 }
 
 export async function getQuote(payload) {
   const data = await request("POST", "/api/quote", payload);
   // если сервер возвращает объект с полем result, разворачиваем
   return data.result || data;
+}
+
+// === Orders (admin) ===
+export async function listOrders() {
+  return request("GET", "/admin/orders", undefined, true);
+}
+
+export async function getOrder(orderId) {
+  return request("GET", `/admin/orders/${orderId}`, undefined, true);
+}
+
+export async function confirmOrderFromQuote(snapshot) {
+  return request("POST", "/admin/orders/confirm", snapshot, true);
+}
+
+export async function rejectOrderForManual(snapshot) {
+  return request("POST", "/admin/orders/reject", snapshot, true);
+}
+
+export async function manualConfirmOrder(orderId, decision) {
+  return request("POST", `/admin/orders/${orderId}/manual_confirm`, decision, true);
+}
+
+export async function approveOrder(orderId, decision = {}) {
+  return request("POST", `/admin/orders/${orderId}/approve`, decision, true);
+}
+
+export async function declineOrder(orderId, decision = {}) {
+  return request("POST", `/admin/orders/${orderId}/decline`, decision, true);
 }
 
 
