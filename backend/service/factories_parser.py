@@ -11,7 +11,7 @@ SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
 CREDENTIALS_PATH = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
 
-def parse_google_sheet(ALLOWED_SHEETS=None):
+def parse_google_sheet(ALLOWED_SHEETS=None, include_vehicles: bool = False):
     """
     Загружает данные из Google Sheets и возвращает структуру:
     {
@@ -39,6 +39,9 @@ def parse_google_sheet(ALLOWED_SHEETS=None):
             continue
 
         if category_name.lower() == "vehicles":
+            if not include_vehicles:
+                print("⚙️ Пропускаем лист Vehicles — тарифы теперь редактируются в админке сайта")
+                continue
             vehicles = []
             for row in data[1:]:
                 if not any(row) or len(row) < 7:
@@ -77,8 +80,7 @@ def parse_google_sheet(ALLOWED_SHEETS=None):
             continue
 
         weights_row = data[0]
-        special_row = data[1]
-        max_row = data[2]
+        # DEPRECATED: больше не читаем special_threshold / max_per_trip (особый тариф и максимум на рейс)
         subtypes_row = data[3]
 
         col_start = 3
@@ -126,8 +128,8 @@ def parse_google_sheet(ALLOWED_SHEETS=None):
                     continue
 
                 weight_val = _to_float(weights_row[col])
-                special_val = _to_float(special_row[col])
-                max_val = _to_float(max_row[col])
+                special_val = 0.0
+                max_val = 0.0
 
                 category_items.append({
                     "category": category_name,

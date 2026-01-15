@@ -17,3 +17,7 @@ class QuoteRequest(BaseModel):
 
     add_manipulator: bool = Field(False, alias="addManipulator")
     selected_special: Optional[str] = Field(None, alias="selectedSpecial")
+
+    # Новый этап: выбор транспорта доставки/разгрузки
+    delivery_transport_tag: str = Field("auto", alias="deliveryTransportTag")
+    unloading_transport_tag: str = Field("auto", alias="unloadingTransportTag")

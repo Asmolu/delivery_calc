@@ -103,16 +103,61 @@ class Tariff(Base):
     name = Column(String(255), nullable=False)  # Название транспорта
     capacity = Column(Float, nullable=False)  # Грузоподъёмность (тонны)
     tag = Column(String(50), nullable=False, index=True)  # manipulator / long_haul / special
-    weight_if = Column(String(50), nullable=False, default="any")  # any, >20, ≤10 и т.д.
+    # DEPRECATED (legacy): строковое условие веса из Google Sheet (any, >20, ≤10 ...)
+    # Новый формат: weight_condition + weight_threshold
+    weight_if = Column(String(50), nullable=False, default="any")
+    # Новый формат веса: условие и порог (например: condition="le", threshold=20.0)
+    weight_condition = Column(String(10), nullable=False, default="any")  # any | le | gt
+    weight_threshold = Column(Float, nullable=True)  # null/0 => не используется
     min_distance = Column(Float, default=0.0)
     max_distance = Column(Float, default=0.0)
     base = Column(Float, nullable=False)  # Базовая цена
-    per_km = Column(Float, default=0.0)  # За каждый км
+    per_km = Column(Float, default=0.0)  # За каждый км после достижения max_distance (если разрешено)
+    # Ограничение по радиусу: если задано, транспорт нельзя использовать дальше этого расстояния
+    radius_limit_km = Column(Float, nullable=True)
+    # Координаты центра, от которого считается радиус (если задан radius_limit_km)
+    radius_center_lat = Column(Float, nullable=True)
+    radius_center_lon = Column(Float, nullable=True)
+    # Разделение транспорта: доставка vs разгрузка (будет расширяться)
+    service_type = Column(String(20), nullable=False, default="delivery")  # delivery | unloading
+    # Новый “тег”: самозагрузка (Y/N)
+    self_loading = Column(Boolean, nullable=False, default=False)
+    # Возможность разгрузки: (legacy single) кран / манипулятор / нельзя
+    unload_capability = Column(String(20), nullable=False, default="none")  # none | crane | manipulator
+    # Возможность разгрузки (multi): список тегов (например ["crane","manipulator"])
+    unload_tags = Column(JSON, nullable=True)
+    # Возможность отключать тариф без удаления
+    is_active = Column(Boolean, nullable=False, default=True)
     description = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
+
+    # Аудит: кто создал / кто последний изменил
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    updated_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    created_by = relationship("User", foreign_keys=[created_by_user_id])
+    updated_by = relationship("User", foreign_keys=[updated_by_user_id])
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class TariffChangeLog(Base):
+    __tablename__ = "tariff_change_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Не FK: хотим сохранять id даже после удаления тарифа
+    tariff_id = Column(Integer, nullable=True, index=True)
+    tariff_name = Column(String(255), nullable=True, index=True)
+
+    action = Column(String(20), nullable=False, index=True)  # create|update|delete
+    before = Column(JSON, nullable=True)
+    after = Column(JSON, nullable=True)
+
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    user = relationship("User")
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
 class OrderStatus(str, enum.Enum):

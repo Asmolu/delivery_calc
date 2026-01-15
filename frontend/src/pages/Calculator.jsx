@@ -16,12 +16,10 @@ export default function Calculator() {
   const [categories, setCategories] = useState({});
   const [items, setItems] = useState([{ category: "", subtype: "", quantity: 1 }]);
   const [coords, setCoords] = useState("");
-  const [transportType, setTransportType] = useState("auto");
+  const [deliveryTransportTag, setDeliveryTransportTag] = useState("auto");
+  const [unloadingTransportTag, setUnloadingTransportTag] = useState("auto");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [addManipulator, setAddManipulator] = useState(false);
-  const [selectedSpecial, setSelectedSpecial] = useState("");
-  const [specialVehicles, setSpecialVehicles] = useState([]);
   const [tariffs, setTariffs] = useState([]);
 
   const [currentUser, setCurrentUser] = useState(null);
@@ -34,6 +32,18 @@ export default function Calculator() {
   const [manualTransportName, setManualTransportName] = useState("");
   const [manualNotes, setManualNotes] = useState("");
 
+  const TRANSPORT_TAGS = React.useMemo(
+    () => [
+      { value: "auto", label: "Авто" },
+      { value: "container_carrier", label: "Контейнеровоз" },
+      { value: "long_haul", label: "Длинномер (шаланда)" },
+      { value: "flatbed", label: "Бортовой транспорт" },
+      { value: "manipulator", label: "Манипулятор" },
+      { value: "crane", label: "Кран" },
+    ],
+    []
+  );
+
   useEffect(() => {
     async function load() {
       const data = await getCategories();
@@ -43,27 +53,6 @@ export default function Calculator() {
         const res = await fetch(`${API_BASE}/api/tariffs`);
         const t = await res.json();
         setTariffs(Array.isArray(t) ? t : []);
-
-        // поддержка русских и английских ключей
-        const specials = (t || []).filter(
-          (t) => t.tag === "special" || t["тег"] === "special"
-        );
-
-        const uniqueSpecials = [];
-        const seenNames = new Set();
-
-        for (const t of specials) {
-          const name = t.name || t["название"];
-          if (!seenNames.has(name)) {
-            seenNames.add(name);
-            uniqueSpecials.push({
-              name,
-              tag: t.tag || t["тег"],
-            });
-          }
-        }
-
-        setSpecialVehicles(uniqueSpecials);
       } catch (err) {
         console.error("Ошибка загрузки тарифов:", err);
       }
@@ -127,9 +116,9 @@ export default function Calculator() {
       const payload = {
         upload_lat: lat,
         upload_lon: lon,
-        transport_type: transportType,
-        addManipulator,
-        selectedSpecial,
+        transport_type: "auto",
+        deliveryTransportTag: deliveryTransportTag,
+        unloadingTransportTag: unloadingTransportTag,
         items: items.map((it) => ({
           category: it.category,
           subtype: it.subtype,
@@ -306,53 +295,38 @@ export default function Calculator() {
 
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
-              <label className="block mb-2 text-sm font-semibold text-slate-700">Тип транспорта</label>
+              <label className="block mb-2 text-sm font-semibold text-slate-700">Выберете транспорт доставки</label>
               <select
-                value={transportType}
-                onChange={(e) => setTransportType(e.target.value)}
+                value={deliveryTransportTag}
+                onChange={(e) => setDeliveryTransportTag(e.target.value)}
                 className="w-full px-3 py-3 rounded-lg bg-white border border-slate-200 text-slate-800 shadow-sm"
               >
-                <option value="auto">Автоматически</option>
-                <option value="manipulator">Манипулятор</option>
-                <option value="long_haul">Длинномер</option>
+                {TRANSPORT_TAGS.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
               </select>
             </div>
-            <div className="space-y-3">
-              <label className="block text-sm font-semibold text-slate-700">Дополнительно</label>
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={addManipulator}
-                  onChange={(e) => setAddManipulator(e.target.checked)}
-                  className="w-4 h-4 accent-indigo-600"
-                />
-                <span>Обязательный +1 манипулятор</span>
-              </label>
-
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-slate-600">🛠 Спецтранспорт:</span>
-                <select
-                  value={selectedSpecial}
-                  onChange={(e) => setSelectedSpecial(e.target.value)}
-                  className="bg-white text-slate-800 rounded-lg px-3 py-2 border border-slate-200"
-                >
-                  <option value="">Не выбирать</option>
-                  {specialVehicles.map((v) => (
-                    <option key={v.name} value={v.name}>
-                      {v.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label className="block mb-2 text-sm font-semibold text-slate-700">Выберете транспорт разгрузки</label>
+              <select
+                value={unloadingTransportTag}
+                onChange={(e) => setUnloadingTransportTag(e.target.value)}
+                className="w-full px-3 py-3 rounded-lg bg-white border border-slate-200 text-slate-800 shadow-sm"
+              >
+                {TRANSPORT_TAGS.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
 
         <div className="card-glass p-5 md:p-6">
           <h3 className="text-lg font-semibold mb-3">Товары</h3>
-          <p className="text-sm text-slate-600 mb-3">
-            Можно добавлять несколько строк, система рассчётит комбинированные перевозки.
-          </p>
           <div className="space-y-3">
             {items.map((it, i) => (
               <div

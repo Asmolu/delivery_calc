@@ -4,8 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from backend.core.data_loader import (
-    rebuild_factories_and_tariffs_from_google,
     load_factories_and_tariffs,
+    load_factories_from_google,
 )
 from backend.core.logger import get_logger
 
@@ -44,20 +44,39 @@ async def startup_event():
     log.info("✅ Database initialized")
 
     # Создание администратора по умолчанию
-    from backend.core.db_migration import create_default_admin, ensure_catalog_normalization
+    from backend.core.db_migration import (
+        create_default_admin,
+        ensure_catalog_normalization,
+        ensure_tariffs_schema,
+        migrate_tariffs,
+    )
     db = SessionLocal()
     try:
         ensure_catalog_normalization(db)
+        ensure_tariffs_schema(db)
         create_default_admin(db)
     finally:
         db.close()
 
-    # Пересоздание данных из Google Sheets в БД
+    # Пересоздание товаров/заводов из Google Sheets в БД
     db = SessionLocal()
     try:
         ensure_catalog_normalization(db)
-        rebuild_factories_and_tariffs_from_google(GOOGLE_SHEET_ID, db)
-        
+        ensure_tariffs_schema(db)
+
+        # ВАЖНО: тарифы (машины) больше НЕ читаем из Google Sheets.
+        # Обновляем только factories/products.
+        load_factories_from_google(db)
+
+        # Если тарифов ещё нет в БД — подтянем стартовый набор из backend/storage/tariffs.json (если есть).
+        # Это не Google Sheets и нужно только для первого запуска.
+        from backend.models.db_models import Tariff
+        if (db.query(Tariff).count() or 0) == 0:
+            try:
+                migrate_tariffs(db)
+            except Exception as e:
+                log.warning("⚠️ Не удалось импортировать tariffs из JSON: %s", e)
+
         # Проверим, что данные загружены
         factories, tariffs = load_factories_and_tariffs(db)
         log.info(f"✅ Данные загружены: {len(factories)} категорий товаров, {len(tariffs)} тарифов")

@@ -8,11 +8,10 @@ from sqlalchemy.orm import Session
 from ..core.logger import get_logger
 from ..core.database import get_db
 from ..core.auth import require_admin
-from ..core.db_migration import ensure_catalog_normalization
-from ..models.db_models import Category, Factory, Order, OrderEvent, OrderStatus, Product, User
+from ..core.db_migration import ensure_catalog_normalization, ensure_tariffs_schema
+from ..models.db_models import Category, Factory, Order, OrderEvent, OrderStatus, Product, Tariff, TariffChangeLog, User
 from ..core.data_loader import (
     load_factories_from_google,
-    load_tariffs_from_google,
 )
 
 router = APIRouter()
@@ -27,18 +26,21 @@ async def admin_reload(
     db: Session = Depends(get_db)
 ):
     """
-    🔄 Перезагрузка и factories, и tariffs из Google Sheets в БД.
+    🔄 Перезагрузка factories (товары/заводы) из Google Sheets в БД.
+
+    ВАЖНО: тарифы (машины) больше не читаются из Google Sheets.
     """
     try:
         ensure_catalog_normalization(db)
-        log.info("Запуск полного обновления данных из Google Sheets...")
+        ensure_tariffs_schema(db)
+        log.info("Запуск обновления factories из Google Sheets...")
         factories = load_factories_from_google(db)
-        tariffs_result = load_tariffs_from_google(db)
+        tariffs_count = db.query(Tariff).count()
 
         return JSONResponse(
             content={
                 "factories_count": len(factories),
-                "tariffs": tariffs_result,
+                "tariffs_count": tariffs_count,
             }
         )
     except Exception as e:
@@ -59,6 +61,7 @@ async def admin_reload_factories(
 ):
     try:
         ensure_catalog_normalization(db)
+        ensure_tariffs_schema(db)
         log.info("Обновление factories из Google Sheets...")
         factories = load_factories_from_google(db)
         return JSONResponse(
@@ -80,20 +83,8 @@ async def admin_reload_tariffs(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    try:
-        ensure_catalog_normalization(db)
-        log.info("Обновление tariffs из Google Sheets...")
-        result = load_tariffs_from_google(db)
-        return JSONResponse(content=result)
-    except Exception as e:
-        import traceback
-
-        traceback.print_exc()
-        log.error("Ошибка при обновлении tariffs: %s", e)
-        return JSONResponse(
-            status_code=500,
-            content={"detail": f"Ошибка при обновлении тарифов: {e}"},
-        )
+    # Исторический эндпоинт — теперь тарифы редактируются в админке сайта.
+    raise HTTPException(status_code=410, detail="Тарифы больше не загружаются из Google Sheets. Используйте /admin/tariffs.")
 
 
 # === Будущее редактирование каталога (валидация на уровне API) ===============
@@ -107,9 +98,84 @@ class ProductUpsert(BaseModel):
     category_id: int
     subtype: str = Field(..., min_length=1, max_length=255)
     weight_per_item: float = 0.0
+    # DEPRECATED: больше не используем в расчёте (оставлено для обратной совместимости)
     special_threshold: float = 0.0
+    # DEPRECATED: больше не используем в расчёте (оставлено для обратной совместимости)
     max_per_trip: float = 0.0
     price: float = 0.0
+
+
+class TariffUpsert(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    capacity: float = Field(..., ge=0.0)
+    tag: str = Field(..., pattern="^(container_carrier|long_haul|flatbed|manipulator|crane)$")
+
+    # Весовое условие (новый формат)
+    weight_condition: str = Field("any", pattern="^(any|le|gt)$")
+    weight_threshold: float | None = Field(None, ge=0.0)
+
+    # Диапазон дистанции
+    min_distance: float = Field(0.0, ge=0.0)
+    max_distance: float = Field(0.0, ge=0.0)
+
+    # Цена в диапазоне + цена за км после max_distance (если это “последний” диапазон)
+    base: float = Field(..., ge=0.0)
+    per_km: float = Field(0.0, ge=0.0)
+
+    # Ограничение по радиусу
+    radius_limit_km: float | None = Field(None, ge=0.0)
+    radius_center_lat: float | None = None
+    radius_center_lon: float | None = None
+
+    # Разделение на доставку/разгрузку
+    service_type: str = Field("delivery", pattern="^(delivery|unloading)$")
+
+    # Самозагрузка
+    self_loading: bool = False
+
+    # Возможность разгрузки (multi)
+    unload_tags: list[str] = Field(default_factory=list)
+    # legacy single-field (если кто-то ещё шлёт старый payload)
+    unload_capability: str = Field("none", pattern="^(none|crane|manipulator)$")
+
+    is_active: bool = True
+    description: str | None = None
+    notes: str | None = None
+
+
+class DeliveryRangeUpsert(BaseModel):
+    min_distance: float = Field(0.0, ge=0.0)
+    max_distance: float = Field(0.0, ge=0.0)
+    base: float = Field(..., ge=0.0)
+
+
+class WeightBlockUpsert(BaseModel):
+    weight_condition: str = Field("any", pattern="^(any|le|gt)$")
+    weight_threshold: float | None = Field(None, ge=0.0)
+    per_km: float = Field(0.0, ge=0.0)  # общий per_km для всех диапазонов доставки
+    delivery_ranges: list[DeliveryRangeUpsert] = Field(default_factory=list)
+    unloading_price: float | None = Field(None, ge=0.0)  # фикс цена разгрузки (если включено)
+
+
+class TransportCardUpsert(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    capacity: float = Field(..., ge=0.0)
+    tag: str = Field(..., pattern="^(container_carrier|long_haul|flatbed|manipulator|crane)$")
+
+    # радиус
+    radius_limit_km: float | None = Field(None, ge=0.0)
+    radius_center_lat: float | None = None
+    radius_center_lon: float | None = None
+
+    unload_tags: list[str] = Field(default_factory=list)  # multi
+    is_active: bool = True
+    description: str | None = None
+    notes: str | None = None
+
+    enable_delivery: bool = True
+    enable_unloading: bool = False
+
+    weight_blocks: list[WeightBlockUpsert] = Field(default_factory=list)
 
 
 class OrderCreateFromQuote(BaseModel):
@@ -306,6 +372,438 @@ async def admin_update_product(
     db.commit()
     db.refresh(product)
     return {"id": product.id}
+
+
+# === Тарифы/машины (admin-only) ==============================================
+
+def _tariff_to_dict(t: Tariff) -> dict:
+    return {
+        "id": t.id,
+        "name": t.name,
+        "capacity": t.capacity,
+        "tag": t.tag,
+        "weight_condition": t.weight_condition,
+        "weight_threshold": t.weight_threshold,
+        "min_distance": t.min_distance,
+        "max_distance": t.max_distance,
+        "base": t.base,
+        "per_km": t.per_km,
+        "radius_limit_km": t.radius_limit_km,
+        "radius_center_lat": getattr(t, "radius_center_lat", None),
+        "radius_center_lon": getattr(t, "radius_center_lon", None),
+        "service_type": t.service_type,
+        "self_loading": bool(t.self_loading),
+        "unload_capability": t.unload_capability,
+        "unload_tags": getattr(t, "unload_tags", None),
+        "is_active": bool(t.is_active),
+        "description": t.description,
+        "notes": t.notes,
+        "createdAt": t.created_at.isoformat() if getattr(t, "created_at", None) else None,
+        "updatedAt": t.updated_at.isoformat() if getattr(t, "updated_at", None) else None,
+        "createdBy": (t.created_by.username if getattr(t, "created_by", None) else None),
+        "updatedBy": (t.updated_by.username if getattr(t, "updated_by", None) else None),
+        # legacy, чтобы старый фронт не ломался
+        "название": t.name,
+        "грузоподъёмность": t.capacity,
+        "weight_if": t.weight_if,
+        "описание": t.description or "",
+        "заметки": t.notes or "",
+    }
+
+
+def _tariff_snapshot(t: Tariff) -> dict:
+    """Снимок тарифа для аудит-логов (без legacy дублей)."""
+    return {
+        "id": t.id,
+        "name": t.name,
+        "capacity": t.capacity,
+        "tag": t.tag,
+        "weight_condition": t.weight_condition,
+        "weight_threshold": t.weight_threshold,
+        "min_distance": t.min_distance,
+        "max_distance": t.max_distance,
+        "base": t.base,
+        "per_km": t.per_km,
+        "radius_limit_km": t.radius_limit_km,
+        "radius_center_lat": getattr(t, "radius_center_lat", None),
+        "radius_center_lon": getattr(t, "radius_center_lon", None),
+        "service_type": t.service_type,
+        "self_loading": bool(t.self_loading),
+        "unload_capability": t.unload_capability,
+        "unload_tags": getattr(t, "unload_tags", None),
+        "is_active": bool(t.is_active),
+        "description": t.description,
+        "notes": t.notes,
+    }
+
+
+@router.get("/admin/tariffs")
+async def admin_list_tariffs(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    ensure_tariffs_schema(db)
+    tariffs = db.query(Tariff).order_by(Tariff.name.asc(), Tariff.min_distance.asc(), Tariff.max_distance.asc()).all()
+    return [_tariff_to_dict(t) for t in tariffs]
+
+
+@router.post("/admin/tariffs")
+async def admin_create_tariff(
+    payload: TariffUpsert,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    ensure_tariffs_schema(db)
+
+    if payload.weight_condition != "any" and payload.weight_threshold is None:
+        raise HTTPException(status_code=400, detail="weight_threshold обязателен, если weight_condition != any")
+
+    allowed_unload = {"crane", "manipulator", "self"}
+    unload_tags = [str(x).strip().lower() for x in (payload.unload_tags or []) if str(x).strip()]
+    unload_tags = [x for x in unload_tags if x in allowed_unload]
+    # legacy fallback
+    if not unload_tags and payload.unload_capability in allowed_unload:
+        unload_tags = [payload.unload_capability]
+
+    t = Tariff(
+        name=payload.name.strip(),
+        capacity=float(payload.capacity),
+        tag=payload.tag.strip().lower(),
+        weight_condition=payload.weight_condition,
+        weight_threshold=payload.weight_threshold,
+        # legacy weight_if — заполняем для совместимости и читаемости
+        weight_if="any" if payload.weight_condition == "any" else (f"≤{payload.weight_threshold}" if payload.weight_condition == "le" else f">{payload.weight_threshold}"),
+        min_distance=float(payload.min_distance),
+        max_distance=float(payload.max_distance),
+        base=float(payload.base),
+        per_km=float(payload.per_km),
+        radius_limit_km=payload.radius_limit_km,
+        radius_center_lat=payload.radius_center_lat,
+        radius_center_lon=payload.radius_center_lon,
+        service_type=payload.service_type,
+        self_loading=bool(payload.self_loading),
+        unload_capability=(unload_tags[0] if unload_tags else "none"),
+        unload_tags=(unload_tags or None),
+        is_active=bool(payload.is_active),
+        description=(payload.description or "").strip() or None,
+        notes=(payload.notes or "").strip() or None,
+        created_by_user_id=current_user.id,
+        updated_by_user_id=current_user.id,
+    )
+    db.add(t)
+    db.commit()
+    db.refresh(t)
+
+    db.add(
+        TariffChangeLog(
+            tariff_id=t.id,
+            tariff_name=t.name,
+            action="create",
+            before=None,
+            after=_tariff_snapshot(t),
+            user_id=current_user.id,
+        )
+    )
+    db.commit()
+    return _tariff_to_dict(t)
+
+
+@router.put("/admin/tariffs/{tariff_id}")
+async def admin_update_tariff(
+    tariff_id: int,
+    payload: TariffUpsert,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    allowed_unload = {"crane", "manipulator", "self"}
+    unload_tags = [str(x).strip().lower() for x in (payload.unload_tags or []) if str(x).strip()]
+    unload_tags = [x for x in unload_tags if x in allowed_unload]
+    if not unload_tags and payload.unload_capability in allowed_unload:
+        unload_tags = [payload.unload_capability]
+
+    ensure_tariffs_schema(db)
+    t = db.query(Tariff).filter(Tariff.id == tariff_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Тариф не найден")
+
+    before = _tariff_snapshot(t)
+
+    if payload.weight_condition != "any" and payload.weight_threshold is None:
+        raise HTTPException(status_code=400, detail="weight_threshold обязателен, если weight_condition != any")
+
+    t.name = payload.name.strip()
+    t.capacity = float(payload.capacity)
+    t.tag = payload.tag.strip().lower()
+    t.weight_condition = payload.weight_condition
+    t.weight_threshold = payload.weight_threshold
+    t.weight_if = "any" if payload.weight_condition == "any" else (f"≤{payload.weight_threshold}" if payload.weight_condition == "le" else f">{payload.weight_threshold}")
+    t.min_distance = float(payload.min_distance)
+    t.max_distance = float(payload.max_distance)
+    t.base = float(payload.base)
+    t.per_km = float(payload.per_km)
+    t.radius_limit_km = payload.radius_limit_km
+    t.radius_center_lat = payload.radius_center_lat
+    t.radius_center_lon = payload.radius_center_lon
+    t.service_type = payload.service_type
+    t.self_loading = bool(payload.self_loading)
+    t.unload_capability = (unload_tags[0] if unload_tags else "none")
+    t.unload_tags = (unload_tags or None)
+    t.is_active = bool(payload.is_active)
+    t.description = (payload.description or "").strip() or None
+    t.notes = (payload.notes or "").strip() or None
+    t.updated_by_user_id = current_user.id
+
+    db.commit()
+    db.refresh(t)
+
+    db.add(
+        TariffChangeLog(
+            tariff_id=t.id,
+            tariff_name=t.name,
+            action="update",
+            before=before,
+            after=_tariff_snapshot(t),
+            user_id=current_user.id,
+        )
+    )
+    db.commit()
+    return _tariff_to_dict(t)
+
+
+@router.delete("/admin/tariffs/{tariff_id}")
+async def admin_delete_tariff(
+    tariff_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    ensure_tariffs_schema(db)
+    t = db.query(Tariff).filter(Tariff.id == tariff_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Тариф не найден")
+
+    before = _tariff_snapshot(t)
+    db.add(
+        TariffChangeLog(
+            tariff_id=t.id,
+            tariff_name=t.name,
+            action="delete",
+            before=before,
+            after=None,
+            user_id=current_user.id,
+        )
+    )
+    db.commit()
+    db.delete(t)
+    db.commit()
+    return {"status": "ok"}
+
+
+@router.get("/admin/tariffs/audit")
+async def admin_tariffs_audit(
+    limit: int = 200,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    ensure_tariffs_schema(db)
+    limit = max(1, min(int(limit or 200), 500))
+    rows = (
+        db.query(TariffChangeLog)
+        .order_by(TariffChangeLog.created_at.desc(), TariffChangeLog.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "id": r.id,
+            "action": r.action,
+            "tariffId": r.tariff_id,
+            "tariffName": r.tariff_name,
+            "user": ({"id": r.user.id, "username": r.user.username} if r.user else None),
+            "createdAt": (r.created_at.isoformat() if r.created_at else None),
+            "before": r.before,
+            "after": r.after,
+        }
+        for r in rows
+    ]
+
+
+@router.post("/admin/transports/upsert")
+async def admin_upsert_transport_card(
+    payload: TransportCardUpsert,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Пакетное сохранение "карточки транспорта":
+    - общие поля (name/capacity/tag/радиус/теги разгрузки/активность/описание/заметки)
+    - 1-2 весовых условия, каждое со своими диапазонами доставки и (опционально) ценой разгрузки
+    """
+    ensure_tariffs_schema(db)
+
+    name = payload.name.strip()
+    tag = payload.tag.strip().lower()
+
+    if payload.radius_limit_km and (payload.radius_limit_km or 0) > 0:
+        if payload.radius_center_lat is None or payload.radius_center_lon is None:
+            raise HTTPException(status_code=400, detail="Для radius_limit_km нужно указать radius_center_lat/lon")
+
+    allowed_unload = {"crane", "manipulator", "self"}
+    unload_tags = [str(x).strip().lower() for x in (payload.unload_tags or []) if str(x).strip()]
+    unload_tags = [x for x in unload_tags if x in allowed_unload]
+    unload_capability = (unload_tags[0] if unload_tags else "none")
+
+    blocks = payload.weight_blocks or []
+    if not blocks:
+        # по умолчанию одно "any" условие
+        blocks = [WeightBlockUpsert()]
+
+    # validate blocks
+    if payload.enable_delivery:
+        for b in blocks:
+            if b.weight_condition != "any" and b.weight_threshold is None:
+                raise HTTPException(status_code=400, detail="weight_threshold обязателен для le/gt")
+            if not (b.delivery_ranges or []):
+                raise HTTPException(status_code=400, detail="Нужно добавить хотя бы один диапазон доставки")
+
+    # before snapshot for audit
+    existing = db.query(Tariff).filter(Tariff.name == name, Tariff.tag == tag).all()
+    before = [_tariff_snapshot(t) for t in existing]
+
+    # delete existing rows
+    if existing:
+        for t in existing:
+            db.delete(t)
+        db.commit()
+
+    created_rows: list[Tariff] = []
+
+    def _legacy_weight_if(cond: str, thr: float | None) -> str:
+        if cond == "any":
+            return "any"
+        if cond == "le":
+            return f"≤{thr}"
+        if cond == "gt":
+            return f">{thr}"
+        return "any"
+
+    for b in blocks:
+        cond = (b.weight_condition or "any").strip().lower()
+        thr = b.weight_threshold
+
+        # delivery rows
+        if payload.enable_delivery:
+            for dr in (b.delivery_ranges or []):
+                t = Tariff(
+                    name=name,
+                    capacity=float(payload.capacity),
+                    tag=tag,
+                    weight_condition=cond,
+                    weight_threshold=thr,
+                    weight_if=_legacy_weight_if(cond, thr),
+                    min_distance=float(dr.min_distance),
+                    max_distance=float(dr.max_distance),
+                    base=float(dr.base),
+                    per_km=float(b.per_km or 0.0),
+                    radius_limit_km=payload.radius_limit_km,
+                    radius_center_lat=payload.radius_center_lat,
+                    radius_center_lon=payload.radius_center_lon,
+                    service_type="delivery",
+                    self_loading=False,
+                    unload_capability=unload_capability,
+                    unload_tags=(unload_tags or None),
+                    is_active=bool(payload.is_active),
+                    description=(payload.description or "").strip() or None,
+                    notes=(payload.notes or "").strip() or None,
+                    created_by_user_id=current_user.id,
+                    updated_by_user_id=current_user.id,
+                )
+                db.add(t)
+                created_rows.append(t)
+
+        # unloading row (fixed)
+        if payload.enable_unloading and b.unloading_price and (b.unloading_price or 0) > 0:
+            t = Tariff(
+                name=name,
+                capacity=float(payload.capacity),
+                tag=tag,
+                weight_condition=cond,
+                weight_threshold=thr,
+                weight_if=_legacy_weight_if(cond, thr),
+                min_distance=0.0,
+                max_distance=0.0,
+                base=float(b.unloading_price),
+                per_km=0.0,
+                radius_limit_km=payload.radius_limit_km,
+                radius_center_lat=payload.radius_center_lat,
+                radius_center_lon=payload.radius_center_lon,
+                service_type="unloading",
+                self_loading=False,
+                unload_capability=unload_capability,
+                unload_tags=(unload_tags or None),
+                is_active=bool(payload.is_active),
+                description=(payload.description or "").strip() or None,
+                notes=(payload.notes or "").strip() or None,
+                created_by_user_id=current_user.id,
+                updated_by_user_id=current_user.id,
+            )
+            db.add(t)
+            created_rows.append(t)
+
+    db.commit()
+
+    after_rows = db.query(Tariff).filter(Tariff.name == name, Tariff.tag == tag).all()
+    after = [_tariff_snapshot(t) for t in after_rows]
+
+    db.add(
+        TariffChangeLog(
+            tariff_id=None,
+            tariff_name=name,
+            action="bulk_upsert",
+            before=before,
+            after=after,
+            user_id=current_user.id,
+        )
+    )
+    db.commit()
+
+    return [_tariff_to_dict(t) for t in after_rows]
+
+
+@router.delete("/admin/transports")
+async def admin_delete_transport(
+    name: str,
+    tag: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    ensure_tariffs_schema(db)
+    nm = (name or "").strip()
+    tg = (tag or "").strip().lower()
+    if not nm or not tg:
+        raise HTTPException(status_code=400, detail="name и tag обязательны")
+
+    rows = db.query(Tariff).filter(Tariff.name == nm, Tariff.tag == tg).all()
+    if not rows:
+        return {"status": "ok", "deleted": 0}
+
+    before = [_tariff_snapshot(t) for t in rows]
+    deleted = 0
+    for t in rows:
+        db.delete(t)
+        deleted += 1
+    db.commit()
+
+    db.add(
+        TariffChangeLog(
+            tariff_id=None,
+            tariff_name=nm,
+            action="bulk_delete",
+            before=before,
+            after=None,
+            user_id=current_user.id,
+        )
+    )
+    db.commit()
+    return {"status": "ok", "deleted": deleted}
 
 
 # === Заказы (admin-only) =====================================================

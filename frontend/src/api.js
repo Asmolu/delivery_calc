@@ -109,6 +109,36 @@ export async function reloadAll() {
   return request("POST", "/admin/reload", {}, true);
 }
 
+// === Tariffs (admin) ===
+export async function adminListTariffs() {
+  return request("GET", "/admin/tariffs", undefined, true);
+}
+
+export async function adminCreateTariff(payload) {
+  return request("POST", "/admin/tariffs", payload, true);
+}
+
+export async function adminUpdateTariff(tariffId, payload) {
+  return request("PUT", `/admin/tariffs/${tariffId}`, payload, true);
+}
+
+export async function adminDeleteTariff(tariffId) {
+  return request("DELETE", `/admin/tariffs/${tariffId}`, undefined, true);
+}
+
+export async function adminListTariffAudit(limit = 200) {
+  return request("GET", `/admin/tariffs/audit?limit=${encodeURIComponent(String(limit))}`, undefined, true);
+}
+
+export async function adminUpsertTransportCard(payload) {
+  return request("POST", "/admin/transports/upsert", payload, true);
+}
+
+export async function adminDeleteTransportCard(name, tag) {
+  const qs = `name=${encodeURIComponent(String(name || ""))}&tag=${encodeURIComponent(String(tag || ""))}`;
+  return request("DELETE", `/admin/transports?${qs}`, undefined, true);
+}
+
 export async function getQuote(payload) {
   const data = await request("POST", "/api/quote", payload);
   // если сервер возвращает объект с полем result, разворачиваем

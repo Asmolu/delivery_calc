@@ -41,8 +41,6 @@ def build_factory_scenarios(factories_products: dict, items: list):
                 "category": category,
                 "subtype": product.get("subtype"),
                 "weight_per_item": product.get("weight_per_item"),
-                "special_threshold": product.get("special_threshold"),
-                "max_per_trip": product.get("max_per_trip"),
                 "price": factory.get("price"),
             })
 
@@ -201,8 +199,6 @@ def build_factory_scenarios_v2(
                     "quantity": item_quantity,
                     "price_per_item": price_per_item,
                     "weight_per_item": weight_per_item,
-                    "special_threshold": prod.get("special_threshold") or 0.0,
-                    "max_per_trip": prod.get("max_per_trip") or 0.0,
                     "lat": factory_info.get("lat"),
                     "lon": factory_info.get("lon"),
                     "weight_total": weight_total,

@@ -108,15 +108,29 @@ def _save_tariffs_to_db(db: Session, tariffs: list) -> None:
     db.commit()
     
     for tariff_data in tariffs:
+        weight_condition = (tariff_data.get("weight_condition") or "any").strip().lower()
+        weight_threshold = tariff_data.get("weight_threshold", None)
+        if weight_condition not in ("any", "le", "gt"):
+            # legacy fallback
+            weight_condition = "any"
+            weight_threshold = None
+
         tariff = Tariff(
             name=tariff_data.get("название", ""),
             capacity=tariff_data.get("грузоподъёмность", 0.0),
             tag=tariff_data.get("tag", ""),
             weight_if=tariff_data.get("weight_if", "any"),
+            weight_condition=weight_condition,
+            weight_threshold=weight_threshold,
             min_distance=tariff_data.get("min_distance", 0.0),
             max_distance=tariff_data.get("max_distance", 0.0),
             base=tariff_data.get("base", 0.0),
             per_km=tariff_data.get("per_km", 0.0),
+            radius_limit_km=tariff_data.get("radius_limit_km", None),
+            service_type=(tariff_data.get("service_type") or "delivery"),
+            self_loading=bool(tariff_data.get("self_loading", False)),
+            unload_capability=(tariff_data.get("unload_capability") or "none"),
+            is_active=bool(tariff_data.get("is_active", True)),
             description=tariff_data.get("описание", ""),
             notes=tariff_data.get("заметки", "")
         )
@@ -146,19 +160,12 @@ def load_factories_from_google(db: Session = None):
 
 
 def load_tariffs_from_google(db: Session = None):
-    """Загружает тарифы из Google Sheets и сохраняет их в БД и JSON."""
-    result = parse_google_sheet()
-    tariffs = result.get("tariffs", [])
+    """DEPRECATED: тарифы больше не загружаются из Google Sheets.
 
-    # Сохраняем в БД, если сессия предоставлена
-    if db:
-        _save_tariffs_to_db(db, tariffs)
-    
-    # Также сохраняем в JSON для обратной совместимости
-    _save_tariffs(tariffs)
-    log.info("✅ Обновлены tariffs из Google Sheets (%s тарифов)", len(tariffs))
-
-    return tariffs
+    Тарифы (машины) теперь создаются/редактируются через админку сайта.
+    """
+    log.warning("⚠️ load_tariffs_from_google вызван, но тарифы из Google Sheets больше не поддерживаются")
+    return []
 
 
 
@@ -174,26 +181,21 @@ def rebuild_factories_and_tariffs_from_google(google_sheet_id: str, db: Session 
             f"(GOOGLE_SHEET_ID={google_sheet_id})"
         )
 
-        # Парсим таблицу
+        # Парсим таблицу (ВАЖНО: Vehicles больше не трогаем)
         result = parse_google_sheet()
         factories_products = result.get("products", {})
-        tariffs = result.get("tariffs", [])
 
         # Сохраняем в БД, если сессия предоставлена
         if db:
             _save_factories_to_db(db, factories_products)
-            _save_tariffs_to_db(db, tariffs)
 
         # Также сохраняем в JSON для обратной совместимости
         os.makedirs(STORAGE_PATH, exist_ok=True)
         with open(FACTORIES_FILE, "w", encoding="utf-8") as f:
             json.dump(factories_products, f, ensure_ascii=False, indent=2)
-        with open(TARIFFS_FILE, "w", encoding="utf-8") as f:
-            json.dump(tariffs, f, ensure_ascii=False, indent=2)
-
         log.info(
             f"✅ Успешно обновлены данные: "
-            f"{len(factories_products)} категорий товаров, {len(tariffs)} тарифов."
+            f"{len(factories_products)} категорий товаров."
         )
 
     except Exception as e:
@@ -235,14 +237,25 @@ def load_factories_and_tariffs_from_db(db: Session) -> Tuple[Dict, List]:
     
     for tariff in tariffs_db:
         tariffs.append({
+            "id": tariff.id,
             "название": tariff.name,
             "грузоподъёмность": tariff.capacity,
             "tag": tariff.tag,
             "weight_if": tariff.weight_if,
+            "weight_condition": getattr(tariff, "weight_condition", "any") or "any",
+            "weight_threshold": getattr(tariff, "weight_threshold", None),
             "min_distance": tariff.min_distance,
             "max_distance": tariff.max_distance,
             "base": tariff.base,
             "per_km": tariff.per_km,
+            "radius_limit_km": getattr(tariff, "radius_limit_km", None),
+            "radius_center_lat": getattr(tariff, "radius_center_lat", None),
+            "radius_center_lon": getattr(tariff, "radius_center_lon", None),
+            "service_type": getattr(tariff, "service_type", "delivery") or "delivery",
+            "self_loading": bool(getattr(tariff, "self_loading", False)),
+            "unload_capability": getattr(tariff, "unload_capability", "none") or "none",
+            "unload_tags": getattr(tariff, "unload_tags", None),
+            "is_active": bool(getattr(tariff, "is_active", True)),
             "описание": tariff.description or "",
             "заметки": tariff.notes or ""
         })
@@ -259,8 +272,12 @@ def load_factories_and_tariffs(db: Session = None):
     if db:
         try:
             factories_products, tariffs = load_factories_and_tariffs_from_db(db)
-            if factories_products and tariffs:
-                log.info(f"✅ Загружено из БД: {len(factories_products)} категорий, {len(tariffs)} тарифов")
+            # В новом этапе тарифы могут быть пустыми (их создают в админке),
+            # поэтому не требуем, чтобы оба набора были непустыми.
+            if factories_products or tariffs:
+                log.info(
+                    f"✅ Загружено из БД: {len(factories_products)} категорий, {len(tariffs)} тарифов"
+                )
                 return factories_products, tariffs
         except Exception as e:
             log.warning(f"⚠️ Не удалось загрузить из БД: {e}, пробуем JSON")

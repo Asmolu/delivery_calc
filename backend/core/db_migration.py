@@ -6,7 +6,7 @@ import os
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 from backend.core.database import SessionLocal, init_db
-from backend.models.db_models import Category, Factory, Product, Tariff
+from backend.models.db_models import Category, Factory, Product, Tariff, TariffChangeLog
 from backend.core.logger import get_logger
 
 log = get_logger("db_migration")
@@ -105,15 +105,45 @@ def migrate_tariffs(db: Session):
     db.commit()
     
     for tariff_data in tariffs:
+        # legacy weight_if parsing: "≤20", ">20", "any"
+        weight_if = tariff_data.get("weight_if", "any") or "any"
+        weight_condition = (tariff_data.get("weight_condition") or "").strip().lower()
+        weight_threshold = tariff_data.get("weight_threshold", None)
+        if not weight_condition:
+            s = str(weight_if).strip().lower().replace(" ", "")
+            if s in ("", "any", "все", "любая", "-"):
+                weight_condition, weight_threshold = "any", None
+            elif s.startswith(("≤", "<=")):
+                weight_condition = "le"
+                try:
+                    weight_threshold = float(s.replace("≤", "").replace("<=", "") or 0) or None
+                except Exception:
+                    weight_threshold = None
+            elif s.startswith((">",)):
+                weight_condition = "gt"
+                try:
+                    weight_threshold = float(s.replace(">", "") or 0) or None
+                except Exception:
+                    weight_threshold = None
+            else:
+                weight_condition, weight_threshold = "any", None
+
         tariff = Tariff(
             name=tariff_data.get("название", ""),
             capacity=tariff_data.get("грузоподъёмность", 0.0),
             tag=tariff_data.get("tag", ""),
-            weight_if=tariff_data.get("weight_if", "any"),
+            weight_if=weight_if,
+            weight_condition=weight_condition or "any",
+            weight_threshold=weight_threshold,
             min_distance=tariff_data.get("min_distance", 0.0),
             max_distance=tariff_data.get("max_distance", 0.0),
             base=tariff_data.get("base", 0.0),
             per_km=tariff_data.get("per_km", 0.0),
+            radius_limit_km=tariff_data.get("radius_limit_km", None),
+            service_type=(tariff_data.get("service_type") or "delivery"),
+            self_loading=bool(tariff_data.get("self_loading", False)),
+            unload_capability=(tariff_data.get("unload_capability") or "none"),
+            is_active=bool(tariff_data.get("is_active", True)),
             description=tariff_data.get("описание", ""),
             notes=tariff_data.get("заметки", "")
         )
@@ -162,6 +192,7 @@ def run_migration():
     db = SessionLocal()
     try:
         ensure_catalog_normalization(db)
+        ensure_tariffs_schema(db)
         
         # Создаём администратора
         create_default_admin(db)
@@ -259,6 +290,74 @@ def ensure_catalog_normalization(db: Session) -> None:
         except Exception as e:
             db.rollback()
             log.warning("⚠️ Не удалось создать индексы products: %s", e)
+
+
+def ensure_tariffs_schema(db: Session) -> None:
+    """Идемпотентное расширение схемы tariffs под новые поля админки.
+
+    В проекте нет Alembic, поэтому добавляем колонки через ALTER TABLE IF NEEDED.
+    """
+
+    bind = db.get_bind()
+    insp = inspect(bind)
+
+    if not insp.has_table("tariffs"):
+        # Таблица создастся через Base.metadata.create_all(), но на всякий случай:
+        log.info("🧱 Таблица tariffs отсутствует — создаём...")
+        Tariff.__table__.create(bind=bind, checkfirst=True)
+        return
+
+    cols = {c["name"] for c in insp.get_columns("tariffs")}
+
+    def _add_col(sql: str) -> None:
+        try:
+            db.execute(text(sql))
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            log.warning("⚠️ Не удалось выполнить миграцию tariffs: %s (%s)", sql, e)
+
+    # Новые поля веса
+    if "weight_condition" not in cols:
+        _add_col("ALTER TABLE tariffs ADD COLUMN weight_condition VARCHAR(10) NOT NULL DEFAULT 'any'")
+    if "weight_threshold" not in cols:
+        _add_col("ALTER TABLE tariffs ADD COLUMN weight_threshold DOUBLE PRECISION NULL")
+
+    # Радиус / ограничения
+    if "radius_limit_km" not in cols:
+        _add_col("ALTER TABLE tariffs ADD COLUMN radius_limit_km DOUBLE PRECISION NULL")
+    if "radius_center_lat" not in cols:
+        _add_col("ALTER TABLE tariffs ADD COLUMN radius_center_lat DOUBLE PRECISION NULL")
+    if "radius_center_lon" not in cols:
+        _add_col("ALTER TABLE tariffs ADD COLUMN radius_center_lon DOUBLE PRECISION NULL")
+
+    # Разделение по назначению (доставка/разгрузка)
+    if "service_type" not in cols:
+        _add_col("ALTER TABLE tariffs ADD COLUMN service_type VARCHAR(20) NOT NULL DEFAULT 'delivery'")
+
+    # Самозагрузка / разгрузка
+    if "self_loading" not in cols:
+        _add_col("ALTER TABLE tariffs ADD COLUMN self_loading BOOLEAN NOT NULL DEFAULT FALSE")
+    if "unload_capability" not in cols:
+        _add_col("ALTER TABLE tariffs ADD COLUMN unload_capability VARCHAR(20) NOT NULL DEFAULT 'none'")
+    if "unload_tags" not in cols:
+        # Postgres: JSONB предпочтительнее, но если тип недоступен — логируем и продолжаем
+        _add_col("ALTER TABLE tariffs ADD COLUMN unload_tags JSONB NULL")
+
+    # Флаг активности
+    if "is_active" not in cols:
+        _add_col("ALTER TABLE tariffs ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE")
+
+    # Аудит (кто/когда)
+    if "created_by_user_id" not in cols:
+        _add_col("ALTER TABLE tariffs ADD COLUMN created_by_user_id INTEGER NULL")
+    if "updated_by_user_id" not in cols:
+        _add_col("ALTER TABLE tariffs ADD COLUMN updated_by_user_id INTEGER NULL")
+
+    # Таблица истории изменений (если отсутствует)
+    if not insp.has_table("tariff_change_logs"):
+        log.info("🧱 Создаём таблицу tariff_change_logs...")
+        TariffChangeLog.__table__.create(bind=bind, checkfirst=True)
 
 
 if __name__ == "__main__":
