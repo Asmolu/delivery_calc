@@ -8,6 +8,7 @@ import {
   confirmOrderFromQuote,
   rejectOrderForManual,
   manualConfirmOrder,
+  fetchFactories,
 } from "../api";
 import { API_BASE } from "../api";
 
@@ -29,8 +30,12 @@ export default function Calculator() {
   const [actionBusy, setActionBusy] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualOrderId, setManualOrderId] = useState(null);
-  const [manualTransportName, setManualTransportName] = useState("");
+  const [manualDeliveryMachines, setManualDeliveryMachines] = useState([""]);
+  const [manualUnloadingMachines, setManualUnloadingMachines] = useState([""]);
   const [manualNotes, setManualNotes] = useState("");
+  const [manualItemsSnapshot, setManualItemsSnapshot] = useState([]);
+  const [manualFactoryByItem, setManualFactoryByItem] = useState([]);
+  const [factoriesFlat, setFactoriesFlat] = useState([]);
 
   const TRANSPORT_TAGS = React.useMemo(
     () => [
@@ -43,6 +48,53 @@ export default function Calculator() {
     ],
     []
   );
+
+  const normStr = (x) => String(x ?? "").trim();
+
+  const getTariffName = (t) => t?.name || t?.["название"] || "";
+  const getTariffTag = (t) => t?.tag || t?.["тег"] || "";
+  const getTariffServiceType = (t) => t?.service_type || t?.serviceType || "delivery";
+
+  const transportCards = React.useMemo(() => {
+    const map = new Map();
+    for (const t of tariffs || []) {
+      const name = normStr(getTariffName(t));
+      if (!name) continue;
+      const tag = normStr(getTariffTag(t)).toLowerCase();
+      const serviceType = normStr(getTariffServiceType(t)).toLowerCase() || "delivery";
+      const key = `${name}||${tag}||${serviceType}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          name,
+          tag,
+          serviceType,
+          capacity: t?.capacity ?? t?.capacity_ton ?? t?.["грузоподъёмность"] ?? null,
+          unloadTags: Array.isArray(t?.unload_tags) ? t.unload_tags : null,
+          selfLoading: !!t?.self_loading,
+        });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [tariffs]);
+
+  const deliveryMachineOptions = React.useMemo(() => {
+    const tagFilter = normStr(deliveryTransportTag).toLowerCase();
+    return transportCards.filter(
+      (c) =>
+        c.serviceType === "delivery" &&
+        (tagFilter === "auto" || !tagFilter || c.tag === tagFilter)
+    );
+  }, [transportCards, deliveryTransportTag]);
+
+  const unloadingMachineOptions = React.useMemo(() => {
+    const tagFilter = normStr(unloadingTransportTag).toLowerCase();
+    return transportCards.filter(
+      (c) =>
+        c.serviceType === "unloading" &&
+        (tagFilter === "auto" || !tagFilter || c.tag === tagFilter)
+    );
+  }, [transportCards, unloadingTransportTag]);
 
   useEffect(() => {
     async function load() {
@@ -70,6 +122,18 @@ export default function Calculator() {
     if (!isAuthenticated()) return;
     getCurrentUser().then(setCurrentUser).catch(() => setCurrentUser(null));
   }, []);
+
+  useEffect(() => {
+    if (!manualOpen) return;
+    if (Array.isArray(factoriesFlat) && factoriesFlat.length > 0) return;
+
+    fetchFactories()
+      .then((rows) => setFactoriesFlat(Array.isArray(rows) ? rows : []))
+      .catch((e) => {
+        console.error("Ошибка загрузки /api/factories:", e);
+        setFactoriesFlat([]);
+      });
+  }, [manualOpen, factoriesFlat]);
 
   const uniqueTransportNames = React.useMemo(() => {
     const names = new Set();
@@ -195,8 +259,12 @@ export default function Calculator() {
         sessionStorage.setItem("selected_order_id", String(resp.id));
       }
       setManualOrderId(resp?.id || null);
-      setManualTransportName("");
+      setManualDeliveryMachines([""]);
+      setManualUnloadingMachines([""]);
       setManualNotes("");
+      const itemsSnap = Array.isArray(reqPayload?.items) ? reqPayload.items : [];
+      setManualItemsSnapshot(itemsSnap);
+      setManualFactoryByItem(itemsSnap.map(() => ""));
       setManualOpen(true);
       setActionsOpen(false);
     } catch (e) {
@@ -206,23 +274,86 @@ export default function Calculator() {
     }
   };
 
+  const manualFactoryOptionsByIndex = React.useMemo(() => {
+    const itemsSnap = Array.isArray(manualItemsSnapshot) ? manualItemsSnapshot : [];
+    const byKey = new Map();
+    for (const row of factoriesFlat || []) {
+      const cat = normStr(row?.category);
+      const sub = normStr(row?.subtype);
+      const factoryName = normStr(row?.name || row?.["название"]);
+      if (!cat || !sub || !factoryName) continue;
+      const key = `${cat}||${sub}`;
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key).push(row);
+    }
+
+    return itemsSnap.map((it) => {
+      const key = `${normStr(it?.category)}||${normStr(it?.subtype)}`;
+      const rows = byKey.get(key) || [];
+      // уникализируем по имени завода
+      const map = new Map();
+      for (const r of rows) {
+        const name = normStr(r?.name || r?.["название"]);
+        if (!name) continue;
+        if (!map.has(name)) map.set(name, r);
+      }
+      return Array.from(map.values()).sort((a, b) =>
+        normStr(a?.name || a?.["название"]).localeCompare(normStr(b?.name || b?.["название"]))
+      );
+    });
+  }, [manualItemsSnapshot, factoriesFlat]);
+
   const handleManualConfirm = async () => {
     if (!manualOrderId) {
       alert("Не найден orderId для ручного подтверждения");
       return;
     }
-    if (!manualTransportName.trim()) {
-      alert("Выберите транспорт");
+    const canPickDeliveryMachine = deliveryMachineOptions.length > 0 || uniqueTransportNames.length > 0;
+    const canPickUnloadingMachine = unloadingMachineOptions.length > 0 || uniqueTransportNames.length > 0;
+    const deliveryNames = (manualDeliveryMachines || []).map((x) => normStr(x)).filter(Boolean);
+    const unloadingNames = (manualUnloadingMachines || []).map((x) => normStr(x)).filter(Boolean);
+    if (canPickDeliveryMachine && deliveryNames.length === 0) {
+      alert("Добавьте хотя бы одну машину доставки");
       return;
+    }
+    if (canPickUnloadingMachine && unloadingNames.length === 0) {
+      alert("Добавьте хотя бы одну машину разгрузки");
+      return;
+    }
+    const itemsSnap = Array.isArray(manualItemsSnapshot) ? manualItemsSnapshot : [];
+    if (itemsSnap.length) {
+      for (let i = 0; i < itemsSnap.length; i++) {
+        const hasOptions = Array.isArray(manualFactoryOptionsByIndex?.[i]) && manualFactoryOptionsByIndex[i].length > 0;
+        if (hasOptions && !normStr(manualFactoryByItem?.[i])) {
+          alert("Выберите производство для всех позиций");
+          return;
+        }
+      }
     }
     try {
       setActionBusy(true);
+      const deliveryNameFinal = (deliveryNames.join(" + ") || "manual").trim();
+      const unloadingNameFinal = (unloadingNames.join(" + ") || "manual").trim();
+      const manualPayload = {
+        deliveryMachineName: deliveryNameFinal, // legacy single string
+        unloadingMachineName: unloadingNameFinal, // legacy single string
+        deliveryMachines: deliveryNames,
+        unloadingMachines: unloadingNames,
+        deliveryTransportTag,
+        unloadingTransportTag,
+        items: itemsSnap.map((it, idx) => ({
+          category: it?.category,
+          subtype: it?.subtype,
+          quantity: it?.quantity,
+          factoryName: manualFactoryByItem?.[idx] || null,
+        })),
+      };
       await manualConfirmOrder(manualOrderId, {
-        transportName: manualTransportName.trim(),
+        transportName: deliveryNameFinal,
         notes: manualNotes || null,
         payload: {
-          // можно дополнять: стоимости/рейсы/что именно было выбрано
           selectedVariant: result?.selectedVariant ?? 0,
+          manual: manualPayload,
         },
       });
       sessionStorage.setItem("selected_order_id", String(manualOrderId));
@@ -571,7 +702,7 @@ export default function Calculator() {
       {/* Manual modal */}
       {manualOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-xl rounded-2xl bg-white border border-slate-200 shadow-2xl p-5">
+          <div className="w-full max-w-3xl rounded-2xl bg-white border border-slate-200 shadow-2xl p-5">
             <div className="flex items-center justify-between mb-3">
               <div>
                 <div className="text-lg font-bold">Ручное заполнение (логист)</div>
@@ -589,22 +720,175 @@ export default function Calculator() {
             </div>
 
             <div className="space-y-3">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="text-sm font-semibold text-slate-800 mb-2">Позиции и производства</div>
+                {Array.isArray(manualItemsSnapshot) && manualItemsSnapshot.length ? (
+                  <div className="space-y-3">
+                    {manualItemsSnapshot.map((it, idx) => {
+                      const options = manualFactoryOptionsByIndex[idx] || [];
+                      const label = `${it?.category || "—"} / ${it?.subtype || "—"} × ${it?.quantity ?? "—"}`;
+                      const selectedFactory = manualFactoryByItem?.[idx] || "";
+                      const selectedRow = options.find((r) => normStr(r?.name || r?.["название"]) === selectedFactory);
+
+                      return (
+                        <div key={idx} className="rounded-lg bg-white border border-slate-200 p-3">
+                          <div className="text-sm font-semibold text-slate-800 mb-2">{label}</div>
+                          <div className="grid md:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-semibold text-slate-600 mb-1">Производство</label>
+                              <select
+                                value={selectedFactory}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  setManualFactoryByItem((prev) => {
+                                    const next = Array.isArray(prev) ? [...prev] : [];
+                                    next[idx] = v;
+                                    return next;
+                                  });
+                                }}
+                                className="w-full px-3 py-3 rounded-lg bg-white border border-slate-200 text-slate-800 shadow-sm"
+                                disabled={options.length === 0}
+                              >
+                                <option value="">
+                                  {options.length ? "Выберите производство…" : "Нет производств с этим товаром"}
+                                </option>
+                                {options.map((r) => {
+                                  const nm = normStr(r?.name || r?.["название"]);
+                                  return (
+                                    <option key={nm} value={nm}>
+                                      {nm}
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                            </div>
+                            <div>
+                              <div className="text-xs font-semibold text-slate-600 mb-1">Контакт</div>
+                              <div className="text-sm text-slate-700 whitespace-pre-line">
+                                {normStr(selectedRow?.contact) || "—"}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-sm text-slate-600">Не найден снимок позиций заказа.</div>
+                )}
+              </div>
+
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Транспорт</label>
-                <select
-                  value={manualTransportName}
-                  onChange={(e) => setManualTransportName(e.target.value)}
-                  className="w-full px-3 py-3 rounded-lg bg-white border border-slate-200 text-slate-800 shadow-sm"
-                >
-                  <option value="">Выберите транспорт…</option>
-                  {uniqueTransportNames.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <label className="block text-sm font-semibold text-slate-700">Машины доставки</label>
+                  <button
+                    type="button"
+                    onClick={() => setManualDeliveryMachines((prev) => [...(prev || [""]), ""])}
+                    className="px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 font-semibold hover:bg-indigo-100"
+                  >
+                    ➕ Добавить машину
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {(manualDeliveryMachines || [""]).map((val, idx) => (
+                    <div key={idx} className="flex gap-2">
+                      <select
+                        value={val}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setManualDeliveryMachines((prev) => {
+                            const next = Array.isArray(prev) ? [...prev] : [];
+                            next[idx] = v;
+                            return next;
+                          });
+                        }}
+                        className="flex-1 px-3 py-3 rounded-lg bg-white border border-slate-200 text-slate-800 shadow-sm"
+                      >
+                        <option value="">Выберите машину доставки…</option>
+                        {(deliveryMachineOptions.length
+                          ? deliveryMachineOptions
+                          : uniqueTransportNames.map((n) => ({ name: n }))).map((x) => (
+                          <option key={x.key || x.name} value={x.name}>
+                            {x.name}
+                            {x.tag ? ` (${x.tag})` : ""}
+                            {x.capacity != null ? ` • ${x.capacity}т` : ""}
+                          </option>
+                        ))}
+                      </select>
+                      {(manualDeliveryMachines || []).length > 1 ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setManualDeliveryMachines((prev) => (prev || []).filter((_, i) => i !== idx))
+                          }
+                          className="px-3 py-3 rounded-lg bg-red-50 text-red-700 border border-red-100 font-semibold hover:bg-red-100"
+                          title="Удалить"
+                        >
+                          ✕
+                        </button>
+                      ) : null}
+                    </div>
                   ))}
-                </select>
-                <div className="text-xs text-slate-500 mt-1">
-                  Если списка мало — он берётся из тарифов (`/api/tariffs`).
+                </div>
+                <div className="text-xs text-slate-500 mt-2">
+                  Список берётся из тарифов (`/api/tariffs`) и фильтруется по выбранному “транспорту доставки”.
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <label className="block text-sm font-semibold text-slate-700">Машины разгрузки</label>
+                  <button
+                    type="button"
+                    onClick={() => setManualUnloadingMachines((prev) => [...(prev || [""]), ""])}
+                    className="px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 font-semibold hover:bg-indigo-100"
+                  >
+                    ➕ Добавить машину
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {(manualUnloadingMachines || [""]).map((val, idx) => (
+                    <div key={idx} className="flex gap-2">
+                      <select
+                        value={val}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setManualUnloadingMachines((prev) => {
+                            const next = Array.isArray(prev) ? [...prev] : [];
+                            next[idx] = v;
+                            return next;
+                          });
+                        }}
+                        className="flex-1 px-3 py-3 rounded-lg bg-white border border-slate-200 text-slate-800 shadow-sm"
+                      >
+                        <option value="">Выберите машину разгрузки…</option>
+                        {(unloadingMachineOptions.length
+                          ? unloadingMachineOptions
+                          : uniqueTransportNames.map((n) => ({ name: n }))).map((x) => (
+                          <option key={x.key || x.name} value={x.name}>
+                            {x.name}
+                            {x.tag ? ` (${x.tag})` : ""}
+                            {x.capacity != null ? ` • ${x.capacity}т` : ""}
+                          </option>
+                        ))}
+                      </select>
+                      {(manualUnloadingMachines || []).length > 1 ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setManualUnloadingMachines((prev) => (prev || []).filter((_, i) => i !== idx))
+                          }
+                          className="px-3 py-3 rounded-lg bg-red-50 text-red-700 border border-red-100 font-semibold hover:bg-red-100"
+                          title="Удалить"
+                        >
+                          ✕
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+                <div className="text-xs text-slate-500 mt-2">
+                  Список берётся из тарифов и фильтруется по выбранному “транспорту разгрузки”.
                 </div>
               </div>
 

@@ -174,41 +174,35 @@ def _trip_cost(tariff: Dict[str, Any], distance_km: float) -> float:
     return base
 
 
-def _tariff_label(tariff: Dict[str, Any]) -> str:
-    """Читабельная подпись выбранного тарифа."""
+def _tariff_label(tariff: Dict[str, Any], distance_km: Optional[float] = None) -> str:
+    """Читабельная подпись выбранного тарифа.
 
-    name = tariff.get("название") or tariff.get("name") or "Тариф"
-    descr = tariff.get("описание") or tariff.get("description") or ""
-    if descr:
-        return f"{name} — {descr}"
+    Важно: подпись должна объяснять, какой именно диапазон/цена применились
+    к текущей дистанции (это нужно для UI "Тариф" в детализации).
+    """
 
     min_d = _to_float(tariff.get("min_distance"))
     max_d = _to_float(tariff.get("max_distance"))
-    cond, thr = _parse_weight_rule(tariff)
+    base = _to_float(tariff.get("base"))
+    per_km = _to_float(tariff.get("per_km"))
 
-    range_descr = ""
-    if max_d and max_d != min_d:
-        range_descr = f"{min_d}-{max_d} км"
-    elif max_d > 0 and max_d == min_d:
-        range_descr = f"{min_d}-{max_d} км"
-    elif max_d > 0:
-        range_descr = f"{min_d}-{max_d} км"
+    # диапазон
+    if max_d > 0:
+        range_descr = f"{min_d:g}-{max_d:g}км"
     elif min_d > 0:
-        range_descr = f">={min_d} км"
+        range_descr = f">={min_d:g}км"
+    else:
+        range_descr = "0км+"
 
-    weight_descr = ""
-    if cond == "le":
-        weight_descr = f"≤{thr}т" if thr is not None else "≤?"
-    elif cond == "gt":
-        weight_descr = f">{thr}т" if thr is not None else ">?"
+    # цена
+    base_rub = int(round(base))
+    if distance_km is not None and per_km > 0 and max_d > 0 and distance_km > max_d + 1e-9:
+        per_km_rub = int(round(per_km))
+        price_descr = f"{base_rub}р + {per_km_rub}р/км после {max_d:g}км"
+    else:
+        price_descr = f"{base_rub}р"
 
-    if range_descr and weight_descr:
-        return f"{name} — {range_descr}, {weight_descr}"
-    if range_descr:
-        return f"{name} — {range_descr}"
-    if weight_descr:
-        return f"{name} — {weight_descr}"
-    return name
+    return f"{range_descr} {price_descr}"
 
 
 def _select_tariff_for_load(
@@ -385,7 +379,7 @@ def _linear_plan(
             {
                 "tag": tag,
                 "tariff_name": tariff.get("название") or tariff.get("name") or tag,
-                "tariff_label": _tariff_label(tariff),
+                "tariff_label": _tariff_label(tariff, distance_km=distance_km),
                 "trip_cost": base_cost,
                 "load_ton": round(real_weight, 2),
                 "distance_km": distance_km,
@@ -631,11 +625,11 @@ def evaluate_scenario_transport(
         total_delivery += unloading_cost_total
         total_cost += unloading_cost_total
     trip_count = sum(len(f["trips"]) for f in factory_plans)
+    # "transport_name" должен быть стабильным коротким названием (без дистанции),
+    # поэтому используем tariff_name, а не tariff_label.
     transport_names = sorted(
         {
-            t.get("tariff_label")
-            or t.get("tariff_name")
-            or t.get("tag")
+            t.get("tariff_name") or t.get("tag")
             for f in factory_plans
             for t in f["trips"]
         }

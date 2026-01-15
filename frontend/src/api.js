@@ -166,6 +166,10 @@ export async function manualConfirmOrder(orderId, decision) {
   return request("POST", `/admin/orders/${orderId}/manual_confirm`, decision, true);
 }
 
+export async function recalcManualOrder(orderId) {
+  return request("POST", `/admin/orders/${orderId}/manual_recalc`, {}, true);
+}
+
 export async function approveOrder(orderId, decision = {}) {
   return request("POST", `/admin/orders/${orderId}/approve`, decision, true);
 }

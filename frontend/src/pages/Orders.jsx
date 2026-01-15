@@ -1,6 +1,16 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { getCurrentUser, listOrders, getOrder, manualConfirmOrder, approveOrder, declineOrder } from "../api";
+import {
+  getCurrentUser,
+  listOrders,
+  getOrder,
+  manualConfirmOrder,
+  approveOrder,
+  declineOrder,
+  recalcManualOrder,
+  fetchFactories,
+  getTariffs,
+} from "../api";
 import { useNavigate } from "react-router-dom";
 
 function statusLabel(s) {
@@ -10,9 +20,55 @@ function statusLabel(s) {
   return s || "—";
 }
 
+function transportTagLabel(tag) {
+  const t = String(tag || "").toLowerCase();
+  if (!t) return "—";
+  if (t === "auto") return "Авто";
+  if (t === "container_carrier") return "Контейнеровоз";
+  if (t === "long_haul") return "Длинномер (шаланда)";
+  if (t === "flatbed") return "Бортовой транспорт";
+  if (t === "manipulator") return "Манипулятор";
+  if (t === "crane") return "Кран";
+  return tag;
+}
+
+function eventHumanLabel(type) {
+  const t = String(type || "");
+  if (t === "confirmed_auto") return "Сценарий подтверждён (сохранён в БД)";
+  if (t === "rejected_for_manual") return "Сценарий отклонён — требуется ручное заполнение";
+  if (t === "confirmed_manual") return "Заказ подтверждён вручную";
+  if (t === "manual_recalc") return "Ручной перерасчёт выполнен";
+  if (t === "approved") return "Заказ подтверждён (финальное решение)";
+  if (t === "declined") return "Заказ отклонён (финальное решение)";
+  return t || "Событие";
+}
+
+function eventSummary(type, payload) {
+  const p = payload && typeof payload === "object" ? payload : null;
+  if (!p) return null;
+
+  if (type === "confirmed_auto" || type === "rejected_for_manual") {
+    if (p.selectedVariant != null) return `вариант #${Number(p.selectedVariant) + 1}`;
+  }
+  if (type === "confirmed_manual") {
+    const tn = p.transportName;
+    if (tn) return `транспорт: ${tn}`;
+  }
+  if (type === "manual_recalc") {
+    const total = p?.recalc?.totalCost;
+    if (total != null) return `итого: ${Number(total).toLocaleString()} ₽`;
+  }
+  if (type === "approved" || type === "declined") {
+    const notes = p.notes;
+    if (notes) return `комментарий: ${notes}`;
+  }
+  return null;
+}
+
 export default function Orders() {
   const MotionDiv = motion.div;
   const navigate = useNavigate();
+  const normStr = (x) => String(x ?? "").trim();
   const [user, setUser] = useState(null);
   const [forbidden, setForbidden] = useState(false);
   const [orders, setOrders] = useState([]);
@@ -27,6 +83,14 @@ export default function Orders() {
   // manual confirm form (for rejected)
   const [manualTransportName, setManualTransportName] = useState("");
   const [manualNotes, setManualNotes] = useState("");
+  const [manualDeliveryMachines, setManualDeliveryMachines] = useState([""]);
+  const [manualUnloadingMachines, setManualUnloadingMachines] = useState([""]);
+  const [manualFactoryByItem, setManualFactoryByItem] = useState([]);
+  const [manualDeliveryTransportTag, setManualDeliveryTransportTag] = useState("auto");
+  const [manualUnloadingTransportTag, setManualUnloadingTransportTag] = useState("auto");
+
+  const [tariffs, setTariffs] = useState([]);
+  const [factoriesFlat, setFactoriesFlat] = useState([]);
 
   useEffect(() => {
     getCurrentUser()
@@ -81,6 +145,20 @@ export default function Orders() {
         setSelected(o);
         setManualTransportName(o?.manualTransportName || "");
         setManualNotes(o?.manualNotes || "");
+        // синхронизируем статус в левом списке, чтобы не "залипал" на первом значении
+        setOrders((prev) =>
+          (prev || []).map((row) =>
+            row.id === o?.id
+              ? {
+                  ...row,
+                  status: o?.status,
+                  manualTransportName: o?.manualTransportName,
+                  warningText: o?.warningText,
+                  needsLogisticsCheck: o?.needsLogisticsCheck,
+                }
+              : row
+          )
+        );
       })
       .catch((e) => setMessage(e?.message || "Ошибка загрузки заказа"))
       .finally(() => setDetailLoading(false));
@@ -123,10 +201,218 @@ export default function Orders() {
     return selected?.request || {};
   }, [selected]);
 
+  // load reference data (tariffs + factories) for manual editor
+  useEffect(() => {
+    if (forbidden) return;
+    let cancelled = false;
+    Promise.all([getTariffs(), fetchFactories()])
+      .then(([t, f]) => {
+        if (cancelled) return;
+        setTariffs(Array.isArray(t) ? t : []);
+        setFactoriesFlat(Array.isArray(f) ? f : []);
+      })
+      .catch((e) => {
+        console.error("Ошибка загрузки справочников (tariffs/factories):", e);
+        if (cancelled) return;
+        setTariffs([]);
+        setFactoriesFlat([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [forbidden]);
+
+  const manualDecisionPayload = useMemo(() => {
+    // backend хранит manual_payload = decision.payload
+    const p = selected?.manualPayload;
+    if (p && typeof p === "object") return p;
+    return {};
+  }, [selected]);
+
+  const manualDecision = useMemo(() => {
+    // наша схема из калькулятора: payload.manual = {...}
+    const m = manualDecisionPayload?.manual;
+    if (m && typeof m === "object") return m;
+    return null;
+  }, [manualDecisionPayload]);
+
+  const parseMachines = (v) => {
+    if (Array.isArray(v)) return v.map((x) => normStr(x)).filter(Boolean);
+    const s = normStr(v);
+    if (!s) return [];
+    return s.split("+").map((x) => x.trim()).filter(Boolean);
+  };
+
+  // sync manual editor state from order/request/manual payload
+  useEffect(() => {
+    const dTag = normStr(quoteRequest.deliveryTransportTag) || "auto";
+    const uTag = normStr(quoteRequest.unloadingTransportTag) || "auto";
+    setManualDeliveryTransportTag(dTag);
+    setManualUnloadingTransportTag(uTag);
+
+    const dm = manualDecision ? (manualDecision.deliveryMachines ?? manualDecision.deliveryMachineName) : null;
+    const um = manualDecision ? (manualDecision.unloadingMachines ?? manualDecision.unloadingMachineName) : null;
+
+    const deliveryMachines = parseMachines(dm) || parseMachines(manualTransportName);
+    setManualDeliveryMachines(deliveryMachines.length ? deliveryMachines : [""]);
+    const unloadingMachines = parseMachines(um);
+    setManualUnloadingMachines(unloadingMachines.length ? unloadingMachines : [""]);
+
+    const byIdx = (requestedItems || []).map(() => "");
+    if (manualDecision && Array.isArray(manualDecision.items)) {
+      for (let i = 0; i < (requestedItems || []).length; i++) {
+        const it = requestedItems[i];
+        const match = manualDecision.items.find(
+          (x) => normStr(x?.category) === normStr(it?.category) && normStr(x?.subtype) === normStr(it?.subtype)
+        );
+        if (match?.factoryName) byIdx[i] = String(match.factoryName);
+      }
+    }
+    setManualFactoryByItem(byIdx);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, manualDecision, quoteRequest.deliveryTransportTag, quoteRequest.unloadingTransportTag, requestedItems.length]);
+
+  const manualRecalc = useMemo(() => {
+    const r = manualDecisionPayload?.recalc;
+    if (r && typeof r === "object") return r;
+    return null;
+  }, [manualDecisionPayload]);
+
+  const manualRecalcDetails = useMemo(() => {
+    const rows = manualRecalc?.details;
+    return Array.isArray(rows) ? rows : [];
+  }, [manualRecalc]);
+
+  const manualRecalcTripItems = useMemo(() => {
+    const rows = manualRecalc?.tripItems;
+    return Array.isArray(rows) ? rows : [];
+  }, [manualRecalc]);
+
+  const getTariffName = (t) => t?.name || t?.["название"] || "";
+  const getTariffTag = (t) => t?.tag || t?.["тег"] || "";
+  const getTariffServiceType = (t) => t?.service_type || t?.serviceType || "delivery";
+
+  const uniqueTransportNames = useMemo(() => {
+    const names = new Set();
+    for (const t of tariffs || []) {
+      const name = normStr(getTariffName(t));
+      if (name) names.add(name);
+    }
+    return Array.from(names).sort((a, b) => String(a).localeCompare(String(b)));
+  }, [tariffs]);
+
+  const transportCards = useMemo(() => {
+    const map = new Map();
+    for (const t of tariffs || []) {
+      const name = normStr(getTariffName(t));
+      if (!name) continue;
+      const tag = normStr(getTariffTag(t)).toLowerCase();
+      const serviceType = normStr(getTariffServiceType(t)).toLowerCase() || "delivery";
+      const key = `${name}||${tag}||${serviceType}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          name,
+          tag,
+          serviceType,
+          capacity: t?.capacity ?? t?.capacity_ton ?? t?.["грузоподъёмность"] ?? null,
+        });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [tariffs]);
+
+  const deliveryMachineOptions = useMemo(() => {
+    const tagFilter = normStr(manualDeliveryTransportTag || quoteRequest.deliveryTransportTag).toLowerCase();
+    return transportCards.filter(
+      (c) =>
+        c.serviceType === "delivery" &&
+        (tagFilter === "auto" || !tagFilter || c.tag === tagFilter)
+    );
+  }, [transportCards, manualDeliveryTransportTag, quoteRequest.deliveryTransportTag]);
+
+  const unloadingMachineOptions = useMemo(() => {
+    const tagFilter = normStr(manualUnloadingTransportTag || quoteRequest.unloadingTransportTag).toLowerCase();
+    return transportCards.filter(
+      (c) =>
+        c.serviceType === "unloading" &&
+        (tagFilter === "auto" || !tagFilter || c.tag === tagFilter)
+    );
+  }, [transportCards, manualUnloadingTransportTag, quoteRequest.unloadingTransportTag]);
+
+  const TRANSPORT_TAGS = useMemo(
+    () => [
+      { value: "auto", label: "Авто" },
+      { value: "container_carrier", label: "Контейнеровоз" },
+      { value: "long_haul", label: "Длинномер (шаланда)" },
+      { value: "flatbed", label: "Бортовой транспорт" },
+      { value: "manipulator", label: "Манипулятор" },
+      { value: "crane", label: "Кран" },
+    ],
+    []
+  );
+
+  const manualFactoryOptionsByIndex = useMemo(() => {
+    const itemsSnap = Array.isArray(requestedItems) ? requestedItems : [];
+    const byKey = new Map();
+    for (const row of factoriesFlat || []) {
+      const cat = normStr(row?.category);
+      const sub = normStr(row?.subtype);
+      const factoryName = normStr(row?.name || row?.["название"]);
+      if (!cat || !sub || !factoryName) continue;
+      const key = `${cat}||${sub}`;
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key).push(row);
+    }
+
+    return itemsSnap.map((it) => {
+      const key = `${normStr(it?.category)}||${normStr(it?.subtype)}`;
+      const rows = byKey.get(key) || [];
+      const map = new Map();
+      for (const r of rows) {
+        const name = normStr(r?.name || r?.["название"]);
+        if (!name) continue;
+        if (!map.has(name)) map.set(name, r);
+      }
+      return Array.from(map.values()).sort((a, b) =>
+        normStr(a?.name || a?.["название"]).localeCompare(normStr(b?.name || b?.["название"]))
+      );
+    });
+  }, [requestedItems, factoriesFlat]);
+
   const variantsSummary = useMemo(() => {
     return (variantsSnapshot || []).map((v, idx) => ({
       idx,
-      transportName: v?.transportName || "—",
+      transportName: (() => {
+        const tripItems = Array.isArray(v?.tripItems) ? v.tripItems : [];
+        const names = new Set();
+        for (const t of tripItems) {
+          const nm = normStr(t?.["машина"] || t?.machine || t?.tariff_name || t?.tariffName);
+          if (nm) names.add(nm);
+        }
+        if (names.size) return Array.from(names).join(", ");
+        // fallback: в старом формате transportName уже обычно содержит названия машин
+        return v?.transportName || "—";
+      })(),
+      factoriesText: (() => {
+        const names = new Set();
+        const tripItems = Array.isArray(v?.tripItems) ? v.tripItems : [];
+        for (const t of tripItems) {
+          const fn = normStr(t?.["завод"] || t?.factory || t?.factory_name || t?.factoryName);
+          if (fn) names.add(fn);
+        }
+        const details = Array.isArray(v?.details) ? v.details : [];
+        for (const d of details) {
+          const fn = normStr(d?.["завод"] || d?.factory || d?.factory_name || d?.factoryName);
+          if (fn) names.add(fn);
+        }
+        const td = Array.isArray(v?.transportDetails) ? v.transportDetails : [];
+        for (const p of td) {
+          const fn = normStr(p?.factory_name || p?.factoryName || p?.factory);
+          if (fn) names.add(fn);
+        }
+        return names.size ? Array.from(names).join(", ") : "";
+      })(),
       totalCost: v?.totalCost,
       deliveryCost: v?.deliveryCost,
       materialCost: v?.materialCost,
@@ -139,16 +425,52 @@ export default function Orders() {
 
   const handleManualConfirm = async () => {
     if (!selectedId) return;
-    if (!manualTransportName.trim()) {
-      alert("Выберите транспорт");
+
+    const deliveryNames = (manualDeliveryMachines || []).map((x) => normStr(x)).filter(Boolean);
+    const unloadingNames = (manualUnloadingMachines || []).map((x) => normStr(x)).filter(Boolean);
+
+    const canPickDeliveryMachine = deliveryMachineOptions.length > 0 || uniqueTransportNames.length > 0;
+    const canPickUnloadingMachine = unloadingMachineOptions.length > 0 || uniqueTransportNames.length > 0;
+
+    if (canPickDeliveryMachine && deliveryNames.length === 0) {
+      alert("Добавьте хотя бы одну машину доставки");
       return;
     }
+    if (canPickUnloadingMachine && unloadingNames.length === 0) {
+      alert("Добавьте хотя бы одну машину разгрузки");
+      return;
+    }
+
+    for (let i = 0; i < (requestedItems || []).length; i++) {
+      const hasOptions = Array.isArray(manualFactoryOptionsByIndex?.[i]) && manualFactoryOptionsByIndex[i].length > 0;
+      if (hasOptions && !normStr(manualFactoryByItem?.[i])) {
+        alert("Выберите производство для всех позиций");
+        return;
+      }
+    }
+
+    const deliveryNameFinal = (deliveryNames.join(" + ") || "manual").trim();
     try {
       setMessage("");
       await manualConfirmOrder(selectedId, {
-        transportName: manualTransportName.trim(),
+        transportName: deliveryNameFinal,
         notes: manualNotes || null,
-        payload: {},
+        payload: {
+          manual: {
+            deliveryMachines: deliveryNames,
+            unloadingMachines: unloadingNames,
+            deliveryMachineName: deliveryNameFinal,
+            unloadingMachineName: (unloadingNames.join(" + ") || "manual").trim(),
+            deliveryTransportTag: normStr(manualDeliveryTransportTag || quoteRequest.deliveryTransportTag || "auto"),
+            unloadingTransportTag: normStr(manualUnloadingTransportTag || quoteRequest.unloadingTransportTag || "auto"),
+            items: (requestedItems || []).map((it, idx) => ({
+              category: it?.category,
+              subtype: it?.subtype,
+              quantity: it?.quantity,
+              factoryName: manualFactoryByItem?.[idx] || null,
+            })),
+          },
+        },
       });
       await reload();
       const o = await getOrder(selectedId);
@@ -196,6 +518,18 @@ export default function Orders() {
       setMessage(e?.message || "Ошибка отклонения");
     } finally {
       setDecisionBusy(false);
+    }
+  };
+
+  const handleManualRecalc = async () => {
+    if (!selectedId) return;
+    try {
+      setMessage("");
+      await recalcManualOrder(selectedId);
+      await reloadSelected();
+      setMessage("✅ Ручной перерасчёт выполнен");
+    } catch (e) {
+      setMessage(e?.message || "Ошибка перерасчёта");
     }
   };
 
@@ -266,14 +600,18 @@ export default function Orders() {
               (() => {
                 const isSelected = selectedId === o.id;
                 const d = o?.decision || null;
+                const needsDecision = !d;
                 const border =
                   d === "approved"
                     ? "border-emerald-400"
                     : d === "declined"
                     ? "border-red-400"
+                    : needsDecision
+                    ? "border-amber-400"
                     : isSelected
                     ? "border-indigo-200"
                     : "border-slate-200";
+                // для "требует решения" оставляем общий фон, выделяем только рамкой/меткой
                 const bg = isSelected ? "bg-indigo-50" : "bg-white";
                 const hover = isSelected ? "" : "hover:border-indigo-200";
 
@@ -289,6 +627,9 @@ export default function Orders() {
                   <div className="text-xs text-slate-500">{o.createdAt ? new Date(o.createdAt).toLocaleString() : ""}</div>
                 </div>
                 <div className="text-sm text-slate-700 mt-1">{statusLabel(o.status)}</div>
+                {needsDecision ? (
+                  <div className="text-xs font-semibold text-amber-800 mt-1">⏳ Требует решения (подтвердить/отклонить)</div>
+                ) : null}
                 {o.warningText ? <div className="text-xs text-amber-700 mt-1">⚠️ {o.warningText}</div> : null}
                 {o.manualTransportName ? (
                   <div className="text-xs text-slate-600 mt-1">🛻 {o.manualTransportName}</div>
@@ -365,7 +706,7 @@ export default function Orders() {
                     Отклонить
                   </button>
 
-                  {selectedVariantSnapshot ? (
+                  {selectedVariantSnapshot && selected?.status !== "confirmed_manual" ? (
                     <button
                       type="button"
                       onClick={() => setVariantOpen(true)}
@@ -403,16 +744,16 @@ export default function Orders() {
                     </div>
                   </div>
                   <div className="rounded-lg border border-slate-200 p-3">
-                    <div className="text-xs text-slate-500">Тип транспорта</div>
-                    <div className="font-semibold">{quoteRequest.transport_type ?? "—"}</div>
+                    <div className="text-xs text-slate-500">Транспорт доставки</div>
+                    <div className="font-semibold">{transportTagLabel(quoteRequest.deliveryTransportTag)}</div>
                   </div>
                   <div className="rounded-lg border border-slate-200 p-3">
-                    <div className="text-xs text-slate-500">+1 манипулятор</div>
-                    <div className="font-semibold">{quoteRequest.addManipulator ? "да" : "нет"}</div>
+                    <div className="text-xs text-slate-500">Транспорт разгрузки</div>
+                    <div className="font-semibold">{transportTagLabel(quoteRequest.unloadingTransportTag)}</div>
                   </div>
                   <div className="rounded-lg border border-slate-200 p-3">
-                    <div className="text-xs text-slate-500">Спецтранспорт</div>
-                    <div className="font-semibold">{quoteRequest.selectedSpecial || "—"}</div>
+                    <div className="text-xs text-slate-500">Тип запроса</div>
+                    <div className="font-semibold">{quoteRequest.transport_type ?? "auto"}</div>
                   </div>
                 </div>
 
@@ -423,6 +764,324 @@ export default function Orders() {
                   </div>
                 ) : null}
               </div>
+
+              {(selected?.status === "confirmed_manual" ||
+                selected?.manualTransportName ||
+                selected?.manualNotes ||
+                manualDecision) ? (
+                <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50/50 p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold">Ручное решение логиста (сохранено)</div>
+                      <div className="text-xs text-slate-600">
+                        Это фактически принятый вариант для заказа (в отличие от “выбранного варианта расчёта” ниже).
+                      </div>
+                    </div>
+                    {selected?.manualTransportName ? (
+                      <div className="text-right">
+                        <div className="text-xs text-slate-500">Машины (доставка)</div>
+                        <div className="font-semibold text-emerald-800">{selected.manualTransportName}</div>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {selected?.manualNotes ? (
+                    <div className="text-sm text-slate-700 whitespace-pre-line">
+                      <span className="text-xs font-semibold text-slate-600">Комментарий:</span>{" "}
+                      {selected.manualNotes}
+                    </div>
+                  ) : null}
+
+                  {manualDecision ? (
+                    <div className="rounded-xl bg-white border border-slate-200 p-3 space-y-3">
+                      <div className="grid md:grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <div className="text-xs text-slate-500">Машины доставки</div>
+                          <div className="font-semibold text-slate-800">
+                            {Array.isArray(manualDecision.deliveryMachines) && manualDecision.deliveryMachines.length
+                              ? manualDecision.deliveryMachines.join(" + ")
+                              : (manualDecision.deliveryMachineName || "—")}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-slate-500">Машины разгрузки</div>
+                          <div className="font-semibold text-slate-800">
+                            {Array.isArray(manualDecision.unloadingMachines) && manualDecision.unloadingMachines.length
+                              ? manualDecision.unloadingMachines.join(" + ")
+                              : (manualDecision.unloadingMachineName || "—")}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-slate-500">Транспорт доставки</div>
+                          <div className="font-semibold">{transportTagLabel(manualDecision.deliveryTransportTag)}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-slate-500">Транспорт разгрузки</div>
+                          <div className="font-semibold">{transportTagLabel(manualDecision.unloadingTransportTag)}</div>
+                        </div>
+                      </div>
+
+                      {Array.isArray(manualDecision.items) && manualDecision.items.length ? (
+                        <div>
+                          <div className="text-sm font-semibold text-slate-800 mb-2">Производства по позициям</div>
+                          <div className="overflow-auto rounded-xl border border-slate-200">
+                            <table className="w-full text-sm">
+                              <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                                <tr>
+                                  <th className="p-3 text-left">Товар</th>
+                                  <th className="p-3 text-left">Кол-во</th>
+                                  <th className="p-3 text-left">Производство</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {manualDecision.items.map((it, idx) => (
+                                  <tr key={idx} className="border-b border-slate-100">
+                                    <td className="p-3">{it?.category} / {it?.subtype}</td>
+                                    <td className="p-3">{it?.quantity ?? "—"}</td>
+                                    <td className="p-3 font-semibold">{it?.factoryName || "—"}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <div className="flex items-center justify-between gap-3 pt-2">
+                        <div className="text-sm font-semibold text-slate-800">Перерасчёт по ручному выбору</div>
+                        {!manualRecalc ? (
+                          <button
+                            type="button"
+                            onClick={handleManualRecalc}
+                            className="px-3 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-500"
+                          >
+                            Пересчитать
+                          </button>
+                        ) : null}
+                      </div>
+
+                      {manualRecalc ? (
+                        <div className="space-y-4">
+                          <div className="grid md:grid-cols-4 gap-3 text-sm">
+                            <div className="rounded-lg border border-slate-200 p-3">
+                              <div className="text-xs text-slate-500">Материал</div>
+                              <div className="font-semibold">{Number(manualRecalc.materialCost || 0).toLocaleString()} ₽</div>
+                            </div>
+                            <div className="rounded-lg border border-slate-200 p-3">
+                              <div className="text-xs text-slate-500">Доставка</div>
+                              <div className="font-semibold">{Number(manualRecalc.deliveryCost || 0).toLocaleString()} ₽</div>
+                            </div>
+                            <div className="rounded-lg border border-slate-200 p-3">
+                              <div className="text-xs text-slate-500">Разгрузка</div>
+                              <div className="font-semibold">{Number(manualRecalc.unloadingCost || 0).toLocaleString()} ₽</div>
+                            </div>
+                            <div className="rounded-lg border border-slate-200 p-3">
+                              <div className="text-xs text-slate-500">Итого</div>
+                              <div className="font-semibold text-emerald-700">{Number(manualRecalc.totalCost || 0).toLocaleString()} ₽</div>
+                            </div>
+                          </div>
+
+                          {manualRecalcTripItems.length ? (
+                            <div className="overflow-auto rounded-xl border border-slate-200">
+                              <div className="p-3 border-b border-slate-200 font-semibold text-sm">🚚 Что везёт каждая машина</div>
+                              <table className="w-full text-sm">
+                                <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                                  <tr>
+                                    <th className="p-3 text-left">Производство</th>
+                                    <th className="p-3 text-left">Машина</th>
+                                    <th className="p-3 text-left">Тариф</th>
+                                    <th className="p-3 text-left">Расстояние (км)</th>
+                                    <th className="p-3 text-left">Загрузка (т)</th>
+                                    <th className="p-3 text-left">Товары</th>
+                                    <th className="p-3 text-left">Доставка (₽)</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {manualRecalcTripItems.map((trip, i) => (
+                                    <tr key={i} className="border-b border-slate-100 align-top">
+                                      <td className="p-3 whitespace-nowrap">{trip["завод"]}</td>
+                                      <td className="p-3">{trip["машина"]}</td>
+                                      <td className="p-3 whitespace-pre-line text-slate-600">{trip["тариф"] || "—"}</td>
+                                      <td className="p-3">{trip["расстояние_км"]}</td>
+                                      <td className="p-3">{trip["загрузка_т"]}</td>
+                                      <td className="p-3">{trip["товары"]}</td>
+                                      <td className="p-3">{Number(trip["стоимость_доставки"] || 0).toLocaleString()}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <div className="text-sm text-slate-500">Нет данных по загрузке машин</div>
+                          )}
+
+                          {manualRecalcDetails.length ? (
+                            <div className="overflow-auto rounded-xl border border-slate-200">
+                              <div className="p-3 border-b border-slate-200 font-semibold text-sm">📑 Детализация расчёта</div>
+                              <table className="w-full text-sm">
+                                <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                                  <tr>
+                                    <th className="p-3 text-left">Производство</th>
+                                    <th className="p-3 text-left">Контакт</th>
+                                    <th className="p-3 text-left">Товар</th>
+                                    <th className="p-3 text-left">Машина</th>
+                                    <th className="p-3 text-left">Расстояние (км)</th>
+                                    <th className="p-3 text-left">Материал (₽)</th>
+                                    <th className="p-3 text-left">Доставка (₽)</th>
+                                    <th className="p-3 text-left">Итого (₽)</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {manualRecalcDetails.map((d, idx) => (
+                                    <tr key={idx} className="border-b border-slate-100 align-top">
+                                      <td className="p-3 whitespace-nowrap">{d["завод"]}</td>
+                                      <td className="p-3 whitespace-pre-line text-slate-600">{d["контакт"] || "—"}</td>
+                                      <td className="p-3">{d["товар"]}</td>
+                                      <td className="p-3">{d["машина"]}</td>
+                                      <td className="p-3">{d["расстояние_км"]}</td>
+                                      <td className="p-3">{d["стоимость_материала"]?.toLocaleString?.() ?? d["стоимость_материала"]}</td>
+                                      <td className="p-3">{d["стоимость_доставки"]?.toLocaleString?.() ?? d["стоимость_доставки"]}</td>
+                                      <td className="p-3 font-semibold text-emerald-700">{d["итого"]?.toLocaleString?.() ?? d["итого"]}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    // fallback: если payload не в нашем формате, всё равно покажем raw
+                    (Object.keys(manualDecisionPayload || {}).length ? (
+                      <details className="rounded-xl border border-slate-200 bg-white p-3">
+                        <summary className="cursor-pointer text-sm font-semibold text-slate-700">
+                          Показать raw JSON ручного решения (manualPayload)
+                        </summary>
+                        <pre className="mt-2 text-xs overflow-auto">{JSON.stringify(manualDecisionPayload, null, 2)}</pre>
+                      </details>
+                    ) : null)
+                  )}
+                </div>
+              ) : null}
+
+              {selected?.status === "confirmed_auto" && selectedVariantSnapshot ? (
+                <div className="rounded-xl border-2 border-indigo-300/30 bg-indigo-500/10 p-4 space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold">Автоматическое решение системы (сохранено)</div>
+                      <div className="text-xs text-slate-600">
+                        Это принятый системой вариант расчёта, сохранённый в момент подтверждения сценария.
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-slate-500">Итого</div>
+                      <div className="text-lg font-bold text-indigo-200">
+                        {selectedVariantSnapshot.totalCost != null
+                          ? `${Number(selectedVariantSnapshot.totalCost).toLocaleString()} ₽`
+                          : "—"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid md:grid-cols-4 gap-3 text-sm">
+                    <div className="rounded-lg border border-slate-200 p-3 bg-slate-900/40">
+                      <div className="text-xs text-slate-500">Материал</div>
+                      <div className="font-semibold">
+                        {selectedVariantSnapshot.materialCost != null
+                          ? `${Number(selectedVariantSnapshot.materialCost).toLocaleString()} ₽`
+                          : "—"}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 p-3 bg-slate-900/40">
+                      <div className="text-xs text-slate-500">Доставка</div>
+                      <div className="font-semibold">
+                        {selectedVariantSnapshot.deliveryCost != null
+                          ? `${Number(selectedVariantSnapshot.deliveryCost).toLocaleString()} ₽`
+                          : "—"}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 p-3 bg-slate-900/40">
+                      <div className="text-xs text-slate-500">Вес</div>
+                      <div className="font-semibold">{selectedVariantSnapshot.totalWeight ?? "—"} т</div>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 p-3 bg-slate-900/40">
+                      <div className="text-xs text-slate-500">Рейсы</div>
+                      <div className="font-semibold">{selectedVariantSnapshot.tripCount ?? "—"}</div>
+                    </div>
+                  </div>
+
+                  {variantTripItems.length ? (
+                    <div className="overflow-auto rounded-xl border border-slate-200 bg-slate-900/70 shadow-sm">
+                      <div className="p-3 border-b border-slate-800 font-semibold text-sm text-slate-200">
+                        🚚 Что везёт каждая машина
+                      </div>
+                      <table className="w-full text-sm text-slate-200">
+                        <thead className="bg-slate-900/50 text-slate-300 border-b border-slate-800">
+                          <tr>
+                            <th className="p-3 text-left">Производство</th>
+                            <th className="p-3 text-left">Машина</th>
+                            <th className="p-3 text-left">Тариф</th>
+                            <th className="p-3 text-left">Расстояние (км)</th>
+                            <th className="p-3 text-left">Загрузка (т)</th>
+                            <th className="p-3 text-left">Товары</th>
+                            <th className="p-3 text-left">Доставка (₽)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {variantTripItems.map((trip, i) => (
+                            <tr key={i} className="border-b border-slate-800 align-top">
+                              <td className="p-3 whitespace-nowrap">{trip["завод"]}</td>
+                              <td className="p-3">{trip["машина"]}</td>
+                              <td className="p-3 whitespace-pre-line text-slate-300">{trip["тариф"] || "—"}</td>
+                              <td className="p-3">{trip["расстояние_км"]}</td>
+                              <td className="p-3">{trip["загрузка_т"]}</td>
+                              <td className="p-3 text-slate-100">{trip["товары"]}</td>
+                              <td className="p-3">{Number(trip["стоимость_доставки"] || 0).toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+
+                  {variantDetailsRows.length ? (
+                    <div className="overflow-auto rounded-xl border border-slate-200 bg-slate-900/70 shadow-sm">
+                      <div className="p-3 border-b border-slate-800 font-semibold text-sm text-slate-200">
+                        📑 Детализация расчёта
+                      </div>
+                      <table className="w-full text-sm text-slate-200">
+                        <thead className="bg-slate-900/50 text-slate-300 border-b border-slate-800">
+                          <tr>
+                            <th className="p-3 text-left">Производство</th>
+                            <th className="p-3 text-left">Контакт</th>
+                            <th className="p-3 text-left">Товар</th>
+                            <th className="p-3 text-left">Машина</th>
+                            <th className="p-3 text-left">Расстояние (км)</th>
+                            <th className="p-3 text-left">Материал (₽)</th>
+                            <th className="p-3 text-left">Доставка (₽)</th>
+                            <th className="p-3 text-left">Итого (₽)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {variantDetailsRows.map((d, idx) => (
+                            <tr key={idx} className="border-b border-slate-800">
+                              <td className="p-3 whitespace-nowrap">{d["завод"]}</td>
+                              <td className="p-3 whitespace-pre-line text-slate-400">{d["контакт"] || "—"}</td>
+                              <td className="p-3">{d["товар"]}</td>
+                              <td className="p-3">{d["машина"]}</td>
+                              <td className="p-3">{d["расстояние_км"]}</td>
+                              <td className="p-3">{d["стоимость_материала"]?.toLocaleString?.() ?? d["стоимость_материала"]}</td>
+                              <td className="p-3">{d["стоимость_доставки"]?.toLocaleString?.() ?? d["стоимость_доставки"]}</td>
+                              <td className="p-3 text-indigo-200 font-semibold">{d["итого"]?.toLocaleString?.() ?? d["итого"]}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
 
               <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
                 <div className="flex items-center justify-between gap-3">
@@ -438,11 +1097,6 @@ export default function Orders() {
                           <th className="p-3 text-left">#</th>
                           <th className="p-3 text-left">Транспорт</th>
                           <th className="p-3 text-left">Итого (₽)</th>
-                          <th className="p-3 text-left">Материал (₽)</th>
-                          <th className="p-3 text-left">Доставка (₽)</th>
-                          <th className="p-3 text-left">Вес (т)</th>
-                          <th className="p-3 text-left">Рейсы</th>
-                          <th className="p-3 text-left">Детали</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -451,19 +1105,14 @@ export default function Orders() {
                           return (
                             <tr key={v.idx} className={`border-b border-slate-100 ${isSel ? "bg-indigo-50" : ""}`}>
                               <td className="p-3 font-semibold">{v.idx + 1}</td>
-                              <td className="p-3">{v.transportName}</td>
+                              <td className="p-3">
+                                <div className="font-semibold text-slate-900">{v.transportName}</div>
+                                {v.factoriesText ? (
+                                  <div className="text-xs text-slate-500 mt-1">🏭 {v.factoriesText}</div>
+                                ) : null}
+                              </td>
                               <td className="p-3 font-semibold text-indigo-700">
                                 {v.totalCost != null ? Number(v.totalCost).toLocaleString() : "—"}
-                              </td>
-                              <td className="p-3">{v.materialCost != null ? Number(v.materialCost).toLocaleString() : "—"}</td>
-                              <td className="p-3">{v.deliveryCost != null ? Number(v.deliveryCost).toLocaleString() : "—"}</td>
-                              <td className="p-3">{v.totalWeight ?? "—"}</td>
-                              <td className="p-3">{v.tripCount ?? "—"}</td>
-                              <td className="p-3 text-xs text-slate-600">
-                                {v.hasTripItems ? "машины" : ""}
-                                {v.hasTripItems && v.hasDetails ? " + " : ""}
-                                {v.hasDetails ? "таблица" : ""}
-                                {!v.hasTripItems && !v.hasDetails ? "—" : ""}
                               </td>
                             </tr>
                           );
@@ -483,11 +1132,13 @@ export default function Orders() {
                 </details>
               </div>
 
-              {selectedVariantSnapshot ? (
+              {selectedVariantSnapshot && selected?.status !== "confirmed_auto" ? (
                 <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="font-semibold">Принятый вариант</div>
+                      <div className="font-semibold">
+                        {selected?.status === "confirmed_manual" ? "Выбранный вариант расчёта (ориентир)" : "Принятый вариант"}
+                      </div>
                       <div className="text-xs text-slate-500">
                         {selectedVariantSnapshot.transportName ? `🚛 ${selectedVariantSnapshot.transportName}` : ""}
                       </div>
@@ -600,34 +1251,237 @@ export default function Orders() {
               ) : null}
 
               {canManualConfirm ? (
-                <div className="rounded-xl border border-slate-200 bg-white p-4">
-                  <div className="font-semibold mb-2">Ручное решение логиста</div>
-                  <div className="grid md:grid-cols-2 gap-3">
+                <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
+                  <div className="flex items-start justify-between gap-3">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Транспорт</label>
-                      <input
-                        value={manualTransportName}
-                        onChange={(e) => setManualTransportName(e.target.value)}
-                        placeholder="Например: Манипулятор 10т"
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Комментарий</label>
-                      <input
-                        value={manualNotes}
-                        onChange={(e) => setManualNotes(e.target.value)}
-                        placeholder="Опционально"
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2"
-                      />
+                      <div className="font-semibold">Ручное решение логиста (редактирование)</div>
+                      <div className="text-xs text-slate-500">
+                        Интерфейс совпадает с “Ручное заполнение (логист)” в калькуляторе.
+                      </div>
                     </div>
                   </div>
-                  <button
-                    onClick={handleManualConfirm}
-                    className="mt-3 px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-500"
-                  >
-                    Подтвердить вручную
-                  </button>
+
+                  <div className="grid md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">Транспорт доставки</label>
+                      <select
+                        value={manualDeliveryTransportTag}
+                        onChange={(e) => setManualDeliveryTransportTag(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg bg-white border border-slate-200 text-slate-800 shadow-sm"
+                      >
+                        {TRANSPORT_TAGS.map((t) => (
+                          <option key={t.value} value={t.value}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">Транспорт разгрузки</label>
+                      <select
+                        value={manualUnloadingTransportTag}
+                        onChange={(e) => setManualUnloadingTransportTag(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg bg-white border border-slate-200 text-slate-800 shadow-sm"
+                      >
+                        {TRANSPORT_TAGS.map((t) => (
+                          <option key={t.value} value={t.value}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="text-sm font-semibold text-slate-800 mb-2">Позиции и производства</div>
+                    {Array.isArray(requestedItems) && requestedItems.length ? (
+                      <div className="space-y-3">
+                        {requestedItems.map((it, idx) => {
+                          const options = manualFactoryOptionsByIndex[idx] || [];
+                          const selectedFactory = manualFactoryByItem?.[idx] || "";
+                          const selectedRow = options.find((r) => normStr(r?.name || r?.["название"]) === selectedFactory);
+                          const label = `${it?.category || "—"} / ${it?.subtype || "—"} × ${it?.quantity ?? "—"}`;
+
+                          return (
+                            <div key={idx} className="rounded-lg bg-white border border-slate-200 p-3">
+                              <div className="text-sm font-semibold text-slate-800 mb-2">{label}</div>
+                              <div className="grid md:grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-semibold text-slate-600 mb-1">Производство</label>
+                                  <select
+                                    value={selectedFactory}
+                                    onChange={(e) => {
+                                      const v = e.target.value;
+                                      setManualFactoryByItem((prev) => {
+                                        const next = Array.isArray(prev) ? [...prev] : [];
+                                        next[idx] = v;
+                                        return next;
+                                      });
+                                    }}
+                                    className="w-full px-3 py-3 rounded-lg bg-white border border-slate-200 text-slate-800 shadow-sm"
+                                    disabled={options.length === 0}
+                                  >
+                                    <option value="">
+                                      {options.length ? "Выберите производство…" : "Нет производств с этим товаром"}
+                                    </option>
+                                    {options.map((r) => {
+                                      const nm = normStr(r?.name || r?.["название"]);
+                                      return (
+                                        <option key={nm} value={nm}>
+                                          {nm}
+                                        </option>
+                                      );
+                                    })}
+                                  </select>
+                                </div>
+                                <div>
+                                  <div className="text-xs font-semibold text-slate-600 mb-1">Контакт</div>
+                                  <div className="text-sm text-slate-700 whitespace-pre-line">
+                                    {normStr(selectedRow?.contact) || "—"}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-slate-600">Нет позиций заказа.</div>
+                    )}
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <label className="block text-sm font-semibold text-slate-700">Машины доставки</label>
+                        <button
+                          type="button"
+                          onClick={() => setManualDeliveryMachines((prev) => [...(prev || [""]), ""])}
+                          className="px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 font-semibold hover:bg-indigo-100"
+                        >
+                          ➕ Добавить
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {(manualDeliveryMachines || [""]).map((val, idx) => (
+                          <div key={idx} className="flex gap-2">
+                            <select
+                              value={val}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setManualDeliveryMachines((prev) => {
+                                  const next = Array.isArray(prev) ? [...prev] : [];
+                                  next[idx] = v;
+                                  return next;
+                                });
+                              }}
+                              className="flex-1 px-3 py-3 rounded-lg bg-white border border-slate-200 text-slate-800 shadow-sm"
+                            >
+                              <option value="">Выберите машину доставки…</option>
+                              {(deliveryMachineOptions.length
+                                ? deliveryMachineOptions
+                                : uniqueTransportNames.map((n) => ({ name: n }))).map((x) => (
+                                <option key={x.key || x.name} value={x.name}>
+                                  {x.name}
+                                  {x.tag ? ` (${x.tag})` : ""}
+                                  {x.capacity != null ? ` • ${x.capacity}т` : ""}
+                                </option>
+                              ))}
+                            </select>
+                            {(manualDeliveryMachines || []).length > 1 ? (
+                              <button
+                                type="button"
+                                onClick={() => setManualDeliveryMachines((prev) => (prev || []).filter((_, i) => i !== idx))}
+                                className="px-3 py-3 rounded-lg bg-red-50 text-red-700 border border-red-100 font-semibold hover:bg-red-100"
+                                title="Удалить"
+                              >
+                                ✕
+                              </button>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-2">
+                        Список берётся из тарифов и фильтруется по выбранному “транспорту доставки”.
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <label className="block text-sm font-semibold text-slate-700">Машины разгрузки</label>
+                        <button
+                          type="button"
+                          onClick={() => setManualUnloadingMachines((prev) => [...(prev || [""]), ""])}
+                          className="px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 font-semibold hover:bg-indigo-100"
+                        >
+                          ➕ Добавить
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {(manualUnloadingMachines || [""]).map((val, idx) => (
+                          <div key={idx} className="flex gap-2">
+                            <select
+                              value={val}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setManualUnloadingMachines((prev) => {
+                                  const next = Array.isArray(prev) ? [...prev] : [];
+                                  next[idx] = v;
+                                  return next;
+                                });
+                              }}
+                              className="flex-1 px-3 py-3 rounded-lg bg-white border border-slate-200 text-slate-800 shadow-sm"
+                            >
+                              <option value="">Выберите машину разгрузки…</option>
+                              {(unloadingMachineOptions.length
+                                ? unloadingMachineOptions
+                                : uniqueTransportNames.map((n) => ({ name: n }))).map((x) => (
+                                <option key={x.key || x.name} value={x.name}>
+                                  {x.name}
+                                  {x.tag ? ` (${x.tag})` : ""}
+                                  {x.capacity != null ? ` • ${x.capacity}т` : ""}
+                                </option>
+                              ))}
+                            </select>
+                            {(manualUnloadingMachines || []).length > 1 ? (
+                              <button
+                                type="button"
+                                onClick={() => setManualUnloadingMachines((prev) => (prev || []).filter((_, i) => i !== idx))}
+                                className="px-3 py-3 rounded-lg bg-red-50 text-red-700 border border-red-100 font-semibold hover:bg-red-100"
+                                title="Удалить"
+                              >
+                                ✕
+                              </button>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-2">
+                        Список берётся из тарифов и фильтруется по выбранному “транспорту разгрузки”.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Комментарий</label>
+                    <textarea
+                      value={manualNotes}
+                      onChange={(e) => setManualNotes(e.target.value)}
+                      rows={3}
+                      className="w-full px-3 py-2 rounded-lg bg-white border border-slate-200 text-slate-800"
+                      placeholder="Например: согласовано с клиентом, требуется 2 рейса, и т.д."
+                    />
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleManualConfirm}
+                      className="px-4 py-3 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-500"
+                    >
+                      Подтвердить вручную
+                    </button>
+                  </div>
                 </div>
               ) : null}
 
@@ -638,16 +1492,24 @@ export default function Orders() {
                     {selected.events.map((e) => (
                       <li key={e.id} className="border border-slate-100 rounded-lg p-2">
                         <div className="flex items-center justify-between">
-                          <span className="font-semibold">{e.type}</span>
+                          <span className="font-semibold">{eventHumanLabel(e.type)}</span>
                           <span className="text-xs text-slate-500">
                             {e.createdAt ? new Date(e.createdAt).toLocaleString() : ""}
                           </span>
                         </div>
                         <div className="text-xs text-slate-500">user: {e.user || "—"}</div>
+                        {eventSummary(e.type, e.payload) ? (
+                          <div className="mt-1 text-xs text-slate-600">{eventSummary(e.type, e.payload)}</div>
+                        ) : null}
                         {e.payload ? (
-                          <pre className="mt-2 text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 overflow-auto">
-                            {JSON.stringify(e.payload, null, 2)}
-                          </pre>
+                          <details className="mt-2 rounded-lg bg-slate-50 border border-slate-200 p-2">
+                            <summary className="cursor-pointer text-xs font-semibold text-slate-700">
+                              Показать payload
+                            </summary>
+                            <pre className="mt-2 text-xs overflow-auto">
+                              {JSON.stringify(e.payload, null, 2)}
+                            </pre>
+                          </details>
                         ) : null}
                       </li>
                     ))}

@@ -73,11 +73,11 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="card-glass bg-white/80 border border-slate-100 shadow-xl p-6 md:p-8 rounded-2xl">
+        <div className="card-glass bg-slate-900/50 border border-slate-700/40 shadow-xl p-6 md:p-8 rounded-2xl">
           <div className="text-sm text-slate-500 mb-2">Превью интерфейса</div>
-          <div className="rounded-xl border border-slate-200 overflow-hidden shadow-lg">
+          <div className="rounded-xl border border-slate-700/40 overflow-hidden shadow-lg bg-slate-950/30">
             <img
-              src="https://placehold.co/900x600/ffffff/0f172a?text=DeliveryCalc+UI"
+              src="https://placehold.co/900x600/0f172a/e2e8f0?text=DeliveryCalc+UI"
               alt="Макет интерфейса DeliveryCalc"
               className="w-full h-auto"
             />

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from types import SimpleNamespace
 
 from ..core.logger import get_logger
 from ..core.database import get_db
@@ -12,6 +13,17 @@ from ..core.db_migration import ensure_catalog_normalization, ensure_tariffs_sch
 from ..models.db_models import Category, Factory, Order, OrderEvent, OrderStatus, Product, Tariff, TariffChangeLog, User
 from ..core.data_loader import (
     load_factories_from_google,
+    load_factories_and_tariffs,
+)
+from ..service.transport_calc import (
+    evaluate_scenario_transport,
+    build_shipment_details_from_result,
+    build_trip_items_details,
+    _build_group_max_distance,
+    _distance_matches_tariff,
+    _trip_cost,
+    _weight_ok,
+    _tariff_label,
 )
 
 router = APIRouter()
@@ -243,6 +255,249 @@ def _enforce_orders_limit(db: Session, limit: int = MAX_ORDERS_TO_KEEP) -> None:
     # сначала события, потом заказы (иначе FK запретит удаление)
     db.query(OrderEvent).filter(OrderEvent.order_id.in_(extra_ids)).delete(synchronize_session=False)
     db.query(Order).filter(Order.id.in_(extra_ids)).delete(synchronize_session=False)
+
+
+def _norm_str_local(x) -> str:
+    return str(x or "").strip()
+
+
+def _manual_selected_names(manual: dict, field_list: str, field_legacy: str) -> list[str]:
+    """Извлекает выбранные имена машин из manual payload."""
+    arr = manual.get(field_list, None)
+    if isinstance(arr, list):
+        out = [_norm_str_local(v) for v in arr if _norm_str_local(v)]
+        return out
+    legacy = _norm_str_local(manual.get(field_legacy, ""))
+    if legacy:
+        # legacy строка может быть "A + B + C"
+        parts = [p.strip() for p in legacy.split("+")]
+        out = [p for p in parts if p]
+        return out
+    return []
+
+
+def _build_manual_scenario_from_order(db: Session, order: Order, manual: dict) -> dict:
+    """Строит scenario dict для evaluate_scenario_transport на базе ручного выбора заводов."""
+    items = manual.get("items") if isinstance(manual, dict) else None
+    if not isinstance(items, list) or not items:
+        raise HTTPException(status_code=400, detail="manual.items отсутствует или пуст")
+
+    factories_map: dict[str, list[dict]] = {}
+    total_material_cost = 0.0
+    total_weight = 0.0
+
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        category = _norm_str_local(it.get("category"))
+        subtype = _norm_str_local(it.get("subtype"))
+        qty = int(it.get("quantity") or 0)
+        factory_name = _norm_str_local(it.get("factoryName"))
+        if not category or not subtype or qty <= 0 or not factory_name:
+            continue
+
+        # найти Product по (factory, category, subtype)
+        prod = (
+            db.query(Product)
+            .join(Factory, Product.factory_id == Factory.id)
+            .join(Category, Product.category_id == Category.id)
+            .filter(Factory.name == factory_name, Category.name == category, Product.subtype == subtype)
+            .first()
+        )
+        if not prod:
+            # fallback на legacy поле category
+            prod = (
+                db.query(Product)
+                .join(Factory, Product.factory_id == Factory.id)
+                .filter(Factory.name == factory_name, Product.category == category, Product.subtype == subtype)
+                .first()
+            )
+        if not prod:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Не найден товар в БД для {category}/{subtype} на заводе '{factory_name}'",
+            )
+
+        f = prod.factory
+        if not f or f.lat is None or f.lon is None:
+            raise HTTPException(status_code=400, detail=f"У завода '{factory_name}' нет координат")
+
+        weight_per_item = float(prod.weight_per_item or 0.0)
+        price_per_item = float(prod.price or 0.0)
+        weight_total = weight_per_item * qty
+
+        total_material_cost += price_per_item * qty
+        total_weight += weight_total
+
+        factories_map.setdefault(factory_name, []).append(
+            {
+                "factory": {
+                    "name": f.name,
+                    "lat": f.lat,
+                    "lon": f.lon,
+                    "contact": f.contact,
+                    "price": price_per_item,
+                },
+                "category": category,
+                "subtype": subtype,
+                "quantity": qty,
+                "price_per_item": price_per_item,
+                "weight_per_item": weight_per_item,
+                "lat": f.lat,
+                "lon": f.lon,
+                "weight_total": weight_total,
+            }
+        )
+
+    if not factories_map:
+        raise HTTPException(status_code=400, detail="Не удалось построить сценарий из manual.items")
+
+    return {
+        "scenario_id": 1,
+        "factories": factories_map,
+        "total_material_cost": total_material_cost,
+        "total_weight": total_weight,
+    }
+
+
+def _filter_tariffs_for_manual_choice(tariffs: list[dict], manual: dict) -> list[dict]:
+    """Ограничивает тарифы выбранными машинами (по названию) для delivery/unloading."""
+    if not isinstance(tariffs, list) or not tariffs:
+        return []
+
+    delivery_names = set(_manual_selected_names(manual, "deliveryMachines", "deliveryMachineName"))
+    unloading_names = set(_manual_selected_names(manual, "unloadingMachines", "unloadingMachineName"))
+
+    out = []
+    for t in tariffs:
+        if not isinstance(t, dict):
+            continue
+        name = _norm_str_local(t.get("название") or t.get("name"))
+        service_type = _norm_str_local(t.get("service_type") or "delivery").lower()
+
+        if service_type == "delivery" and delivery_names:
+            if name in delivery_names:
+                out.append(t)
+            continue
+        if service_type == "unloading" and unloading_names:
+            if name in unloading_names:
+                out.append(t)
+            continue
+        out.append(t)
+    return out
+
+
+def _recalc_manual_order(db: Session, order: Order, manual: dict) -> dict:
+    """Пересчитать заказ по ручному выбору и вернуть структуру для UI."""
+    if not isinstance(order.request_payload, dict):
+        raise HTTPException(status_code=400, detail="order.request_payload повреждён")
+
+    req_payload = order.request_payload
+    upload_lat = req_payload.get("upload_lat")
+    upload_lon = req_payload.get("upload_lon")
+    if upload_lat is None or upload_lon is None:
+        raise HTTPException(status_code=400, detail="В заказе нет upload_lat/upload_lon для перерасчёта")
+
+    # теги транспорта могут прийти из manual (приоритет), иначе из request_payload
+    delivery_tag = _norm_str_local(manual.get("deliveryTransportTag") or req_payload.get("deliveryTransportTag") or "auto")
+    unloading_tag = _norm_str_local(manual.get("unloadingTransportTag") or req_payload.get("unloadingTransportTag") or "auto")
+
+    scenario = _build_manual_scenario_from_order(db, order, manual)
+    _, tariffs = load_factories_and_tariffs(db)
+    tariffs_filtered = _filter_tariffs_for_manual_choice(tariffs, manual)
+
+    req = SimpleNamespace(
+        upload_lat=float(upload_lat),
+        upload_lon=float(upload_lon),
+        transport_type=_norm_str_local(req_payload.get("transport_type") or "auto"),
+        deliveryTransportTag=delivery_tag,
+        unloadingTransportTag=unloading_tag,
+        addManipulator=bool(req_payload.get("addManipulator") or req_payload.get("add_manipulator") or False),
+    )
+
+    result = evaluate_scenario_transport(scenario, req, tariffs_filtered)
+    if not result:
+        raise HTTPException(status_code=400, detail="Не удалось пересчитать сценарий по ручному выбору")
+
+    details = build_shipment_details_from_result(result, req)
+    trip_items = build_trip_items_details(result)
+    return {
+        "totalCost": round(float(result.get("total_cost") or 0.0), 2),
+        "materialCost": round(float(result.get("material_sum") or 0.0), 2),
+        "deliveryCost": round(float(result.get("delivery_cost") or 0.0), 2),
+        "unloadingCost": round(float(result.get("unloading_cost") or 0.0), 2),
+        "tripCount": int(result.get("trip_count") or 0),
+        "transportName": result.get("transport_name") or "",
+        "details": details,
+        "tripItems": trip_items,
+    }
+
+
+def _refresh_tripitems_tariff_labels(trip_items: list, request_payload: dict, tariffs: list[dict]) -> list:
+    """Для старых заказов: пересчитываем отображение тарифа/стоимости рейса по текущим тарифам."""
+    if not isinstance(trip_items, list) or not trip_items:
+        return trip_items
+    if not isinstance(request_payload, dict):
+        return trip_items
+    if not isinstance(tariffs, list) or not tariffs:
+        return trip_items
+
+    upload_lat = request_payload.get("upload_lat")
+    upload_lon = request_payload.get("upload_lon")
+    try:
+        ulat = float(upload_lat) if upload_lat is not None else None
+        ulon = float(upload_lon) if upload_lon is not None else None
+    except Exception:
+        ulat = None
+        ulon = None
+
+    group_max_distance = _build_group_max_distance(tariffs)
+
+    refreshed = []
+    for row in trip_items:
+        if not isinstance(row, dict):
+            refreshed.append(row)
+            continue
+
+        machine_name = _norm_str_local(row.get("машина"))
+        distance_km = float(row.get("расстояние_км") or 0.0)
+        load_ton = float(row.get("загрузка_т") or 0.0)
+
+        if not machine_name or distance_km <= 0:
+            refreshed.append(row)
+            continue
+
+        candidates = []
+        for t in tariffs:
+            if not isinstance(t, dict):
+                continue
+            if _norm_str_local(t.get("service_type") or "delivery").lower() != "delivery":
+                continue
+            name = _norm_str_local(t.get("название") or t.get("name"))
+            if name != machine_name:
+                continue
+            if not _distance_matches_tariff(t, distance_km, group_max_distance, ulat, ulon):
+                continue
+            if not _weight_ok(t, load_ton):
+                continue
+            # capacity check (best effort)
+            cap = float(t.get("грузоподъёмность") or 0.0)
+            if cap and load_ton > cap + 1e-9:
+                continue
+            candidates.append(t)
+
+        if not candidates:
+            refreshed.append(row)
+            continue
+
+        best = min(candidates, key=lambda x: _trip_cost(x, distance_km))
+        new_label = _tariff_label(best, distance_km=distance_km)
+        new_cost = round(float(_trip_cost(best, distance_km)), 2)
+
+        updated = {**row, "тариф": new_label, "стоимость_доставки": new_cost}
+        refreshed.append(updated)
+
+    return refreshed
 
 
 @router.get("/admin/categories")
@@ -854,6 +1109,19 @@ async def admin_get_order(
         .all()
     )
 
+    # best-effort: для старых снимков “tripItems” обновляем отображение тарифа/стоимости по текущим тарифам
+    _, current_tariffs = load_factories_and_tariffs(db)
+    selected_snapshot = o.selected_variant_snapshot
+    if isinstance(selected_snapshot, dict) and isinstance(selected_snapshot.get("tripItems"), list):
+        selected_snapshot = {
+            **selected_snapshot,
+            "tripItems": _refresh_tripitems_tariff_labels(
+                selected_snapshot.get("tripItems") or [],
+                o.request_payload or {},
+                current_tariffs or [],
+            ),
+        }
+
     return {
         "id": o.id,
         "status": o.status.value if hasattr(o.status, "value") else o.status,
@@ -864,7 +1132,7 @@ async def admin_get_order(
         "selectedVariant": o.selected_variant,
         "request": o.request_payload,
         "variants": o.variants_snapshot,
-        "selectedVariantSnapshot": o.selected_variant_snapshot,
+        "selectedVariantSnapshot": selected_snapshot,
         "manualTransportName": o.manual_transport_name,
         "manualNotes": o.manual_notes,
         "manualPayload": o.manual_payload,
@@ -973,7 +1241,21 @@ async def admin_manual_confirm_order(
     order.status = OrderStatus.CONFIRMED_MANUAL
     order.manual_transport_name = decision.transportName.strip()
     order.manual_notes = (decision.notes or "").strip() or None
-    order.manual_payload = decision.payload or {}
+    payload = decision.payload or {}
+    # если клиент прислал structured manual — пересчитаем и положим в payload.recalc
+    try:
+        manual = payload.get("manual") if isinstance(payload, dict) else None
+        if isinstance(manual, dict):
+            recalc = _recalc_manual_order(db, order, manual)
+            payload = {**payload, "recalc": recalc}
+    except HTTPException:
+        # пробрасываем понятную ошибку наверх (чтобы логист увидел)
+        raise
+    except Exception as e:
+        # не валим подтверждение, но сохраняем причину в payload
+        payload = {**payload, "recalc_error": str(e)}
+
+    order.manual_payload = payload
     db.add(order)
 
     db.add(
@@ -987,6 +1269,38 @@ async def admin_manual_confirm_order(
     db.commit()
     db.refresh(order)
     return {"id": order.id, "status": order.status.value}
+
+
+@router.post("/admin/orders/{order_id}/manual_recalc")
+async def admin_manual_recalc_order(
+    order_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Пересчитать уже сохранённое ручное решение по данным order.manual_payload.manual."""
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+
+    payload = order.manual_payload or {}
+    manual = payload.get("manual") if isinstance(payload, dict) else None
+    if not isinstance(manual, dict):
+        raise HTTPException(status_code=400, detail="В заказе нет manual для перерасчёта")
+
+    recalc = _recalc_manual_order(db, order, manual)
+    order.manual_payload = {**payload, "recalc": recalc}
+    db.add(order)
+    db.add(
+        OrderEvent(
+            order_id=order.id,
+            event_type="manual_recalc",
+            payload={"recalc": recalc},
+            user_id=current_user.id,
+        )
+    )
+    db.commit()
+    db.refresh(order)
+    return {"id": order.id, "recalc": recalc}
 
 
 @router.post("/admin/orders/{order_id}/approve")

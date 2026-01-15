@@ -179,7 +179,7 @@ export default function Admin() {
           <div className="flex items-center gap-3 mb-2">
             <p className="pill">Google Sheets (только заводы/товары)</p>
             {user && (
-              <span className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+              <span className="text-xs px-2 py-1 rounded-full bg-indigo-500/10 text-indigo-200 border border-indigo-400/30">
                 {user.username} ({user.role})
               </span>
             )}
@@ -205,7 +205,7 @@ export default function Admin() {
           <button
             type="button"
             onClick={handleLogout}
-            className="px-5 py-3 rounded-xl text-sm font-semibold transition bg-slate-200 text-slate-700 hover:bg-slate-300"
+            className="px-5 py-3 rounded-xl text-sm font-semibold transition bg-slate-900/40 text-slate-100 border border-slate-700/40 hover:bg-slate-900/60"
           >
             Выйти
           </button>
@@ -271,7 +271,7 @@ export default function Admin() {
               </thead>
               <tbody>
                 {transports.map((t) => (
-                  <tr key={t.key} className="border-t border-slate-100 hover:bg-slate-50">
+                  <tr key={t.key} className="border-t border-slate-100 hover:bg-indigo-500/10">
                     <td className="px-3 py-2 font-medium text-slate-900">{t.name}</td>
                     <td className="px-3 py-2">{tagLabel(t.tag)}</td>
                     <td className="px-3 py-2">{Number(t.capacity || 0).toLocaleString()}</td>
