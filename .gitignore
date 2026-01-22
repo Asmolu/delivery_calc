@@ -15,7 +15,6 @@ venv.bak/
 backend.env
 *.env
 .env.*
-!.env.example
 !.env.sample
 
 # Build & Dist
@@ -61,6 +60,7 @@ node_modules/
 # === CREDENTIALS / SECRETS ===
 .env
 .env.local
+backend.env
 google_credentials.json
 google_credentials/
 credentials.json
