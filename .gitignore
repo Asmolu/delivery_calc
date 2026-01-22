@@ -16,6 +16,7 @@ backend.env
 *.env
 .env.*
 !.env.sample
+!.env.example
 
 # Build & Dist
 build/
