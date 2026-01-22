@@ -41,14 +41,17 @@ def _save_tariffs(tariffs: list) -> None:
 
 def _save_factories_to_db(db: Session, factories_products: dict) -> None:
     """Сохранение заводов и товаров в БД"""
-    # Очищаем существующие данные
-    db.query(Product).delete()
-    db.query(Factory).delete()
-    db.commit()
-    
-    factory_map = {}
-    category_map = {}
-    
+    # ВАЖНО: не удаляем строки целиком, чтобы сохранить admin-активность (is_active).
+    # Делаем upsert по ключам:
+    # - Factory: name
+    # - Product: (factory_id, category_id, subtype)
+
+    factory_map: dict[str, Factory] = {}
+    category_map: dict[str, Category] = {}
+
+    # кешируем текущие сущности (для быстрого upsert)
+    existing_factories = {f.name: f for f in db.query(Factory).all()}
+
     for category, items in factories_products.items():
         if not isinstance(items, list):
             continue
@@ -62,43 +65,78 @@ def _save_factories_to_db(db: Session, factories_products: dict) -> None:
                 db.flush()
             category_map[category] = cat_obj
         cat_obj = category_map[category]
-        
+
         for item in items:
             factory_data = item.get("factory", {})
             if not factory_data.get("name"):
                 continue
-            
-            factory_name = factory_data["name"]
-            
-            # Создаём или получаем завод
-            if factory_name not in factory_map:
+
+            factory_name = str(factory_data["name"]).strip()
+            if not factory_name:
+                continue
+
+            # upsert factory (preserve is_active)
+            factory = factory_map.get(factory_name) or existing_factories.get(factory_name)
+            if not factory:
                 factory = Factory(
                     name=factory_name,
                     lat=factory_data.get("lat"),
                     lon=factory_data.get("lon"),
-                    contact=factory_data.get("contact")
+                    contact=factory_data.get("contact"),
+                    is_active=True,
                 )
                 db.add(factory)
                 db.flush()
-                factory_map[factory_name] = factory
+                existing_factories[factory_name] = factory
             else:
-                factory = factory_map[factory_name]
-            
-            # Создаём товар
-            product = Product(
-                category=category,
-                subtype=item.get("subtype", ""),
-                weight_per_item=item.get("weight_per_item", 0.0),
-                special_threshold=item.get("special_threshold", 0.0),
-                max_per_trip=item.get("max_per_trip", 0.0),
-                price=factory_data.get("price", 0.0),
-                factory_id=factory.id,
-                category_id=cat_obj.id,
+                # обновляем координаты/контакт, но не трогаем is_active
+                factory.lat = factory_data.get("lat")
+                factory.lon = factory_data.get("lon")
+                factory.contact = factory_data.get("contact")
+                db.add(factory)
+            factory_map[factory_name] = factory
+
+            subtype = str(item.get("subtype", "") or "").strip()
+            if not subtype:
+                continue
+
+            # upsert product (preserve is_active)
+            existing_product = (
+                db.query(Product)
+                .filter(
+                    Product.factory_id == factory.id,
+                    Product.category_id == cat_obj.id,
+                    Product.subtype == subtype,
+                )
+                .first()
             )
-            db.add(product)
-    
+            if not existing_product:
+                existing_product = Product(
+                    category=category,  # legacy (for debug/backward compat)
+                    subtype=subtype,
+                    weight_per_item=item.get("weight_per_item", 0.0),
+                    special_threshold=item.get("special_threshold", 0.0),
+                    max_per_trip=item.get("max_per_trip", 0.0),
+                    price=factory_data.get("price", 0.0),
+                    factory_id=factory.id,
+                    category_id=cat_obj.id,
+                    is_active=True,
+                )
+                db.add(existing_product)
+            else:
+                existing_product.category = category
+                existing_product.weight_per_item = item.get("weight_per_item", 0.0)
+                existing_product.special_threshold = item.get("special_threshold", 0.0)
+                existing_product.max_per_trip = item.get("max_per_trip", 0.0)
+                existing_product.price = factory_data.get("price", 0.0)
+                db.add(existing_product)
+
     db.commit()
-    log.info(f"✅ Сохранено в БД: {len(factory_map)} заводов, {sum(len(items) for items in factories_products.values() if isinstance(items, list))} товаров")
+    log.info(
+        "✅ Сохранено в БД (upsert): %s заводов, %s категорий",
+        len(factory_map),
+        len(category_map),
+    )
 
 
 def _save_tariffs_to_db(db: Session, tariffs: list) -> None:
@@ -207,8 +245,13 @@ def load_factories_and_tariffs_from_db(db: Session) -> Tuple[Dict, List]:
     Загружает factories и tariffs из PostgreSQL.
     Возвращает кортеж: (factories_products, tariffs) в формате, совместимом со старым API.
     """
-    # Загружаем товары с заводами
-    products = db.query(Product).all()
+    # Загружаем только активные товары активных заводов (чтобы “отрезание” влияло на расчёт)
+    products = (
+        db.query(Product)
+        .join(Factory, Product.factory_id == Factory.id)
+        .filter(Factory.is_active.is_(True), Product.is_active.is_(True))
+        .all()
+    )
     factories_products = {}
     
     for product in products:
@@ -223,6 +266,7 @@ def load_factories_and_tariffs_from_db(db: Session) -> Tuple[Dict, List]:
             "special_threshold": product.special_threshold,
             "max_per_trip": product.max_per_trip,
             "factory": {
+                "id": product.factory.id,
                 "name": product.factory.name,
                 "lat": product.factory.lat,
                 "lon": product.factory.lon,
@@ -255,6 +299,8 @@ def load_factories_and_tariffs_from_db(db: Session) -> Tuple[Dict, List]:
             "self_loading": bool(getattr(tariff, "self_loading", False)),
             "unload_capability": getattr(tariff, "unload_capability", "none") or "none",
             "unload_tags": getattr(tariff, "unload_tags", None),
+            "base_transport_name": getattr(tariff, "base_transport_name", None),
+            "base_transport_tag": getattr(tariff, "base_transport_tag", None),
             "is_active": bool(getattr(tariff, "is_active", True)),
             "описание": tariff.description or "",
             "заметки": tariff.notes or ""

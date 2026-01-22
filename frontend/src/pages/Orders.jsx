@@ -7,6 +7,7 @@ import {
   manualConfirmOrder,
   approveOrder,
   declineOrder,
+  deleteOrder,
   recalcManualOrder,
   fetchFactories,
   getTariffs,
@@ -69,6 +70,8 @@ export default function Orders() {
   const MotionDiv = motion.div;
   const navigate = useNavigate();
   const normStr = (x) => String(x ?? "").trim();
+  const ORG_RANK = { viewer: 10, manager: 20, logist: 30, admin: 40, owner: 50 };
+  const orgRank = (r) => ORG_RANK[String(r || "").toLowerCase()] || 0;
   const [user, setUser] = useState(null);
   const [forbidden, setForbidden] = useState(false);
   const [orders, setOrders] = useState([]);
@@ -78,6 +81,9 @@ export default function Orders() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [variantOpen, setVariantOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [decisionBusy, setDecisionBusy] = useState(false);
 
   // manual confirm form (for rejected)
@@ -96,8 +102,8 @@ export default function Orders() {
     getCurrentUser()
       .then((u) => {
         setUser(u);
-        const roleNorm = String(u?.role || "").toLowerCase();
-        if (roleNorm !== "admin") {
+        // Доступ к просмотру заказов: manager и выше
+        if (orgRank(u?.orgRole) < ORG_RANK.manager) {
           setForbidden(true);
         } else {
           setForbidden(false);
@@ -165,7 +171,7 @@ export default function Orders() {
   }, [selectedId, forbidden]);
 
   const selectedStatus = selected?.status;
-  const canManualConfirm = selectedStatus === "rejected_for_manual";
+  const canManualConfirm = canDecide && selectedStatus === "rejected_for_manual";
   const decision = selected?.decision || null;
 
   const requestedItems = useMemo(() => {
@@ -196,6 +202,53 @@ export default function Orders() {
     const rows = selectedVariantSnapshot?.tripItems;
     return Array.isArray(rows) ? rows : [];
   }, [selectedVariantSnapshot]);
+
+  const autoMachinesText = useMemo(() => {
+    const machines = Array.from(
+      new Set((variantTripItems || []).map((t) => normStr(t?.["машина"])).filter(Boolean))
+    );
+    if (machines.length) return machines.join(" + ");
+    return normStr(selectedVariantSnapshot?.transportName);
+  }, [variantTripItems, selectedVariantSnapshot]);
+
+  const autoFactoriesByItem = useMemo(() => {
+    const rows = Array.isArray(variantDetailsRows) ? variantDetailsRows : [];
+    const normRows = rows
+      .map((r) => {
+        const product = normStr(r?.["товар"]).toLowerCase();
+        const factory = normStr(r?.["завод"]);
+        return { product, factory };
+      })
+      .filter((r) => r.product || r.factory);
+
+    return (requestedItems || []).map((it) => {
+      const cat = normStr(it?.category).toLowerCase();
+      const sub = normStr(it?.subtype).toLowerCase();
+
+      const candidates = normRows.filter((r) => {
+        if (!r.product) return false;
+        // match by either category or subtype (substrings), tolerant to different naming
+        return (cat && r.product.includes(cat)) || (sub && r.product.includes(sub));
+      });
+
+      const pool = candidates.length ? candidates : normRows;
+      const counts = new Map();
+      for (const r of pool) {
+        if (!r.factory) continue;
+        counts.set(r.factory, (counts.get(r.factory) || 0) + 1);
+      }
+
+      let best = "";
+      let bestCount = 0;
+      for (const [k, v] of counts.entries()) {
+        if (v > bestCount) {
+          best = k;
+          bestCount = v;
+        }
+      }
+      return best || "—";
+    });
+  }, [requestedItems, variantDetailsRows]);
 
   const quoteRequest = useMemo(() => {
     return selected?.request || {};
@@ -533,6 +586,30 @@ export default function Orders() {
     }
   };
 
+  const canDecide = orgRank(user?.orgRole) >= ORG_RANK.logist; // подтверждать/отклонять/ручные решения
+  const canViewAdminOnly = orgRank(user?.orgRole) >= ORG_RANK.admin; // события + удаление
+  const canDeleteOrder =
+    canViewAdminOnly && (selected?.status === "confirmed_auto" || selected?.status === "confirmed_manual" || selected?.status === "rejected_for_manual");
+
+  const handleDeleteOrder = async () => {
+    if (!selectedId) return;
+    try {
+      setDeleteBusy(true);
+      setMessage("");
+      await deleteOrder(selectedId, deletePassword);
+      setOrders((prev) => (prev || []).filter((o) => o.id !== selectedId));
+      setSelectedId(null);
+      setSelected(null);
+      setDeleteOpen(false);
+      setDeletePassword("");
+      setMessage(`🗑️ Заказ #${selectedId} удалён`);
+    } catch (e) {
+      setMessage(e?.message || "Ошибка удаления заказа");
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
   return (
     <MotionDiv
       className="space-y-6"
@@ -540,9 +617,72 @@ export default function Orders() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
     >
+      {deleteOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white border border-slate-200 shadow-2xl p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-lg font-bold text-slate-900">Удаление заказа</div>
+                <div className="text-xs text-slate-500 mt-1">
+                  Введите пароль администратора для подтверждения (личная подпись).
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (deleteBusy) return;
+                  setDeleteOpen(false);
+                  setDeletePassword("");
+                }}
+                className="px-3 py-2 rounded-lg bg-white border border-slate-200 hover:border-slate-300"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Пароль администратора</label>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  className="w-full px-3 py-3 rounded-lg bg-white border border-slate-200 text-slate-800 shadow-sm"
+                  placeholder="••••••••"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (deleteBusy) return;
+                    setDeleteOpen(false);
+                    setDeletePassword("");
+                  }}
+                  className="px-3 py-2 rounded-lg bg-white border border-slate-200 font-semibold hover:border-slate-300"
+                  disabled={deleteBusy}
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteOrder}
+                  disabled={deleteBusy || !deletePassword.trim()}
+                  className="px-3 py-2 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-500 disabled:opacity-60"
+                >
+                  {deleteBusy ? "Удаляем..." : "Удалить заказ"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="card-glass p-6 flex items-center justify-between">
         <div>
-          <p className="pill mb-2">admin-only</p>
+          <p className="pill mb-2">orders</p>
           <h1 className="text-2xl font-bold">📋 Заказы</h1>
           <p className="text-slate-600 text-sm">
             История подтверждений/отклонений и ручных решений. {user ? `Вы: ${user.username}` : ""}
@@ -573,8 +713,8 @@ export default function Orders() {
         <div className="card-glass p-6 border border-slate-200 bg-white">
           <div className="text-lg font-semibold mb-2">Доступ ограничен</div>
           <div className="text-sm text-slate-700">
-            Страница заказов доступна только администраторам. Текущая роль:{" "}
-            <span className="font-semibold">{user?.role || "—"}</span>
+            Страница заказов доступна только менеджеру и выше. Текущая роль в организации:{" "}
+            <span className="font-semibold">{user?.orgRole || "—"}</span>
           </div>
           <div className="mt-4 flex gap-2">
             <button
@@ -595,7 +735,7 @@ export default function Orders() {
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="card-glass p-4 lg:col-span-1">
           <div className="text-sm font-semibold mb-3">Список</div>
-          <div className="space-y-2 max-h-[70vh] overflow-auto pr-1">
+          <div className="space-y-2 h-[calc(100vh-260px)] overflow-auto pr-2">
             {(orders || []).map((o) => (
               (() => {
                 const isSelected = selectedId === o.id;
@@ -681,30 +821,36 @@ export default function Orders() {
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    disabled={decisionBusy}
-                    onClick={handleApprove}
-                    className={`px-4 py-2 rounded-lg bg-white font-semibold border-2 transition disabled:opacity-60 ${
-                      decision === "approved"
-                        ? "border-emerald-500 text-emerald-700"
-                        : "border-slate-200 text-slate-800 hover:border-emerald-200"
-                    }`}
-                  >
-                    Подтвердить
-                  </button>
-                  <button
-                    type="button"
-                    disabled={decisionBusy}
-                    onClick={handleDecline}
-                    className={`px-4 py-2 rounded-lg bg-white font-semibold border-2 transition disabled:opacity-60 ${
-                      decision === "declined"
-                        ? "border-red-500 text-red-700"
-                        : "border-slate-200 text-slate-800 hover:border-red-200"
-                    }`}
-                  >
-                    Отклонить
-                  </button>
+                  {canDecide ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={decisionBusy}
+                        onClick={handleApprove}
+                        className={`px-4 py-2 rounded-lg bg-white font-semibold border-2 transition disabled:opacity-60 ${
+                          decision === "approved"
+                            ? "border-emerald-500 text-emerald-700"
+                            : "border-slate-200 text-slate-800 hover:border-emerald-200"
+                        }`}
+                      >
+                        Подтвердить
+                      </button>
+                      <button
+                        type="button"
+                        disabled={decisionBusy}
+                        onClick={handleDecline}
+                        className={`px-4 py-2 rounded-lg bg-white font-semibold border-2 transition disabled:opacity-60 ${
+                          decision === "declined"
+                            ? "border-red-500 text-red-700"
+                            : "border-slate-200 text-slate-800 hover:border-red-200"
+                        }`}
+                      >
+                        Отклонить
+                      </button>
+                    </>
+                  ) : (
+                    <div className="text-sm text-slate-500">Решения (подтвердить/отклонить) доступны только логисту и выше.</div>
+                  )}
 
                   {selectedVariantSnapshot && selected?.status !== "confirmed_manual" ? (
                     <button
@@ -966,7 +1112,7 @@ export default function Orders() {
               ) : null}
 
               {selected?.status === "confirmed_auto" && selectedVariantSnapshot ? (
-                <div className="rounded-xl border-2 border-indigo-300/30 bg-indigo-500/10 p-4 space-y-4">
+                <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50/50 p-4 space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="font-semibold">Автоматическое решение системы (сохранено)</div>
@@ -974,112 +1120,170 @@ export default function Orders() {
                         Это принятый системой вариант расчёта, сохранённый в момент подтверждения сценария.
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-xs text-slate-500">Итого</div>
-                      <div className="text-lg font-bold text-indigo-200">
-                        {selectedVariantSnapshot.totalCost != null
-                          ? `${Number(selectedVariantSnapshot.totalCost).toLocaleString()} ₽`
-                          : "—"}
+                    {autoMachinesText ? (
+                      <div className="text-right">
+                        <div className="text-xs text-slate-500">Машины (доставка)</div>
+                        <div className="font-semibold text-emerald-800">{autoMachinesText}</div>
                       </div>
-                    </div>
+                    ) : null}
                   </div>
 
-                  <div className="grid md:grid-cols-4 gap-3 text-sm">
-                    <div className="rounded-lg border border-slate-200 p-3 bg-slate-900/40">
-                      <div className="text-xs text-slate-500">Материал</div>
-                      <div className="font-semibold">
-                        {selectedVariantSnapshot.materialCost != null
-                          ? `${Number(selectedVariantSnapshot.materialCost).toLocaleString()} ₽`
-                          : "—"}
+                  <div className="rounded-xl bg-white border border-slate-200 p-3 space-y-3">
+                    <div className="grid md:grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <div className="text-xs text-slate-500">Машины доставки</div>
+                        <div className="font-semibold text-slate-800">{autoMachinesText || "—"}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-slate-500">Машины разгрузки</div>
+                        <div className="font-semibold text-slate-800">{autoMachinesText || "—"}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-slate-500">Транспорт доставки</div>
+                        <div className="font-semibold">{transportTagLabel(quoteRequest.deliveryTransportTag)}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-slate-500">Транспорт разгрузки</div>
+                        <div className="font-semibold">{transportTagLabel(quoteRequest.unloadingTransportTag)}</div>
                       </div>
                     </div>
-                    <div className="rounded-lg border border-slate-200 p-3 bg-slate-900/40">
-                      <div className="text-xs text-slate-500">Доставка</div>
-                      <div className="font-semibold">
-                        {selectedVariantSnapshot.deliveryCost != null
-                          ? `${Number(selectedVariantSnapshot.deliveryCost).toLocaleString()} ₽`
-                          : "—"}
+
+                    {Array.isArray(requestedItems) && requestedItems.length ? (
+                      <div>
+                        <div className="text-sm font-semibold text-slate-800 mb-2">Производства по позициям</div>
+                        <div className="overflow-auto rounded-xl border border-slate-200">
+                          <table className="w-full text-sm">
+                            <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                              <tr>
+                                <th className="p-3 text-left">Товар</th>
+                                <th className="p-3 text-left">Кол-во</th>
+                                <th className="p-3 text-left">Производство</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {requestedItems.map((it, idx) => (
+                                <tr key={idx} className="border-b border-slate-100">
+                                  <td className="p-3">
+                                    {it?.category} / {it?.subtype}
+                                  </td>
+                                  <td className="p-3">{it?.quantity ?? "—"}</td>
+                                  <td className="p-3 font-semibold">{autoFactoriesByItem[idx] || "—"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="text-sm font-semibold text-slate-800 pt-2">Сервисный расчёт</div>
+                    <div className="grid md:grid-cols-4 gap-3 text-sm">
+                      <div className="rounded-lg border border-slate-200 p-3">
+                        <div className="text-xs text-slate-500">Материал</div>
+                        <div className="font-semibold">
+                          {selectedVariantSnapshot.materialCost != null
+                            ? `${Number(selectedVariantSnapshot.materialCost).toLocaleString()} ₽`
+                            : "—"}
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-slate-200 p-3">
+                        <div className="text-xs text-slate-500">Доставка</div>
+                        <div className="font-semibold">
+                          {selectedVariantSnapshot.deliveryCost != null
+                            ? `${Number(selectedVariantSnapshot.deliveryCost).toLocaleString()} ₽`
+                            : "—"}
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-slate-200 p-3">
+                        <div className="text-xs text-slate-500">Разгрузка</div>
+                        <div className="font-semibold">
+                          {selectedVariantSnapshot.unloadingCost != null
+                            ? `${Number(selectedVariantSnapshot.unloadingCost).toLocaleString()} ₽`
+                            : "—"}
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-slate-200 p-3">
+                        <div className="text-xs text-slate-500">Итого</div>
+                        <div className="font-semibold text-emerald-700">
+                          {selectedVariantSnapshot.totalCost != null
+                            ? `${Number(selectedVariantSnapshot.totalCost).toLocaleString()} ₽`
+                            : "—"}
+                        </div>
                       </div>
                     </div>
-                    <div className="rounded-lg border border-slate-200 p-3 bg-slate-900/40">
-                      <div className="text-xs text-slate-500">Вес</div>
-                      <div className="font-semibold">{selectedVariantSnapshot.totalWeight ?? "—"} т</div>
-                    </div>
-                    <div className="rounded-lg border border-slate-200 p-3 bg-slate-900/40">
-                      <div className="text-xs text-slate-500">Рейсы</div>
-                      <div className="font-semibold">{selectedVariantSnapshot.tripCount ?? "—"}</div>
-                    </div>
+
+                    {variantTripItems.length ? (
+                      <div className="overflow-auto rounded-xl border border-slate-200">
+                        <div className="p-3 border-b border-slate-200 font-semibold text-sm">🚚 Что везёт каждая машина</div>
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                            <tr>
+                              <th className="p-3 text-left">Производство</th>
+                              <th className="p-3 text-left">Машина</th>
+                              <th className="p-3 text-left">Тариф</th>
+                              <th className="p-3 text-left">Расстояние (км)</th>
+                              <th className="p-3 text-left">Загрузка (т)</th>
+                              <th className="p-3 text-left">Товары</th>
+                              <th className="p-3 text-left">Доставка (₽)</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {variantTripItems.map((trip, i) => (
+                              <tr key={i} className="border-b border-slate-100 align-top">
+                                <td className="p-3 whitespace-nowrap">{trip["завод"]}</td>
+                                <td className="p-3">{trip["машина"]}</td>
+                                <td className="p-3 whitespace-pre-line text-slate-600">{trip["тариф"] || "—"}</td>
+                                <td className="p-3">{trip["расстояние_км"]}</td>
+                                <td className="p-3">{trip["загрузка_т"]}</td>
+                                <td className="p-3">{trip["товары"]}</td>
+                                <td className="p-3">{Number(trip["стоимость_доставки"] || 0).toLocaleString()}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : null}
+
+                    {variantDetailsRows.length ? (
+                      <div className="overflow-auto rounded-xl border border-slate-200">
+                        <div className="p-3 border-b border-slate-200 font-semibold text-sm">📑 Детализация расчёта</div>
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                            <tr>
+                              <th className="p-3 text-left">Производство</th>
+                              <th className="p-3 text-left">Контакт</th>
+                              <th className="p-3 text-left">Товар</th>
+                              <th className="p-3 text-left">Машина</th>
+                              <th className="p-3 text-left">Расстояние (км)</th>
+                              <th className="p-3 text-left">Материал (₽)</th>
+                              <th className="p-3 text-left">Доставка (₽)</th>
+                              <th className="p-3 text-left">Итого (₽)</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {variantDetailsRows.map((d, idx) => (
+                              <tr key={idx} className="border-b border-slate-100">
+                                <td className="p-3 whitespace-nowrap">{d["завод"]}</td>
+                                <td className="p-3 whitespace-pre-line text-slate-600">{d["контакт"] || "—"}</td>
+                                <td className="p-3">{d["товар"]}</td>
+                                <td className="p-3">{d["машина"]}</td>
+                                <td className="p-3">{d["расстояние_км"]}</td>
+                                <td className="p-3">
+                                  {d["стоимость_материала"]?.toLocaleString?.() ?? d["стоимость_материала"]}
+                                </td>
+                                <td className="p-3">
+                                  {d["стоимость_доставки"]?.toLocaleString?.() ?? d["стоимость_доставки"]}
+                                </td>
+                                <td className="p-3 font-semibold text-emerald-700">
+                                  {d["итого"]?.toLocaleString?.() ?? d["итого"]}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : null}
                   </div>
-
-                  {variantTripItems.length ? (
-                    <div className="overflow-auto rounded-xl border border-slate-200 bg-slate-900/70 shadow-sm">
-                      <div className="p-3 border-b border-slate-800 font-semibold text-sm text-slate-200">
-                        🚚 Что везёт каждая машина
-                      </div>
-                      <table className="w-full text-sm text-slate-200">
-                        <thead className="bg-slate-900/50 text-slate-300 border-b border-slate-800">
-                          <tr>
-                            <th className="p-3 text-left">Производство</th>
-                            <th className="p-3 text-left">Машина</th>
-                            <th className="p-3 text-left">Тариф</th>
-                            <th className="p-3 text-left">Расстояние (км)</th>
-                            <th className="p-3 text-left">Загрузка (т)</th>
-                            <th className="p-3 text-left">Товары</th>
-                            <th className="p-3 text-left">Доставка (₽)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {variantTripItems.map((trip, i) => (
-                            <tr key={i} className="border-b border-slate-800 align-top">
-                              <td className="p-3 whitespace-nowrap">{trip["завод"]}</td>
-                              <td className="p-3">{trip["машина"]}</td>
-                              <td className="p-3 whitespace-pre-line text-slate-300">{trip["тариф"] || "—"}</td>
-                              <td className="p-3">{trip["расстояние_км"]}</td>
-                              <td className="p-3">{trip["загрузка_т"]}</td>
-                              <td className="p-3 text-slate-100">{trip["товары"]}</td>
-                              <td className="p-3">{Number(trip["стоимость_доставки"] || 0).toLocaleString()}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : null}
-
-                  {variantDetailsRows.length ? (
-                    <div className="overflow-auto rounded-xl border border-slate-200 bg-slate-900/70 shadow-sm">
-                      <div className="p-3 border-b border-slate-800 font-semibold text-sm text-slate-200">
-                        📑 Детализация расчёта
-                      </div>
-                      <table className="w-full text-sm text-slate-200">
-                        <thead className="bg-slate-900/50 text-slate-300 border-b border-slate-800">
-                          <tr>
-                            <th className="p-3 text-left">Производство</th>
-                            <th className="p-3 text-left">Контакт</th>
-                            <th className="p-3 text-left">Товар</th>
-                            <th className="p-3 text-left">Машина</th>
-                            <th className="p-3 text-left">Расстояние (км)</th>
-                            <th className="p-3 text-left">Материал (₽)</th>
-                            <th className="p-3 text-left">Доставка (₽)</th>
-                            <th className="p-3 text-left">Итого (₽)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {variantDetailsRows.map((d, idx) => (
-                            <tr key={idx} className="border-b border-slate-800">
-                              <td className="p-3 whitespace-nowrap">{d["завод"]}</td>
-                              <td className="p-3 whitespace-pre-line text-slate-400">{d["контакт"] || "—"}</td>
-                              <td className="p-3">{d["товар"]}</td>
-                              <td className="p-3">{d["машина"]}</td>
-                              <td className="p-3">{d["расстояние_км"]}</td>
-                              <td className="p-3">{d["стоимость_материала"]?.toLocaleString?.() ?? d["стоимость_материала"]}</td>
-                              <td className="p-3">{d["стоимость_доставки"]?.toLocaleString?.() ?? d["стоимость_доставки"]}</td>
-                              <td className="p-3 text-indigo-200 font-semibold">{d["итого"]?.toLocaleString?.() ?? d["итого"]}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : null}
                 </div>
               ) : null}
 
@@ -1485,48 +1689,75 @@ export default function Orders() {
                 </div>
               ) : null}
 
-              <div className="rounded-xl border border-slate-200 bg-white p-4">
-                <div className="font-semibold mb-2">События</div>
-                {Array.isArray(selected.events) && selected.events.length ? (
-                  <ul className="text-sm text-slate-700 space-y-2">
-                    {selected.events.map((e) => (
-                      <li key={e.id} className="border border-slate-100 rounded-lg p-2">
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold">{eventHumanLabel(e.type)}</span>
-                          <span className="text-xs text-slate-500">
-                            {e.createdAt ? new Date(e.createdAt).toLocaleString() : ""}
-                          </span>
-                        </div>
-                        <div className="text-xs text-slate-500">user: {e.user || "—"}</div>
-                        {eventSummary(e.type, e.payload) ? (
-                          <div className="mt-1 text-xs text-slate-600">{eventSummary(e.type, e.payload)}</div>
-                        ) : null}
-                        {e.payload ? (
-                          <details className="mt-2 rounded-lg bg-slate-50 border border-slate-200 p-2">
-                            <summary className="cursor-pointer text-xs font-semibold text-slate-700">
-                              Показать payload
-                            </summary>
-                            <pre className="mt-2 text-xs overflow-auto">
-                              {JSON.stringify(e.payload, null, 2)}
-                            </pre>
-                          </details>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div className="text-sm text-slate-500">Пока нет событий</div>
-                )}
-              </div>
+              {canViewAdminOnly ? (
+                <>
+                  <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="font-semibold mb-2">События</div>
+                    {Array.isArray(selected.events) && selected.events.length ? (
+                      <ul className="text-sm text-slate-700 space-y-2">
+                        {selected.events.map((e) => (
+                          <li key={e.id} className="border border-slate-100 rounded-lg p-2">
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold">{eventHumanLabel(e.type)}</span>
+                              <span className="text-xs text-slate-500">
+                                {e.createdAt ? new Date(e.createdAt).toLocaleString() : ""}
+                              </span>
+                            </div>
+                            <div className="text-xs text-slate-500">user: {e.user || "—"}</div>
+                            {eventSummary(e.type, e.payload) ? (
+                              <div className="mt-1 text-xs text-slate-600">{eventSummary(e.type, e.payload)}</div>
+                            ) : null}
+                            {e.payload ? (
+                              <details className="mt-2 rounded-lg bg-slate-50 border border-slate-200 p-2">
+                                <summary className="cursor-pointer text-xs font-semibold text-slate-700">
+                                  Показать payload
+                                </summary>
+                                <pre className="mt-2 text-xs overflow-auto">{JSON.stringify(e.payload, null, 2)}</pre>
+                              </details>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="text-sm text-slate-500">Пока нет событий</div>
+                    )}
+                  </div>
 
-              <details className="rounded-xl border border-slate-200 bg-white p-4">
-                <summary className="cursor-pointer text-sm font-semibold text-slate-700">
-                  Показать raw JSON заказа (полностью)
-                </summary>
-                <pre className="mt-3 text-xs bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-auto">
-                  {JSON.stringify(selected, null, 2)}
-                </pre>
-              </details>
+                  <details className="rounded-xl border border-slate-200 bg-white p-4">
+                    <summary className="cursor-pointer text-sm font-semibold text-slate-700">
+                      Показать raw JSON заказа (полностью)
+                    </summary>
+                    <pre className="mt-3 text-xs bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-auto">
+                      {JSON.stringify(selected, null, 2)}
+                    </pre>
+                  </details>
+                </>
+              ) : (
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="font-semibold mb-1">События</div>
+                  <div className="text-sm text-slate-500">Доступ: только админ и выше.</div>
+                </div>
+              )}
+
+              {canDeleteOrder ? (
+                <div className="rounded-xl border border-red-200 bg-red-50/50 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold text-red-900">Опасная зона</div>
+                      <div className="text-xs text-red-800/80 mt-1">
+                        Удаление заказа необратимо. Требуется пароль администратора.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteOpen(true)}
+                      className="px-3 py-2 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-500"
+                    >
+                      🗑️ Удалить заказ
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="text-sm text-slate-500">Выберите заказ слева</div>

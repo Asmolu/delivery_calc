@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { login, isAuthenticated } from "../api";
 import { motion } from "framer-motion";
 
@@ -10,13 +10,15 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const fromPath = location.state?.from?.pathname || "/admin";
 
   // Если уже авторизован, перенаправляем
   React.useEffect(() => {
     if (isAuthenticated()) {
-      navigate("/admin");
+      navigate(fromPath, { replace: true });
     }
-  }, [navigate]);
+  }, [navigate, fromPath]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -25,7 +27,7 @@ export default function Login() {
 
     try {
       await login(username, password);
-      navigate("/admin");
+      navigate(fromPath, { replace: true });
     } catch (err) {
       setError(err.message || "Ошибка входа. Проверьте логин и пароль.");
     } finally {

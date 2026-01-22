@@ -182,6 +182,86 @@ def create_default_admin(db: Session):
     log.info(f"✅ Создан администратор: {admin_username} / {admin_password}")
 
 
+def ensure_default_organization(db: Session) -> None:
+    """Создаём дефолтную организацию и привязываем существующих пользователей (best effort).
+
+    Проект сейчас single-tenant по факту, поэтому стартуем с одной организации.
+    """
+    from backend.models.db_models import Organization, OrganizationMember, OrgRole, User, UserRole
+
+    org_name = os.getenv("DEFAULT_ORG_NAME", "Default")
+    org = db.query(Organization).filter(Organization.name == org_name).first()
+    if not org:
+        org = Organization(name=org_name, is_active=True)
+        db.add(org)
+        db.commit()
+        db.refresh(org)
+        log.info("✅ Создана организация по умолчанию: %s", org_name)
+
+    # привязываем всех пользователей (идемпотентно)
+    users = db.query(User).all()
+    created = 0
+    for u in users:
+        exists = (
+            db.query(OrganizationMember)
+            .filter(OrganizationMember.organization_id == org.id, OrganizationMember.user_id == u.id)
+            .first()
+        )
+        if exists:
+            continue
+        role = OrgRole.ADMIN if u.role == UserRole.ADMIN else OrgRole.MANAGER
+        db.add(OrganizationMember(organization_id=org.id, user_id=u.id, role=role, is_active=True))
+        created += 1
+    if created:
+        db.commit()
+        log.info("✅ Привязано пользователей к org=%s: %s", org_name, created)
+
+    # Гарантируем, что основной админ из ENV становится OWNER (если есть).
+    try:
+        admin_username = os.getenv("ADMIN_USERNAME", "admin")
+        admin_user = db.query(User).filter(User.username == admin_username).first()
+        if admin_user:
+            m = (
+                db.query(OrganizationMember)
+                .filter(OrganizationMember.organization_id == org.id, OrganizationMember.user_id == admin_user.id)
+                .first()
+            )
+            if m and (m.role != OrgRole.OWNER):
+                m.role = OrgRole.OWNER
+                db.add(m)
+                db.commit()
+                log.info("✅ Пользователь %s назначен OWNER в org=%s", admin_username, org_name)
+    except Exception as e:
+        db.rollback()
+        log.warning("⚠️ Не удалось назначить OWNER для ADMIN_USERNAME: %s", e)
+
+
+def ensure_users_schema(db: Session) -> None:
+    """Идемпотентное расширение схемы users под B2B-профиль (имя/фамилия).
+
+    Без Alembic добавляем колонки через ALTER TABLE, если их нет.
+    """
+    bind = db.get_bind()
+    insp = inspect(bind)
+    if not insp.has_table("users"):
+        return
+
+    cols = {c["name"] for c in insp.get_columns("users")}
+
+    def _add_col(sql: str) -> None:
+        try:
+            db.execute(text(sql))
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            log.warning("⚠️ Не удалось выполнить миграцию users: %s (%s)", sql, e)
+
+    if "first_name" not in cols:
+        _add_col("ALTER TABLE users ADD COLUMN first_name VARCHAR(100) NULL")
+    if "last_name" not in cols:
+        _add_col("ALTER TABLE users ADD COLUMN last_name VARCHAR(100) NULL")
+
+
 def run_migration():
     """Запуск полной миграции"""
     log.info("🚀 Запуск миграции данных в PostgreSQL...")
@@ -191,6 +271,7 @@ def run_migration():
     
     db = SessionLocal()
     try:
+        ensure_users_schema(db)
         ensure_catalog_normalization(db)
         ensure_tariffs_schema(db)
         
@@ -228,6 +309,21 @@ def ensure_catalog_normalization(db: Session) -> None:
         log.info("🧱 Создаём таблицу categories...")
         Category.__table__.create(bind=bind, checkfirst=True)
 
+    def _add_col_safe(sql: str) -> None:
+        try:
+            db.execute(text(sql))
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            log.warning("⚠️ Не удалось выполнить миграцию каталога: %s (%s)", sql, e)
+
+    # 1.1) factories.is_active
+    if insp.has_table("factories"):
+        fcols = {c["name"] for c in insp.get_columns("factories")}
+        if "is_active" not in fcols:
+            log.info("🧱 Добавляем factories.is_active...")
+            _add_col_safe("ALTER TABLE factories ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE")
+
     # 2) products.category_id
     if insp.has_table("products"):
         cols = {c["name"] for c in insp.get_columns("products")}
@@ -235,6 +331,11 @@ def ensure_catalog_normalization(db: Session) -> None:
             log.info("🧱 Добавляем products.category_id...")
             db.execute(text("ALTER TABLE products ADD COLUMN category_id INTEGER"))
             db.commit()
+
+        # 2.1) products.is_active
+        if "is_active" not in cols:
+            log.info("🧱 Добавляем products.is_active...")
+            _add_col_safe("ALTER TABLE products ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE")
 
         # 3) наполняем categories из products.category и проставляем FK
         # (актуально при переходе со старой схемы, где category была строкой)
@@ -266,6 +367,16 @@ def ensure_catalog_normalization(db: Session) -> None:
         except Exception as e:
             db.rollback()
             log.warning("⚠️ Не удалось перенести category->category_id: %s", e)
+
+        # 3.1) защитно проставим активность для старых строк (если вдруг были NULL)
+        try:
+            if insp.has_table("factories"):
+                db.execute(text("UPDATE factories SET is_active = TRUE WHERE is_active IS NULL"))
+            db.execute(text("UPDATE products SET is_active = TRUE WHERE is_active IS NULL"))
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            log.warning("⚠️ Не удалось обновить is_active по умолчанию: %s", e)
 
         # 4) индексы (безопасно, если уже есть)
         # Уникальность: factory_id + category_id + subtype
@@ -347,6 +458,12 @@ def ensure_tariffs_schema(db: Session) -> None:
     # Флаг активности
     if "is_active" not in cols:
         _add_col("ALTER TABLE tariffs ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE")
+
+    # Контейнеровоз: привязка к базовому транспорту (шаланда и т.п.)
+    if "base_transport_name" not in cols:
+        _add_col("ALTER TABLE tariffs ADD COLUMN base_transport_name VARCHAR(255) NULL")
+    if "base_transport_tag" not in cols:
+        _add_col("ALTER TABLE tariffs ADD COLUMN base_transport_tag VARCHAR(50) NULL")
 
     # Аудит (кто/когда)
     if "created_by_user_id" not in cols:

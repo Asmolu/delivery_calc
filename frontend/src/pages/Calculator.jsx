@@ -12,22 +12,126 @@ import {
 } from "../api";
 import { API_BASE } from "../api";
 
+function MultiSelectDropdown({ options, value, onChange, placeholder = "Нет" }) {
+  const [open, setOpen] = React.useState(false);
+  const rootRef = React.useRef(null);
+
+  const selected = Array.isArray(value) ? value : [];
+  const selectedSet = React.useMemo(() => new Set(selected), [selected]);
+  const available = React.useMemo(
+    () => (options || []).filter((o) => !selectedSet.has(o.value)),
+    [options, selectedSet]
+  );
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e) => {
+      if (!rootRef.current) return;
+      if (rootRef.current.contains(e.target)) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [open]);
+
+  const addValue = (v) => {
+    if (!v) return;
+    if (selectedSet.has(v)) return;
+    onChange([...(selected || []), v]);
+    setOpen(false);
+  };
+
+  const removeValue = (v) => {
+    onChange((selected || []).filter((x) => x !== v));
+  };
+
+  return (
+    <div ref={rootRef} className={`relative ${open ? "z-[9999]" : ""}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((s) => !s)}
+        className="w-full px-3 py-2 rounded-lg bg-white border border-slate-200 text-slate-800 shadow-sm text-left flex items-center justify-between gap-2"
+      >
+        <span className="text-sm text-slate-700">
+          {open ? "Выберите…" : selected.length ? (available.length ? "Добавить…" : "Нет доступных") : placeholder}
+        </span>
+        <span className="text-slate-400">▾</span>
+      </button>
+
+      {selected.length ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {selected.map((v) => {
+            const opt = (options || []).find((o) => o.value === v);
+            const label = opt?.label || v;
+            return (
+              <span
+                key={v}
+                className="inline-flex items-center gap-2 px-2 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-xs"
+              >
+                {label}
+                <button
+                  type="button"
+                  onClick={() => removeValue(v)}
+                  className="text-slate-500 hover:text-slate-800"
+                  title="Убрать"
+                >
+                  ✕
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mt-2 text-xs text-slate-500">{placeholder}</div>
+      )}
+
+      {open ? (
+        <div className="absolute z-[9999] mt-2 w-full rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden">
+          <div className="max-h-56 overflow-auto">
+            {available.length ? (
+              available.map((o) => (
+                <button
+                  key={o.value}
+                  type="button"
+                  onClick={() => addValue(o.value)}
+                  className="w-full text-left px-3 py-2 text-sm text-slate-800 hover:bg-slate-50"
+                >
+                  {o.label}
+                </button>
+              ))
+            ) : (
+              <div className="px-3 py-3 text-sm text-slate-500">Нечего добавлять</div>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function Calculator() {
   const MotionDiv = motion.div;
   const [categories, setCategories] = useState({});
   const [items, setItems] = useState([{ category: "", subtype: "", quantity: 1 }]);
   const [coords, setCoords] = useState("");
-  const [deliveryTransportTag, setDeliveryTransportTag] = useState("auto");
-  const [unloadingTransportTag, setUnloadingTransportTag] = useState("auto");
+  const [allowedDeliveryTags, setAllowedDeliveryTags] = useState([]);
+  const [allowedUnloadingTags, setAllowedUnloadingTags] = useState([]);
+  const [forbiddenDeliveryTags, setForbiddenDeliveryTags] = useState([]);
+  const [forbiddenUnloadingTags, setForbiddenUnloadingTags] = useState([]);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [tariffs, setTariffs] = useState([]);
 
   const [currentUser, setCurrentUser] = useState(null);
-  const isAdmin = String(currentUser?.role || "").toLowerCase() === "admin";
+  const ORG_RANK = { viewer: 10, manager: 20, logist: 30, admin: 40, owner: 50 };
+  const orgRank = (r) => ORG_RANK[String(r || "").toLowerCase()] || 0;
+  const canLogist = orgRank(currentUser?.orgRole) >= ORG_RANK.logist;
+  const canAdmin = orgRank(currentUser?.orgRole) >= ORG_RANK.admin;
+  const isAuthed = isAuthenticated();
 
   const [actionsOpen, setActionsOpen] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
+  const [logisticsModalOpen, setLogisticsModalOpen] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualOrderId, setManualOrderId] = useState(null);
   const [manualDeliveryMachines, setManualDeliveryMachines] = useState([""]);
@@ -49,7 +153,47 @@ export default function Calculator() {
     []
   );
 
+  const UNLOADING_SPECIAL_OPTIONS = React.useMemo(
+    () => [{ value: "none", label: "Нет разгрузки (на объекте есть техника)" }],
+    []
+  );
+
   const normStr = (x) => String(x ?? "").trim();
+
+  const forbiddenTransportOptions = React.useMemo(() => {
+    return (TRANSPORT_TAGS || [])
+      .filter((t) => t.value !== "auto")
+      .map((t) => ({ value: t.value, label: t.label }));
+  }, [TRANSPORT_TAGS]);
+
+  const unloadingAllowedOptions = React.useMemo(() => {
+    return [...UNLOADING_SPECIAL_OPTIONS, ...(forbiddenTransportOptions || [])];
+  }, [UNLOADING_SPECIAL_OPTIONS, forbiddenTransportOptions]);
+
+  const deliveryTransportTag = React.useMemo(() => {
+    // legacy single-tag field: если выбран ровно 1 тег — отправим его, иначе "auto"
+    const v = (allowedDeliveryTags || []).map((x) => normStr(x).toLowerCase()).filter(Boolean);
+    if (v.length === 1) return v[0];
+    return "auto";
+  }, [allowedDeliveryTags]);
+
+  const unloadingTransportTag = React.useMemo(() => {
+    const v = (allowedUnloadingTags || []).map((x) => normStr(x).toLowerCase()).filter(Boolean);
+    if (v.length === 1) return v[0];
+    return "auto";
+  }, [allowedUnloadingTags]);
+
+  const allowedDeliverySet = React.useMemo(() => {
+    return new Set((allowedDeliveryTags || []).map((x) => normStr(x).toLowerCase()).filter(Boolean));
+  }, [allowedDeliveryTags]);
+
+  const allowedUnloadingSet = React.useMemo(() => {
+    return new Set((allowedUnloadingTags || []).map((x) => normStr(x).toLowerCase()).filter(Boolean));
+  }, [allowedUnloadingTags]);
+
+  const unloadingDisabled = React.useMemo(() => {
+    return unloadingTransportTag === "none" || allowedUnloadingSet.has("none");
+  }, [unloadingTransportTag, allowedUnloadingSet]);
 
   const getTariffName = (t) => t?.name || t?.["название"] || "";
   const getTariffTag = (t) => t?.tag || t?.["тег"] || "";
@@ -79,22 +223,20 @@ export default function Calculator() {
   }, [tariffs]);
 
   const deliveryMachineOptions = React.useMemo(() => {
-    const tagFilter = normStr(deliveryTransportTag).toLowerCase();
     return transportCards.filter(
       (c) =>
         c.serviceType === "delivery" &&
-        (tagFilter === "auto" || !tagFilter || c.tag === tagFilter)
+        (allowedDeliverySet.size ? allowedDeliverySet.has(c.tag) : true)
     );
-  }, [transportCards, deliveryTransportTag]);
+  }, [transportCards, allowedDeliverySet]);
 
   const unloadingMachineOptions = React.useMemo(() => {
-    const tagFilter = normStr(unloadingTransportTag).toLowerCase();
     return transportCards.filter(
       (c) =>
         c.serviceType === "unloading" &&
-        (tagFilter === "auto" || !tagFilter || c.tag === tagFilter)
+        (allowedUnloadingSet.size ? allowedUnloadingSet.has(c.tag) : true)
     );
-  }, [transportCards, unloadingTransportTag]);
+  }, [transportCards, allowedUnloadingSet]);
 
   useEffect(() => {
     async function load() {
@@ -177,12 +319,34 @@ export default function Calculator() {
       }
 
       setLoading(true);
+      const forbidDelivery = Array.from(
+        new Set((forbiddenDeliveryTags || []).map((x) => normStr(x).toLowerCase()).filter(Boolean))
+      );
+      const forbidUnloading = Array.from(
+        new Set((forbiddenUnloadingTags || []).map((x) => normStr(x).toLowerCase()).filter(Boolean))
+      );
+      // whitelist не должен одновременно попадать в запреты
+      for (const t of allowedDeliverySet) {
+        const idx = forbidDelivery.indexOf(t);
+        if (idx >= 0) forbidDelivery.splice(idx, 1);
+      }
+      for (const t of allowedUnloadingSet) {
+        const idx = forbidUnloading.indexOf(t);
+        if (idx >= 0) forbidUnloading.splice(idx, 1);
+      }
+
+      const allowDelivery = Array.from(allowedDeliverySet);
+      const allowUnloading = Array.from(allowedUnloadingSet);
       const payload = {
         upload_lat: lat,
         upload_lon: lon,
         transport_type: "auto",
         deliveryTransportTag: deliveryTransportTag,
         unloadingTransportTag: unloadingTransportTag,
+        allowedDeliveryTags: allowDelivery,
+        allowedUnloadingTags: allowUnloading,
+        forbiddenDeliveryTags: forbidDelivery,
+        forbiddenUnloadingTags: forbidUnloading,
         items: items.map((it) => ({
           category: it.category,
           subtype: it.subtype,
@@ -192,6 +356,7 @@ export default function Calculator() {
 
       const data = await getQuote(payload);
       if (data?.variants) {
+        if (data?.needsLogisticsCheck) setLogisticsModalOpen(true);
         setResult({ ...data, selectedVariant: 0, _lastQuoteRequest: payload });
       } else {
         const localized = {
@@ -210,6 +375,7 @@ export default function Calculator() {
           selectedVariant: 0,
           _lastQuoteRequest: payload,
         };
+        if (localized?.needsLogisticsCheck) setLogisticsModalOpen(true);
         setResult(localized);
       }
     } catch (err) {
@@ -222,7 +388,7 @@ export default function Calculator() {
   };
 
   const handleConfirmScenario = async () => {
-    if (!isAdmin || !result?.variants?.length) return;
+    if (!canLogist || !result?.variants?.length) return;
     const reqPayload = result?._lastQuoteRequest;
     if (!reqPayload) {
       alert("Не найден снимок запроса для сохранения заказа");
@@ -245,7 +411,7 @@ export default function Calculator() {
   };
 
   const handleRejectAndOpenManual = async () => {
-    if (!isAdmin || !result?.variants?.length) return;
+    if (!canLogist || !result?.variants?.length) return;
     const reqPayload = result?._lastQuoteRequest;
     if (!reqPayload) {
       alert("Не найден снимок запроса для сохранения заказа");
@@ -309,9 +475,12 @@ export default function Calculator() {
       return;
     }
     const canPickDeliveryMachine = deliveryMachineOptions.length > 0 || uniqueTransportNames.length > 0;
-    const canPickUnloadingMachine = unloadingMachineOptions.length > 0 || uniqueTransportNames.length > 0;
+    const canPickUnloadingMachine =
+      !unloadingDisabled && (unloadingMachineOptions.length > 0 || uniqueTransportNames.length > 0);
     const deliveryNames = (manualDeliveryMachines || []).map((x) => normStr(x)).filter(Boolean);
-    const unloadingNames = (manualUnloadingMachines || []).map((x) => normStr(x)).filter(Boolean);
+    const unloadingNames = unloadingDisabled
+      ? []
+      : (manualUnloadingMachines || []).map((x) => normStr(x)).filter(Boolean);
     if (canPickDeliveryMachine && deliveryNames.length === 0) {
       alert("Добавьте хотя бы одну машину доставки");
       return;
@@ -333,14 +502,16 @@ export default function Calculator() {
     try {
       setActionBusy(true);
       const deliveryNameFinal = (deliveryNames.join(" + ") || "manual").trim();
-      const unloadingNameFinal = (unloadingNames.join(" + ") || "manual").trim();
+      const unloadingNameFinal = unloadingDisabled ? "none" : (unloadingNames.join(" + ") || "manual").trim();
       const manualPayload = {
         deliveryMachineName: deliveryNameFinal, // legacy single string
         unloadingMachineName: unloadingNameFinal, // legacy single string
         deliveryMachines: deliveryNames,
         unloadingMachines: unloadingNames,
         deliveryTransportTag,
-        unloadingTransportTag,
+        unloadingTransportTag: unloadingDisabled ? "none" : unloadingTransportTag,
+        allowedDeliveryTags: Array.from(allowedDeliverySet),
+        allowedUnloadingTags: unloadingDisabled ? ["none"] : Array.from(allowedUnloadingSet),
         items: itemsSnap.map((it, idx) => ({
           category: it?.category,
           subtype: it?.subtype,
@@ -395,7 +566,9 @@ export default function Calculator() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">
-        <div className="card-glass p-5 md:p-6 md:col-span-2 space-y-4">
+        {/* card-glass has backdrop-filter -> creates stacking context.
+            Ensure dropdowns can overlay next sections by raising this card's z-index. */}
+        <div className="card-glass relative z-50 p-5 md:p-6 md:col-span-2 space-y-4">
           <div className="flex flex-col md:flex-row md:items-center md:gap-3">
             <label className="text-sm font-semibold text-slate-700">Координаты выгрузки</label>
             <div className="flex flex-col sm:flex-row gap-3 w-full">
@@ -427,31 +600,76 @@ export default function Calculator() {
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
               <label className="block mb-2 text-sm font-semibold text-slate-700">Выберете транспорт доставки</label>
-              <select
-                value={deliveryTransportTag}
-                onChange={(e) => setDeliveryTransportTag(e.target.value)}
-                className="w-full px-3 py-3 rounded-lg bg-white border border-slate-200 text-slate-800 shadow-sm"
-              >
-                {TRANSPORT_TAGS.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
+              <MultiSelectDropdown
+                options={forbiddenTransportOptions}
+                value={allowedDeliveryTags}
+                onChange={(next) => {
+                  const normNext = Array.from(new Set((next || []).map((x) => normStr(x).toLowerCase()).filter(Boolean)));
+                  setAllowedDeliveryTags(normNext);
+                  const nextSet = new Set(normNext);
+                  setForbiddenDeliveryTags((prev) => (prev || []).filter((x) => !nextSet.has(normStr(x).toLowerCase())));
+                }}
+                placeholder="Авто"
+              />
+              <div className="text-xs text-slate-500 mt-1">
+                {allowedDeliveryTags?.length ? "Расчёт будет только по выбранным тегам." : "Если ничего не выбрано — ограничений нет."}
+              </div>
+
+              <div className="mt-3">
+                <label className="block mb-2 text-sm font-semibold text-slate-700">
+                  Запрещённый транспорт доставки (можно несколько)
+                </label>
+                <MultiSelectDropdown
+                  options={forbiddenTransportOptions}
+                  value={forbiddenDeliveryTags}
+                  onChange={setForbiddenDeliveryTags}
+                  placeholder="Нет"
+                />
+              </div>
             </div>
             <div>
               <label className="block mb-2 text-sm font-semibold text-slate-700">Выберете транспорт разгрузки</label>
-              <select
-                value={unloadingTransportTag}
-                onChange={(e) => setUnloadingTransportTag(e.target.value)}
-                className="w-full px-3 py-3 rounded-lg bg-white border border-slate-200 text-slate-800 shadow-sm"
-              >
-                {TRANSPORT_TAGS.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
+              <MultiSelectDropdown
+                options={unloadingAllowedOptions}
+                value={allowedUnloadingTags}
+                onChange={(next) => {
+                  const normNext = Array.from(
+                    new Set((next || []).map((x) => normStr(x).toLowerCase()).filter(Boolean))
+                  );
+                  // "none" эксклюзивен: если выбран — оставляем только его и убираем запреты
+                  if (normNext.includes("none")) {
+                    setAllowedUnloadingTags(["none"]);
+                    setForbiddenUnloadingTags([]);
+                    return;
+                  }
+                  const cleaned = normNext.filter((x) => x !== "none");
+                  setAllowedUnloadingTags(cleaned);
+                  const nextSet = new Set(cleaned);
+                  setForbiddenUnloadingTags((prev) =>
+                    (prev || []).filter((x) => !nextSet.has(normStr(x).toLowerCase()))
+                  );
+                }}
+                placeholder="Авто"
+              />
+              <div className="text-xs text-slate-500 mt-1">
+                {unloadingDisabled
+                  ? "Разгрузка не будет посчитана (на объекте есть своя техника)."
+                  : allowedUnloadingTags?.length
+                    ? "Разгрузка будет только по выбранным тегам."
+                    : "Если ничего не выбрано — ограничений нет."}
+              </div>
+
+              <div className="mt-3">
+                <label className="block mb-2 text-sm font-semibold text-slate-700">
+                  Запрещённый транспорт разгрузки (можно несколько)
+                </label>
+                <MultiSelectDropdown
+                  options={forbiddenTransportOptions}
+                  value={forbiddenUnloadingTags}
+                  onChange={setForbiddenUnloadingTags}
+                  placeholder="Нет"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -522,7 +740,8 @@ export default function Calculator() {
         </div>
       </div>
 
-      <div className="card-glass p-6 md:p-8 flex flex-col gap-4">
+      {/* Keep below filter card so dropdowns overlay it */}
+      <div className="card-glass relative z-0 p-6 md:p-8 flex flex-col gap-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
             <h2 className="text-2xl font-semibold">Готовы посчитать?</h2>
@@ -543,10 +762,46 @@ export default function Calculator() {
       {result?.variants ? (
         <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card-glass p-6 md:p-8">
           {result.warningText ? (
-            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 px-4 py-3">
-              <div className="text-sm font-semibold">⚠️ {result.warningText}</div>
-              <div className="text-xs text-amber-800 mt-1">
-                Заказ содержит товары из разных категорий — перевозки будут рассчитаны раздельно.
+            <div className="mb-6 rounded-2xl border-2 border-amber-300 bg-gradient-to-r from-amber-50 to-white text-amber-950 px-5 py-4 shadow-lg">
+              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold uppercase tracking-wide text-amber-700">Требует внимания</div>
+                  <div className="text-xl font-extrabold mt-1">⚠️ {result.warningText}</div>
+                  {Array.isArray(result.warningReasons) && result.warningReasons.length ? (
+                    <ul className="mt-2 text-sm text-amber-900 list-disc pl-5 space-y-1">
+                      {result.warningReasons.slice(0, 5).map((r, idx) => (
+                        <li key={idx}>{r}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="text-sm text-amber-900 mt-2">
+                      Заказ содержит товары из разных категорий — перевозки будут рассчитаны раздельно.
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLogisticsModalOpen(true)}
+                    className="px-4 py-2 rounded-xl bg-amber-600 text-white font-semibold hover:bg-amber-500"
+                  >
+                    Что делать?
+                  </button>
+                  {canLogist ? (
+                    <button
+                      type="button"
+                      disabled={actionBusy}
+                      onClick={async () => {
+                        setLogisticsModalOpen(false);
+                        await handleRejectAndOpenManual();
+                      }}
+                      className="px-4 py-2 rounded-xl bg-white border-2 border-amber-300 text-amber-900 font-semibold hover:border-amber-400 disabled:opacity-60"
+                    >
+                      Отклонить и заполнить вручную
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </div>
           ) : null}
@@ -555,6 +810,24 @@ export default function Calculator() {
               <p className="pill mb-2">Найдено {result.variants.length} вариантов</p>
               <h3 className="text-2xl font-semibold">Сравнение предложений</h3>
               <p className="text-slate-600">Кликните на карточку, чтобы увидеть детали рейсов и тарифов.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div
+                className={`text-xs font-semibold px-3 py-2 rounded-xl border ${
+                  canLogist ? "bg-emerald-50 border-emerald-200 text-emerald-900" : "bg-slate-50 border-slate-200 text-slate-700"
+                }`}
+              >
+                Детализация: {canLogist ? "доступна" : "недоступна"} · детали доступны логисту и выше
+                {!canLogist ? (isAuthed ? ` (ваша роль: ${currentUser?.orgRole || "—"})` : " (войдите)") : ""}
+              </div>
+              {!isAuthed ? (
+                <a
+                  href="/login"
+                  className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold hover:border-indigo-200"
+                >
+                  Войти
+                </a>
+              ) : null}
             </div>
           </div>
 
@@ -570,86 +843,204 @@ export default function Calculator() {
                     : "bg-white border-slate-200 hover:border-indigo-200"
                 }`}
               >
-                <div className="text-sm text-slate-500 mb-1">Вариант #{idx + 1}</div>
-                <div className="text-lg font-semibold mb-1">🚛 {variant.transportName || "Комбинация"}</div>
-                <p className="text-indigo-700 font-bold text-xl mb-1">
-                  {variant.totalCost != null ? `${variant.totalCost.toLocaleString()} ₽` : "—"}
-                </p>
-                <p className="text-sm text-slate-600">📦 {variant.totalWeight} т · 🔁 {variant.tripCount} рейс(ов)</p>
-                <p className="text-xs text-slate-500 mt-1">Доставка: {variant.deliveryCost.toLocaleString()} ₽</p>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <div className="text-sm text-slate-500">Вариант #{idx + 1}</div>
+                  {variant?.isSingleFactory ? (
+                    <div className="text-[11px] font-semibold px-2 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+                      1 завод{variant?.singleFactoryName ? `: ${variant.singleFactoryName}` : ""}
+                    </div>
+                  ) : null}
+                </div>
+                {(() => {
+                  const plans = Array.isArray(variant?.transportDetails) ? variant.transportDetails : [];
+                  const factories = Array.from(new Set(plans.map((p) => p?.factory_name).filter(Boolean)));
+                  const productionLabel =
+                    variant?.singleFactoryName ||
+                    (factories.length === 1 ? factories[0] : (factories.length ? factories.join(", ") : "—"));
+                  const unloadingMachine =
+                    Number(variant?.unloadingCost || 0) > 0 ? (variant?.unloading?.tariff_name || "—") : "—";
+                  const deliveryMachine = variant?.transportName || "—";
+
+                  return (
+                    <>
+                      <div className="text-lg font-semibold mb-1">🚚 {deliveryMachine}</div>
+                      <p className="text-indigo-700 font-bold text-xl mb-1">
+                        {variant.totalCost != null ? `${variant.totalCost.toLocaleString()} ₽` : "—"}
+                      </p>
+                      <div className="mt-2 text-sm text-slate-600 space-y-1">
+                        <div>
+                          <span className="text-slate-400">Производство:</span> {productionLabel}
+                        </div>
+                        <div>
+                          <span className="text-slate-400">Количество рейсов:</span> {variant.tripCount ?? 0}
+                        </div>
+                        <div>
+                          <span className="text-slate-400">Машина разгрузки:</span> {unloadingMachine}
+                        </div>
+                        <div>
+                          <span className="text-slate-400">Машина доставки:</span> {deliveryMachine}
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
               </button>
             ))}
           </div>
 
           {result.selectedVariant !== undefined && (() => {
             const activeVariant = result.variants[result.selectedVariant] || {};
-            const tripItems = activeVariant.tripItems || [];
-            const detailRows = activeVariant.details || [];
+            const tripItems = Array.isArray(activeVariant.tripItems) ? activeVariant.tripItems : [];
+            const detailRows = Array.isArray(activeVariant.details) ? activeVariant.details : [];
+            const unloading = activeVariant.unloading || null;
+            const unloadingCost = Number(activeVariant.unloadingCost || 0);
+            const summaryMaterial = Number(activeVariant.materialCost || 0);
+            const summaryDelivery = Number(activeVariant.deliveryCost || 0);
+            const summaryTotal =
+              activeVariant.totalCost != null
+                ? Number(activeVariant.totalCost || 0)
+                : summaryMaterial + summaryDelivery + unloadingCost;
+
+            const sumMaterial = (detailRows || []).reduce((acc, r) => acc + Number(r?.["стоимость_материала"] || 0), 0);
+            const sumDelivery = (detailRows || []).reduce((acc, r) => acc + Number(r?.["стоимость_доставки"] || 0), 0);
+            const sumTotalWithUnloading = sumMaterial + sumDelivery + unloadingCost;
 
             return (
               <div className="mt-10 space-y-6">
-                <div className="overflow-auto rounded-xl border border-slate-200 bg-slate-900/70 shadow-sm">
-                  <table className="w-full text-sm text-slate-200">
-                    <thead className="bg-slate-900/50 text-slate-300 border-b border-slate-800">
-                      <tr>
-                        <th className="p-3 text-left">Производство</th>
-                        <th className="p-3 text-left">Контакт</th>
-                        <th className="p-3 text-left">Товар</th>
-                        <th className="p-3 text-left">Машина</th>
-                        <th className="p-3 text-left">Расстояние (км)</th>
-                        <th className="p-3 text-left">Материал (₽)</th>
-                        <th className="p-3 text-left">Доставка (₽)</th>
-                        <th className="p-3 text-left">Итого (₽)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {detailRows.map((d, idx) => (
-                        <tr key={idx} className="border-b border-slate-800">
-                          <td className="p-3 whitespace-nowrap">{d["завод"]}</td>
-                          <td className="p-3 whitespace-pre-line text-slate-400">{d["контакт"] || "—"}</td>
-                          <td className="p-3">{d["товар"]}</td>
-                          <td className="p-3">{d["машина"]}</td>
-                          <td className="p-3">{d["расстояние_км"]}</td>
-                          <td className="p-3">{d["стоимость_материала"]?.toLocaleString()}</td>
-                          <td className="p-3">{d["стоимость_доставки"]?.toLocaleString()}</td>
-                          <td className="p-3 text-indigo-300 font-semibold">{d["итого"]?.toLocaleString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="text-sm font-semibold text-slate-800 mb-2">Итоги варианта</div>
+                  <div className="grid gap-2 sm:grid-cols-4">
+                    <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
+                      <div className="text-xs text-slate-500">Материал</div>
+                      <div className="text-lg font-semibold text-slate-900">{summaryMaterial.toLocaleString()} ₽</div>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
+                      <div className="text-xs text-slate-500">Доставка</div>
+                      <div className="text-lg font-semibold text-slate-900">{summaryDelivery.toLocaleString()} ₽</div>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
+                      <div className="text-xs text-slate-500">Разгрузка</div>
+                      <div className="text-lg font-semibold text-slate-900">{unloadingCost.toLocaleString()} ₽</div>
+                    </div>
+                    <div className="rounded-lg bg-emerald-900/20 border border-emerald-400/30 p-3">
+                      <div className="text-xs text-emerald-200">Итого</div>
+                      <div className="text-lg font-bold text-emerald-100">{summaryTotal.toLocaleString()} ₽</div>
+                    </div>
+                  </div>
                 </div>
 
-                {Array.isArray(tripItems) && tripItems.length > 0 && (
-                  <div className="overflow-auto rounded-xl border border-slate-200 bg-slate-900/70 shadow-sm">
-                    <div className="p-4 border-b border-slate-800 flex items-center gap-2 text-slate-200">
-                      🚚 Что везёт каждая машина
-                    </div>
-                    <table className="w-full text-sm text-slate-200">
-                      <thead className="bg-slate-900/50 text-slate-300 border-b border-slate-800">
-                        <tr>
-                          <th className="p-3 text-left">Производство</th>
-                          <th className="p-3 text-left">Машина</th>
-                          <th className="p-3 text-left">Тариф</th>
-                          <th className="p-3 text-left">Расстояние (км)</th>
-                          <th className="p-3 text-left">Загрузка (т)</th>
-                          <th className="p-3 text-left">Товары</th>
-                          <th className="p-3 text-left">Доставка (₽)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {tripItems.map((trip, i) => (
-                          <tr key={i} className="border-b border-slate-800 align-top">
-                            <td className="p-3 whitespace-nowrap">{trip["завод"]}</td>
-                            <td className="p-3">{trip["машина"]}</td>
-                            <td className="p-3 text-slate-300 whitespace-pre-line">{trip["тариф"] || "—"}</td>
-                            <td className="p-3">{trip["расстояние_км"]}</td>
-                            <td className="p-3">{trip["загрузка_т"]}</td>
-                            <td className="p-3 text-slate-100">{trip["товары"]}</td>
-                            <td className="p-3">{Number(trip["стоимость_доставки"] || 0).toLocaleString()}</td>
+                {canLogist ? (
+                  <>
+                    <div className="overflow-auto rounded-xl border border-slate-200 bg-slate-900/70 shadow-sm">
+                      <table className="w-full text-sm text-slate-200">
+                        <thead className="bg-slate-900/50 text-slate-300 border-b border-slate-800">
+                          <tr>
+                            <th className="p-3 text-left">Производство</th>
+                            <th className="p-3 text-left">Контакт</th>
+                            <th className="p-3 text-left">Товар</th>
+                            <th className="p-3 text-left">Материал (₽)</th>
+                            <th className="p-3 text-left">Машина</th>
+                            <th className="p-3 text-left">Доставка (₽)</th>
+                            <th className="p-3 text-left">Разгрузка</th>
+                            <th className="p-3 text-left">Разгрузка (₽)</th>
+                            <th className="p-3 text-left">Итого (₽)</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {detailRows.map((d, idx) => (
+                            <tr key={idx} className="border-b border-slate-800">
+                              <td className="p-3 whitespace-nowrap">{d["завод"]}</td>
+                              <td className="p-3 whitespace-pre-line text-slate-400">{d["контакт"] || "—"}</td>
+                              <td className="p-3">{d["товар"]}</td>
+                              <td className="p-3">{d["стоимость_материала"]?.toLocaleString()}</td>
+                              <td className="p-3">{d["машина"]}</td>
+                              <td className="p-3">{d["стоимость_доставки"]?.toLocaleString()}</td>
+                              <td className="p-3 text-slate-300 whitespace-pre-line">{d["разгрузка"] || "—"}</td>
+                              <td className="p-3">{detailRows.length === 1 ? `${unloadingCost.toLocaleString()} ₽` : "—"}</td>
+                              <td className="p-3 text-indigo-300 font-semibold">
+                                {(Number(d["итого"] || 0) + (detailRows.length === 1 ? unloadingCost : 0)).toLocaleString()}
+                              </td>
+                            </tr>
+                          ))}
+                          {/* Summary rows (to avoid double-counting unloading when factories > 1) */}
+                          {detailRows.length > 1 ? (
+                            <>
+                              <tr className="border-t border-slate-700 bg-slate-900/30">
+                                <td className="p-3 font-semibold" colSpan={7}>Разгрузка</td>
+                                <td className="p-3 text-indigo-200 font-semibold">{unloadingCost.toLocaleString()} ₽</td>
+                                <td className="p-3">—</td>
+                              </tr>
+                              <tr className="border-t border-slate-700 bg-slate-900/40">
+                                <td className="p-3 font-bold" colSpan={3}>Итого по варианту</td>
+                                <td className="p-3 font-bold text-slate-100">{sumMaterial.toLocaleString()} ₽</td>
+                                <td className="p-3">—</td>
+                                <td className="p-3 font-bold text-slate-100">{sumDelivery.toLocaleString()} ₽</td>
+                                <td className="p-3">—</td>
+                                <td className="p-3 font-bold text-indigo-200">{unloadingCost.toLocaleString()} ₽</td>
+                                <td className="p-3 font-bold text-emerald-200">{sumTotalWithUnloading.toLocaleString()} ₽</td>
+                              </tr>
+                            </>
+                          ) : null}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {tripItems.length > 0 ? (
+                      <div className="overflow-auto rounded-xl border border-slate-200 bg-slate-900/70 shadow-sm">
+                        <div className="p-4 border-b border-slate-800 flex items-center gap-2 text-slate-200">
+                          🚚 Что везёт каждая машина
+                        </div>
+                        <table className="w-full text-sm text-slate-200">
+                          <thead className="bg-slate-900/50 text-slate-300 border-b border-slate-800">
+                            <tr>
+                              <th className="p-3 text-left">Производство</th>
+                              <th className="p-3 text-left">Расстояние (км)</th>
+                              <th className="p-3 text-left">Машина</th>
+                              <th className="p-3 text-left">Тариф</th>
+                              <th className="p-3 text-left">Товары</th>
+                              <th className="p-3 text-left">Загрузка (т)</th>
+                              <th className="p-3 text-left">Разгрузка</th>
+                              <th className="p-3 text-left">Доставка (₽)</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {tripItems.map((trip, i) => (
+                              <tr key={i} className="border-b border-slate-800 align-top">
+                                <td className="p-3 whitespace-nowrap">{trip["завод"]}</td>
+                                <td className="p-3">{trip["расстояние_км"]}</td>
+                                <td className="p-3">{trip["машина"]}</td>
+                                <td className="p-3 text-slate-300 whitespace-pre-line">{trip["тариф"] || "—"}</td>
+                                <td className="p-3 text-slate-100">{trip["товары"]}</td>
+                                <td className="p-3">{trip["загрузка_т"]}</td>
+                                <td className="p-3 text-slate-300 whitespace-pre-line">{trip["разгрузка"] || "—"}</td>
+                                <td className="p-3">{Number(trip["стоимость_доставки"] || 0).toLocaleString()}</td>
+                              </tr>
+                            ))}
+                            {/* Add explicit unloading row for clarity */}
+                            {unloading ? (
+                              <tr className="border-t border-slate-700 bg-slate-900/30">
+                                <td className="p-3 font-semibold whitespace-nowrap">Разгрузка</td>
+                                <td className="p-3">—</td>
+                                <td className="p-3">{unloading.tariff_name || unloading.tag || "—"}</td>
+                                <td className="p-3 text-slate-300 whitespace-pre-line">{unloading.tariff_label || "—"}</td>
+                                <td className="p-3 text-slate-100">—</td>
+                                <td className="p-3">—</td>
+                                <td className="p-3 text-slate-300 whitespace-pre-line">—</td>
+                                <td className="p-3 font-semibold text-indigo-200">{unloadingCost.toLocaleString()} ₽</td>
+                              </tr>
+                            ) : null}
+                            <tr className="border-t border-slate-700 bg-slate-900/40">
+                              <td className="p-3 font-bold" colSpan={7}>Итого по варианту</td>
+                              <td className="p-3 font-bold text-indigo-200">{(sumDelivery + unloadingCost).toLocaleString()} ₽</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+                    Подробности по рейсам/производствам доступны только логисту и выше. Сейчас показаны только итоговые суммы.
                   </div>
                 )}
               </div>
@@ -658,8 +1049,8 @@ export default function Calculator() {
         </MotionDiv>
       ) : null}
 
-      {/* Floating actions (admin-only, after quote) */}
-      {isAdmin && result?.variants?.length ? (
+      {/* Floating actions (logist+, after quote) */}
+      {canLogist && result?.variants?.length ? (
         <div className="fixed bottom-6 right-6 z-50">
           {actionsOpen ? (
             <div className="mb-3 w-72 rounded-2xl border border-slate-200 bg-white shadow-xl p-3">
@@ -920,6 +1311,66 @@ export default function Calculator() {
               >
                 Подтвердить (в БД)
               </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Logistics warning modal */}
+      {logisticsModalOpen && result?.warningText ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-white border border-slate-200 shadow-2xl p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">Проверка логистом</div>
+                <div className="text-2xl font-extrabold text-slate-900 mt-1">⚠️ {result.warningText}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLogisticsModalOpen(false)}
+                className="px-3 py-2 rounded-lg bg-white border border-slate-200 hover:border-indigo-200"
+                title="Закрыть"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <div className="text-sm font-semibold text-amber-900 mb-2">Причины</div>
+              {Array.isArray(result.warningReasons) && result.warningReasons.length ? (
+                <ul className="text-sm text-amber-900 list-disc pl-5 space-y-1">
+                  {result.warningReasons.map((r, idx) => (
+                    <li key={idx}>{r}</li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="text-sm text-amber-900">
+                  Есть признаки, что автоматический расчёт может требовать ручной проверки.
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setLogisticsModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-800 font-semibold hover:border-indigo-200"
+              >
+                Понятно
+              </button>
+              {canLogist ? (
+                <button
+                  type="button"
+                  disabled={actionBusy}
+                  onClick={async () => {
+                    setLogisticsModalOpen(false);
+                    await handleRejectAndOpenManual();
+                  }}
+                  className="px-4 py-2 rounded-xl bg-amber-600 text-white font-semibold hover:bg-amber-500 disabled:opacity-60"
+                >
+                  Отклонить и заполнить вручную
+                </button>
+              ) : null}
             </div>
           </div>
         </div>

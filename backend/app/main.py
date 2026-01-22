@@ -46,21 +46,26 @@ async def startup_event():
     # Создание администратора по умолчанию
     from backend.core.db_migration import (
         create_default_admin,
+        ensure_default_organization,
+        ensure_users_schema,
         ensure_catalog_normalization,
         ensure_tariffs_schema,
         migrate_tariffs,
     )
     db = SessionLocal()
     try:
+        ensure_users_schema(db)
         ensure_catalog_normalization(db)
         ensure_tariffs_schema(db)
         create_default_admin(db)
+        ensure_default_organization(db)
     finally:
         db.close()
 
     # Пересоздание товаров/заводов из Google Sheets в БД
     db = SessionLocal()
     try:
+        ensure_users_schema(db)
         ensure_catalog_normalization(db)
         ensure_tariffs_schema(db)
 

@@ -13,6 +13,12 @@ class QuoteRequest(BaseModel):
     upload_lon: float
     transport_type: str
     forbidden_types: list[str] = []
+    # Новый этап: запреты транспорта по тегам (отдельно для доставки/разгрузки)
+    forbidden_delivery_tags: list[str] = Field(default_factory=list, alias="forbiddenDeliveryTags")
+    forbidden_unloading_tags: list[str] = Field(default_factory=list, alias="forbiddenUnloadingTags")
+    # Новый этап: whitelist транспорта по тегам (если список не пуст — используем только эти теги)
+    allowed_delivery_tags: list[str] = Field(default_factory=list, alias="allowedDeliveryTags")
+    allowed_unloading_tags: list[str] = Field(default_factory=list, alias="allowedUnloadingTags")
     items: List[QuoteItem]
 
     add_manipulator: bool = Field(False, alias="addManipulator")

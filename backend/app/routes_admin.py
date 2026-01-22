@@ -1,4 +1,8 @@
 import json
+import hashlib
+import os
+import secrets
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
@@ -8,9 +12,24 @@ from types import SimpleNamespace
 
 from ..core.logger import get_logger
 from ..core.database import get_db
-from ..core.auth import require_admin
+from ..core.auth import verify_password
+from ..core.rbac import get_user_org_role, org_role_rank, require_org_min
 from ..core.db_migration import ensure_catalog_normalization, ensure_tariffs_schema
-from ..models.db_models import Category, Factory, Order, OrderEvent, OrderStatus, Product, Tariff, TariffChangeLog, User
+from ..models.db_models import (
+    Category,
+    Factory,
+    Order,
+    OrderEvent,
+    OrderStatus,
+    OrgRole,
+    Organization,
+    OrganizationInvite,
+    OrganizationMember,
+    Product,
+    Tariff,
+    TariffChangeLog,
+    User,
+)
 from ..core.data_loader import (
     load_factories_from_google,
     load_factories_and_tariffs,
@@ -32,9 +51,268 @@ log = get_logger("routes.admin")
 MAX_ORDERS_TO_KEEP = 100
 
 
+def _default_org(db: Session) -> Organization:
+    """Single-tenant fallback: используем org по умолчанию (создаётся на startup)."""
+    name = os.getenv("DEFAULT_ORG_NAME", "Default")
+    org = db.query(Organization).filter(Organization.name == name).first()
+    if org:
+        return org
+    # fallback: первая организация
+    org = db.query(Organization).order_by(Organization.id.asc()).first()
+    if not org:
+        raise HTTPException(status_code=500, detail="Организация не инициализирована")
+    return org
+
+
+def _hash_invite_token(raw_token: str) -> str:
+    salt = os.getenv("INVITE_TOKEN_SALT", "invite-salt-change-me")
+    return hashlib.sha256((salt + "::" + (raw_token or "")).encode("utf-8")).hexdigest()
+
+
+def _invite_url(raw_token: str) -> str:
+    public_base = os.getenv("PUBLIC_APP_BASE_URL", "http://localhost:5173").rstrip("/")
+    return f"{public_base}/invite/{raw_token}"
+
+
+# === Users / Invites (org-scoped RBAC) =======================================
+
+class InviteCreate(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255)
+    role: OrgRole = OrgRole.MANAGER
+    expires_days: int = Field(7, ge=1, le=30)
+
+
+class OrgMemberUpdate(BaseModel):
+    # membership
+    orgRole: OrgRole | None = None
+    isActive: bool | None = None
+    # user profile
+    firstName: str | None = None
+    lastName: str | None = None
+    userIsActive: bool | None = None
+
+
+@router.get("/admin/org")
+async def admin_get_org(
+    current_user: User = Depends(require_org_min(OrgRole.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    org = _default_org(db)
+    members_count = db.query(OrganizationMember).filter(OrganizationMember.organization_id == org.id).count()
+    invites_count = (
+        db.query(OrganizationInvite)
+        .filter(
+            OrganizationInvite.organization_id == org.id,
+            OrganizationInvite.revoked_at.is_(None),
+            OrganizationInvite.accepted_at.is_(None),
+        )
+        .count()
+    )
+    return {
+        "id": org.id,
+        "name": org.name,
+        "is_active": org.is_active,
+        "membersCount": members_count,
+        "invitesCount": invites_count,
+    }
+
+
+@router.get("/admin/org/members")
+async def admin_list_org_members(
+    current_user: User = Depends(require_org_min(OrgRole.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    org = _default_org(db)
+    rows = (
+        db.query(OrganizationMember)
+        .filter(OrganizationMember.organization_id == org.id)
+        .order_by(OrganizationMember.id.asc())
+        .all()
+    )
+    out = []
+    for m in rows:
+        u = m.user
+        out.append(
+            {
+                "id": m.id,
+                "userId": m.user_id,
+                "username": u.username if u else None,
+                "email": u.email if u else None,
+                "firstName": (getattr(u, "first_name", None) if u else None),
+                "lastName": (getattr(u, "last_name", None) if u else None),
+                "userIsActive": (bool(getattr(u, "is_active", True)) if u else False),
+                "orgRole": (m.role.value if hasattr(m.role, "value") else m.role),
+                "isActive": bool(m.is_active),
+                "createdAt": (m.created_at.isoformat() if getattr(m, "created_at", None) else None),
+            }
+        )
+    return out
+
+
+@router.put("/admin/org/members/{member_id}")
+async def admin_update_org_member(
+    member_id: int,
+    payload: OrgMemberUpdate,
+    current_user: User = Depends(require_org_min(OrgRole.OWNER)),
+    db: Session = Depends(get_db),
+):
+    """Owner-only: управление пользователями (роль/активность + имя/фамилия)."""
+    org = _default_org(db)
+    m = (
+        db.query(OrganizationMember)
+        .filter(OrganizationMember.id == member_id, OrganizationMember.organization_id == org.id)
+        .first()
+    )
+    if not m:
+        raise HTTPException(status_code=404, detail="Участник не найден")
+
+    u = m.user
+    if not u:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    # предотвратим потерю последнего OWNER
+    if payload.orgRole and payload.orgRole != OrgRole.OWNER:
+        owners = (
+            db.query(OrganizationMember)
+            .filter(
+                OrganizationMember.organization_id == org.id,
+                OrganizationMember.role == OrgRole.OWNER,
+                OrganizationMember.is_active.is_(True),
+                OrganizationMember.id != m.id,
+            )
+            .count()
+        )
+        if owners <= 0:
+            raise HTTPException(status_code=400, detail="Нельзя убрать роль OWNER у единственного владельца")
+
+    if payload.isActive is not None:
+        # если отключаем единственного OWNER — тоже запрещаем
+        if (payload.isActive is False) and (m.role == OrgRole.OWNER):
+            owners = (
+                db.query(OrganizationMember)
+                .filter(
+                    OrganizationMember.organization_id == org.id,
+                    OrganizationMember.role == OrgRole.OWNER,
+                    OrganizationMember.is_active.is_(True),
+                    OrganizationMember.id != m.id,
+                )
+                .count()
+            )
+            if owners <= 0:
+                raise HTTPException(status_code=400, detail="Нельзя отключить единственного владельца")
+        m.is_active = bool(payload.isActive)
+
+    if payload.orgRole is not None:
+        m.role = payload.orgRole
+
+    if payload.firstName is not None:
+        u.first_name = (payload.firstName or "").strip() or None
+    if payload.lastName is not None:
+        u.last_name = (payload.lastName or "").strip() or None
+    if payload.userIsActive is not None:
+        u.is_active = bool(payload.userIsActive)
+
+    db.add(m)
+    db.add(u)
+    db.commit()
+
+    return {"status": "ok", "memberId": m.id}
+
+
+@router.get("/admin/org/invites")
+async def admin_list_org_invites(
+    current_user: User = Depends(require_org_min(OrgRole.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    org = _default_org(db)
+    rows = (
+        db.query(OrganizationInvite)
+        .filter(OrganizationInvite.organization_id == org.id)
+        .order_by(OrganizationInvite.id.desc())
+        .limit(200)
+        .all()
+    )
+    out = []
+    for inv in rows:
+        out.append(
+            {
+                "id": inv.id,
+                "email": inv.email,
+                "role": (inv.role.value if hasattr(inv.role, "value") else inv.role),
+                "expiresAt": (inv.expires_at.isoformat() if inv.expires_at else None),
+                "revokedAt": (inv.revoked_at.isoformat() if inv.revoked_at else None),
+                "acceptedAt": (inv.accepted_at.isoformat() if inv.accepted_at else None),
+                "createdAt": (inv.created_at.isoformat() if inv.created_at else None),
+                "createdBy": (inv.created_by.username if inv.created_by else None),
+            }
+        )
+    return out
+
+
+@router.post("/admin/org/invites")
+async def admin_create_org_invite(
+    payload: InviteCreate,
+    current_user: User = Depends(require_org_min(OrgRole.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    org = _default_org(db)
+    email = (payload.email or "").strip().lower()
+    if "@" not in email:
+        raise HTTPException(status_code=400, detail="Некорректный email")
+
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = _hash_invite_token(raw_token)
+    expires_at = datetime.now(timezone.utc) + timedelta(days=int(payload.expires_days or 7))
+
+    inv = OrganizationInvite(
+        organization_id=org.id,
+        email=email,
+        role=payload.role,
+        token_hash=token_hash,
+        created_by_user_id=current_user.id,
+        expires_at=expires_at,
+    )
+    db.add(inv)
+    db.commit()
+    db.refresh(inv)
+    return {
+        "id": inv.id,
+        "email": inv.email,
+        "role": (inv.role.value if hasattr(inv.role, "value") else inv.role),
+        "expiresAt": inv.expires_at.isoformat() if inv.expires_at else None,
+        "inviteUrl": _invite_url(raw_token),
+        # raw token intentionally returned so admin can copy link
+        "token": raw_token,
+    }
+
+
+@router.post("/admin/org/invites/{invite_id}/revoke")
+async def admin_revoke_org_invite(
+    invite_id: int,
+    current_user: User = Depends(require_org_min(OrgRole.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    org = _default_org(db)
+    inv = (
+        db.query(OrganizationInvite)
+        .filter(OrganizationInvite.id == invite_id, OrganizationInvite.organization_id == org.id)
+        .first()
+    )
+    if not inv:
+        raise HTTPException(status_code=404, detail="Инвайт не найден")
+    if inv.accepted_at:
+        raise HTTPException(status_code=400, detail="Инвайт уже принят")
+    if inv.revoked_at:
+        return {"status": "ok", "revoked": False}
+    inv.revoked_at = datetime.now(timezone.utc)
+    db.add(inv)
+    db.commit()
+    return {"status": "ok", "revoked": True}
+
+
 @router.post("/admin/reload")
 async def admin_reload(
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_org_min(OrgRole.LOGIST)),
     db: Session = Depends(get_db)
 ):
     """
@@ -68,7 +346,7 @@ async def admin_reload(
 
 @router.post("/admin/reload/factories")
 async def admin_reload_factories(
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_org_min(OrgRole.LOGIST)),
     db: Session = Depends(get_db)
 ):
     try:
@@ -92,7 +370,7 @@ async def admin_reload_factories(
 
 @router.post("/admin/reload/tariffs")
 async def admin_reload_tariffs(
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_org_min(OrgRole.LOGIST)),
     db: Session = Depends(get_db)
 ):
     # Исторический эндпоинт — теперь тарифы редактируются в админке сайта.
@@ -115,6 +393,7 @@ class ProductUpsert(BaseModel):
     # DEPRECATED: больше не используем в расчёте (оставлено для обратной совместимости)
     max_per_trip: float = 0.0
     price: float = 0.0
+    is_active: bool = True
 
 
 class TariffUpsert(BaseModel):
@@ -174,6 +453,10 @@ class TransportCardUpsert(BaseModel):
     capacity: float = Field(..., ge=0.0)
     tag: str = Field(..., pattern="^(container_carrier|long_haul|flatbed|manipulator|crane)$")
 
+    # Контейнеровоз: привязка к базовой шаландe (или другому транспорту), от которого берётся цена
+    base_transport_name: str | None = None
+    base_transport_tag: str | None = None
+
     # радиус
     radius_limit_km: float | None = Field(None, ge=0.0)
     radius_center_lat: float | None = None
@@ -208,6 +491,13 @@ class ManualDecision(BaseModel):
 class OrderDecision(BaseModel):
     notes: str | None = None
     payload: dict = Field(default_factory=dict)
+
+class AdminPasswordCheck(BaseModel):
+    password: str = Field(..., min_length=1, max_length=255)
+
+
+class ActiveToggle(BaseModel):
+    is_active: bool = True
 
 
 def _derive_order_meta(events: list[OrderEvent]) -> dict:
@@ -502,7 +792,7 @@ def _refresh_tripitems_tariff_labels(trip_items: list, request_payload: dict, ta
 
 @router.get("/admin/categories")
 async def admin_list_categories(
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_org_min(OrgRole.LOGIST)),
     db: Session = Depends(get_db),
 ):
     cats = db.query(Category).order_by(Category.name.asc()).all()
@@ -512,7 +802,7 @@ async def admin_list_categories(
 @router.post("/admin/categories")
 async def admin_create_category(
     payload: CategoryUpsert,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_org_min(OrgRole.LOGIST)),
     db: Session = Depends(get_db),
 ):
     name = payload.name.strip()
@@ -530,7 +820,7 @@ async def admin_create_category(
 async def admin_update_category(
     category_id: int,
     payload: CategoryUpsert,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_org_min(OrgRole.LOGIST)),
     db: Session = Depends(get_db),
 ):
     cat = db.query(Category).filter(Category.id == category_id).first()
@@ -551,7 +841,7 @@ async def admin_update_category(
 @router.post("/admin/products")
 async def admin_create_product(
     payload: ProductUpsert,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_org_min(OrgRole.LOGIST)),
     db: Session = Depends(get_db),
 ):
     factory = db.query(Factory).filter(Factory.id == payload.factory_id).first()
@@ -579,6 +869,7 @@ async def admin_create_product(
         special_threshold=max(payload.special_threshold, 0.0),
         max_per_trip=max(payload.max_per_trip, 0.0),
         price=max(payload.price, 0.0),
+        is_active=bool(payload.is_active),
     )
     db.add(product)
     db.commit()
@@ -590,7 +881,7 @@ async def admin_create_product(
 async def admin_update_product(
     product_id: int,
     payload: ProductUpsert,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_org_min(OrgRole.LOGIST)),
     db: Session = Depends(get_db),
 ):
     product = db.query(Product).filter(Product.id == product_id).first()
@@ -623,10 +914,94 @@ async def admin_update_product(
     product.special_threshold = max(payload.special_threshold, 0.0)
     product.max_per_trip = max(payload.max_per_trip, 0.0)
     product.price = max(payload.price, 0.0)
+    product.is_active = bool(payload.is_active)
 
     db.commit()
     db.refresh(product)
     return {"id": product.id}
+
+
+@router.get("/admin/factories")
+async def admin_list_factories_catalog(
+    current_user: User = Depends(require_org_min(OrgRole.LOGIST)),
+    db: Session = Depends(get_db),
+):
+    """Список заводов и их товаров (включая неактивные) для админки."""
+    ensure_catalog_normalization(db)
+    factories = db.query(Factory).order_by(Factory.name.asc()).all()
+    out = []
+    for f in factories:
+        products = (
+            db.query(Product)
+            .filter(Product.factory_id == f.id)
+            .order_by(Product.subtype.asc())
+            .all()
+        )
+        out.append(
+            {
+                "id": f.id,
+                "name": f.name,
+                "lat": f.lat,
+                "lon": f.lon,
+                "contact": f.contact,
+                "is_active": bool(getattr(f, "is_active", True)),
+                "products": [
+                    {
+                        "id": p.id,
+                        "category": (p.category_rel.name if getattr(p, "category_rel", None) else None) or p.category,
+                        "category_id": p.category_id,
+                        "subtype": p.subtype,
+                        "weight_per_item": p.weight_per_item,
+                        "price": p.price,
+                        "is_active": bool(getattr(p, "is_active", True)),
+                    }
+                    for p in products
+                ],
+            }
+        )
+    return out
+
+
+@router.put("/admin/factories/{factory_id}/active")
+async def admin_set_factory_active(
+    factory_id: int,
+    payload: ActiveToggle,
+    current_user: User = Depends(require_org_min(OrgRole.LOGIST)),
+    db: Session = Depends(get_db),
+):
+    ensure_catalog_normalization(db)
+    f = db.query(Factory).filter(Factory.id == factory_id).first()
+    if not f:
+        raise HTTPException(status_code=404, detail="Завод не найден")
+
+    next_active = bool(payload.is_active)
+    f.is_active = next_active
+    db.add(f)
+
+    # Каскад: выключение завода выключает все его товары
+    if not next_active:
+        db.query(Product).filter(Product.factory_id == factory_id).update({"is_active": False})
+
+    db.commit()
+    return {"id": f.id, "is_active": bool(f.is_active)}
+
+
+@router.put("/admin/products/{product_id}/active")
+async def admin_set_product_active(
+    product_id: int,
+    payload: ActiveToggle,
+    current_user: User = Depends(require_org_min(OrgRole.LOGIST)),
+    db: Session = Depends(get_db),
+):
+    ensure_catalog_normalization(db)
+    p = db.query(Product).filter(Product.id == product_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Товар не найден")
+
+    p.is_active = bool(payload.is_active)
+    db.add(p)
+    db.commit()
+    return {"id": p.id, "is_active": bool(p.is_active)}
 
 
 # === Тарифы/машины (admin-only) ==============================================
@@ -637,6 +1012,8 @@ def _tariff_to_dict(t: Tariff) -> dict:
         "name": t.name,
         "capacity": t.capacity,
         "tag": t.tag,
+        "base_transport_name": getattr(t, "base_transport_name", None),
+        "base_transport_tag": getattr(t, "base_transport_tag", None),
         "weight_condition": t.weight_condition,
         "weight_threshold": t.weight_threshold,
         "min_distance": t.min_distance,
@@ -673,6 +1050,8 @@ def _tariff_snapshot(t: Tariff) -> dict:
         "name": t.name,
         "capacity": t.capacity,
         "tag": t.tag,
+        "base_transport_name": getattr(t, "base_transport_name", None),
+        "base_transport_tag": getattr(t, "base_transport_tag", None),
         "weight_condition": t.weight_condition,
         "weight_threshold": t.weight_threshold,
         "min_distance": t.min_distance,
@@ -694,7 +1073,7 @@ def _tariff_snapshot(t: Tariff) -> dict:
 
 @router.get("/admin/tariffs")
 async def admin_list_tariffs(
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_org_min(OrgRole.LOGIST)),
     db: Session = Depends(get_db),
 ):
     ensure_tariffs_schema(db)
@@ -705,7 +1084,7 @@ async def admin_list_tariffs(
 @router.post("/admin/tariffs")
 async def admin_create_tariff(
     payload: TariffUpsert,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_org_min(OrgRole.LOGIST)),
     db: Session = Depends(get_db),
 ):
     ensure_tariffs_schema(db)
@@ -767,7 +1146,7 @@ async def admin_create_tariff(
 async def admin_update_tariff(
     tariff_id: int,
     payload: TariffUpsert,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_org_min(OrgRole.LOGIST)),
     db: Session = Depends(get_db),
 ):
     allowed_unload = {"crane", "manipulator", "self"}
@@ -828,9 +1207,14 @@ async def admin_update_tariff(
 @router.delete("/admin/tariffs/{tariff_id}")
 async def admin_delete_tariff(
     tariff_id: int,
-    current_user: User = Depends(require_admin),
+    password: str,
+    current_user: User = Depends(require_org_min(OrgRole.ADMIN)),
     db: Session = Depends(get_db),
 ):
+    # подтверждение паролем (как "подпись" опасной операции)
+    if not verify_password(password or "", current_user.hashed_password):
+        raise HTTPException(status_code=403, detail="Invalid admin password")
+
     ensure_tariffs_schema(db)
     t = db.query(Tariff).filter(Tariff.id == tariff_id).first()
     if not t:
@@ -856,7 +1240,7 @@ async def admin_delete_tariff(
 @router.get("/admin/tariffs/audit")
 async def admin_tariffs_audit(
     limit: int = 200,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_org_min(OrgRole.ADMIN)),
     db: Session = Depends(get_db),
 ):
     ensure_tariffs_schema(db)
@@ -885,7 +1269,7 @@ async def admin_tariffs_audit(
 @router.post("/admin/transports/upsert")
 async def admin_upsert_transport_card(
     payload: TransportCardUpsert,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_org_min(OrgRole.LOGIST)),
     db: Session = Depends(get_db),
 ):
     """Пакетное сохранение "карточки транспорта":
@@ -896,6 +1280,20 @@ async def admin_upsert_transport_card(
 
     name = payload.name.strip()
     tag = payload.tag.strip().lower()
+    base_name = (payload.base_transport_name or "").strip() or None
+    base_tag = (payload.base_transport_tag or "").strip().lower() or None
+
+    if tag == "container_carrier":
+        if not base_name or not base_tag:
+            raise HTTPException(status_code=400, detail="Для контейнеровоза нужно указать базовый транспорт (base_transport_name/base_transport_tag)")
+        # бизнес-правило: контейнеровоз разгружается только краном
+        # (unload_tags задаём на карточке доставки, не на услуге разгрузки)
+        if payload.unload_tags:
+            tags_norm = [str(x).strip().lower() for x in (payload.unload_tags or []) if str(x).strip()]
+        else:
+            tags_norm = []
+        if tags_norm != ["crane"]:
+            raise HTTPException(status_code=400, detail="Для контейнеровоза unload_tags должны быть ровно ['crane']")
 
     if payload.radius_limit_km and (payload.radius_limit_km or 0) > 0:
         if payload.radius_center_lat is None or payload.radius_center_lon is None:
@@ -907,7 +1305,22 @@ async def admin_upsert_transport_card(
     unload_capability = (unload_tags[0] if unload_tags else "none")
 
     blocks = payload.weight_blocks or []
-    if not blocks:
+    if tag == "container_carrier":
+        # Контейнеровоз использует тарифную сетку шаланды и свою формулу,
+        # поэтому отдельные delivery_ranges/per_km здесь не редактируются.
+        # Храним одну "заглушку" для совместимости с текущей моделью tariffs.
+        blocks = [
+            WeightBlockUpsert(
+                weight_condition="any",
+                weight_threshold=None,
+                per_km=0.0,
+                delivery_ranges=[DeliveryRangeUpsert(min_distance=0.0, max_distance=0.0, base=1.0)],
+                unloading_price=None,
+            )
+        ]
+        payload.enable_delivery = True  # type: ignore[attr-defined]
+        payload.enable_unloading = False  # type: ignore[attr-defined]
+    elif not blocks:
         # по умолчанию одно "any" условие
         blocks = [WeightBlockUpsert()]
 
@@ -951,6 +1364,8 @@ async def admin_upsert_transport_card(
                     name=name,
                     capacity=float(payload.capacity),
                     tag=tag,
+                    base_transport_name=base_name,
+                    base_transport_tag=base_tag,
                     weight_condition=cond,
                     weight_threshold=thr,
                     weight_if=_legacy_weight_if(cond, thr),
@@ -980,6 +1395,8 @@ async def admin_upsert_transport_card(
                 name=name,
                 capacity=float(payload.capacity),
                 tag=tag,
+                base_transport_name=base_name,
+                base_transport_tag=base_tag,
                 weight_condition=cond,
                 weight_threshold=thr,
                 weight_if=_legacy_weight_if(cond, thr),
@@ -1027,9 +1444,14 @@ async def admin_upsert_transport_card(
 async def admin_delete_transport(
     name: str,
     tag: str,
-    current_user: User = Depends(require_admin),
+    password: str,
+    current_user: User = Depends(require_org_min(OrgRole.ADMIN)),
     db: Session = Depends(get_db),
 ):
+    # подтверждение паролем (как "подпись" опасной операции)
+    if not verify_password(password or "", current_user.hashed_password):
+        raise HTTPException(status_code=403, detail="Invalid admin password")
+
     ensure_tariffs_schema(db)
     nm = (name or "").strip()
     tg = (tag or "").strip().lower()
@@ -1065,7 +1487,7 @@ async def admin_delete_transport(
 
 @router.get("/admin/orders")
 async def admin_list_orders(
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_org_min(OrgRole.MANAGER)),
     db: Session = Depends(get_db),
 ):
     orders = db.query(Order).order_by(Order.created_at.desc()).limit(200).all()
@@ -1095,7 +1517,7 @@ async def admin_list_orders(
 @router.get("/admin/orders/{order_id}")
 async def admin_get_order(
     order_id: int,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_org_min(OrgRole.MANAGER)),
     db: Session = Depends(get_db),
 ):
     o = db.query(Order).filter(Order.id == order_id).first()
@@ -1122,7 +1544,10 @@ async def admin_get_order(
             ),
         }
 
-    return {
+    org_role = get_user_org_role(db, current_user)
+    can_view_events = org_role_rank(org_role) >= org_role_rank(OrgRole.ADMIN)
+
+    resp = {
         "id": o.id,
         "status": o.status.value if hasattr(o.status, "value") else o.status,
         "createdAt": o.created_at.isoformat() if o.created_at else None,
@@ -1138,7 +1563,11 @@ async def admin_get_order(
         "manualPayload": o.manual_payload,
         "createdBy": (o.created_by.username if o.created_by else None),
         **_derive_order_meta(events),
-        "events": [
+    }
+
+    # "События" — только admin+
+    if can_view_events:
+        resp["events"] = [
             {
                 "id": e.id,
                 "type": e.event_type,
@@ -1147,14 +1576,15 @@ async def admin_get_order(
                 "payload": e.payload,
             }
             for e in events
-        ],
-    }
+        ]
+
+    return resp
 
 
 @router.post("/admin/orders/confirm")
 async def admin_confirm_order_from_quote(
     payload: OrderCreateFromQuote,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_org_min(OrgRole.LOGIST)),
     db: Session = Depends(get_db),
 ):
     idx = payload.selectedVariant
@@ -1192,7 +1622,7 @@ async def admin_confirm_order_from_quote(
 @router.post("/admin/orders/reject")
 async def admin_reject_order_for_manual(
     payload: OrderCreateFromQuote,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_org_min(OrgRole.LOGIST)),
     db: Session = Depends(get_db),
 ):
     # В rejected состоянии selectedVariant может быть любым (для ориентира)
@@ -1231,7 +1661,7 @@ async def admin_reject_order_for_manual(
 async def admin_manual_confirm_order(
     order_id: int,
     decision: ManualDecision,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_org_min(OrgRole.LOGIST)),
     db: Session = Depends(get_db),
 ):
     order = db.query(Order).filter(Order.id == order_id).first()
@@ -1274,7 +1704,7 @@ async def admin_manual_confirm_order(
 @router.post("/admin/orders/{order_id}/manual_recalc")
 async def admin_manual_recalc_order(
     order_id: int,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_org_min(OrgRole.LOGIST)),
     db: Session = Depends(get_db),
 ):
     """Пересчитать уже сохранённое ручное решение по данным order.manual_payload.manual."""
@@ -1307,7 +1737,7 @@ async def admin_manual_recalc_order(
 async def admin_approve_order(
     order_id: int,
     decision: OrderDecision,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_org_min(OrgRole.LOGIST)),
     db: Session = Depends(get_db),
 ):
     order = db.query(Order).filter(Order.id == order_id).first()
@@ -1330,7 +1760,7 @@ async def admin_approve_order(
 async def admin_decline_order(
     order_id: int,
     decision: OrderDecision,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_org_min(OrgRole.LOGIST)),
     db: Session = Depends(get_db),
 ):
     order = db.query(Order).filter(Order.id == order_id).first()
@@ -1347,3 +1777,25 @@ async def admin_decline_order(
     )
     db.commit()
     return {"id": order.id, "decision": "declined"}
+
+
+@router.post("/admin/orders/{order_id}/delete")
+async def admin_delete_order(
+    order_id: int,
+    payload: AdminPasswordCheck,
+    current_user: User = Depends(require_org_min(OrgRole.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Удаление заказа (требует admin JWT + ввод пароля админа как "подпись")."""
+    if not verify_password(payload.password, current_user.hashed_password):
+        raise HTTPException(status_code=403, detail="Invalid admin password")
+
+    o = db.query(Order).filter(Order.id == order_id).first()
+    if not o:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+
+    # Важно: у OrderEvent нет ON DELETE CASCADE, поэтому удаляем события вручную.
+    db.query(OrderEvent).filter(OrderEvent.order_id == order_id).delete(synchronize_session=False)
+    db.query(Order).filter(Order.id == order_id).delete(synchronize_session=False)
+    db.commit()
+    return {"status": "ok", "deletedId": order_id}

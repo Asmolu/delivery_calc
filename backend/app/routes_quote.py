@@ -1,9 +1,13 @@
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from backend.core.logger import get_logger
 from backend.core.database import get_db
+from backend.core.auth import get_current_user_optional
+from backend.core.rbac import get_user_org_role, org_role_rank
+from backend.models.db_models import OrgRole, User
 from backend.models.dto import QuoteRequest
 from backend.core.data_loader import load_factories_and_tariffs
 from backend.service.osrm_client import OSRMUnavailableError
@@ -21,16 +25,22 @@ log = get_logger("routes.quote")
 @router.post("/quote")
 async def make_quote(
     req: QuoteRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """
     Основной эндпоинт расчёта маршрутов.
     """
     log.info("Запрос на расчёт: %s", req.dict())
 
-    # Бизнес-правило: если в заказе товары из разных категорий — требуется проверка логистом
+    # Бизнес-правило: если в заказе товары из разных категорий — требуется проверка логистом.
+    # Плюс: будем добавлять причины (warningReasons), чтобы фронт мог объяснить, почему требуется проверка.
+    warning_reasons: list[str] = []
     req_categories = sorted({(i.category or "").strip() for i in req.items if (i.category or "").strip()})
-    needs_logistics_check = len(req_categories) > 1
+    if len(req_categories) > 1:
+        warning_reasons.append("Товары из разных категорий (логистика считается раздельно).")
+
+    needs_logistics_check = len(warning_reasons) > 0
     logistics_warning_text = "Выполнить проверку логистом!" if needs_logistics_check else None
 
     # ✅ загружаем объединённые данные (товары + заводы) из БД
@@ -88,31 +98,148 @@ async def make_quote(
         print("⚠️ Нет валидных результатов с total_cost")
         return {"ok": False, "reason": "Не удалось рассчитать стоимость"}
 
-    results = sorted(valid_results, key=lambda x: x["total_cost"])[:3]
+    all_sorted = sorted(valid_results, key=lambda x: x["total_cost"])
 
-    # формируем детализированные варианты
+    # Топ-3 самых дешёвых вариантов
+    top3 = all_sorted[:3]
+
+    # Спец-вариант: все позиции из одного производства (если существует).
+    # Корректный критерий: один и тот же factory_id (из БД). Если id нет (legacy JSON) — fallback на имя.
+    def _factory_key_from_items(items: list) -> str:
+        if not items:
+            return ""
+        f = (items[0] or {}).get("factory") or {}
+        fid = f.get("id")
+        if fid is not None:
+            try:
+                return f"id:{int(fid)}"
+            except Exception:
+                return f"id:{str(fid).strip()}"
+        return str(f.get("name") or "").strip().lower()
+
+    def _is_single_factory(r: dict) -> bool:
+        sc = (r or {}).get("scenario") or {}
+        factories_map = (sc or {}).get("factories") or {}
+        if not isinstance(factories_map, dict) or not factories_map:
+            return False
+        keys = { _factory_key_from_items(items) for items in factories_map.values() if isinstance(items, list) and items }
+        keys = {k for k in keys if k}
+        return len(keys) == 1
+
+    def _single_factory_name(r: dict) -> str | None:
+        sc = (r or {}).get("scenario") or {}
+        factories_map = (sc or {}).get("factories") or {}
+        if not isinstance(factories_map, dict) or not factories_map:
+            return None
+        # Берём первый завод как "имя" (UI/логисту), даже если ключи в map не нормализованы.
+        for k, items in factories_map.items():
+            if isinstance(items, list) and items:
+                f = (items[0] or {}).get("factory") or {}
+                nm = str(f.get("name") or k or "").strip()
+                return nm or None
+        return None
+
+    single_factory_results = [r for r in all_sorted if isinstance(r, dict) and _is_single_factory(r)]
+    best_single_factory = single_factory_results[0] if single_factory_results else None
+
+    # Итоговый список результатов для отображения:
+    # - всегда топ-3
+    # - + отдельный вариант "один завод", если он есть и не попал в топ-3
+    def _scenario_id(r: dict) -> int | None:
+        sc = (r or {}).get("scenario") or {}
+        try:
+            sid = sc.get("scenario_id")
+            return int(sid) if sid is not None else None
+        except Exception:
+            return None
+
+    top3_ids = { _scenario_id(r) for r in top3 }
+    results = list(top3)
+    # Добавляем "один завод" как 4-й вариант, если это другой сценарий (по scenario_id).
+    if best_single_factory and (_scenario_id(best_single_factory) not in top3_ids):
+        results.append(best_single_factory)
+
+    # Дополнительные правила "нужна проверка логистом" — по лучшему (самому дешёвому) сценарию.
+    # Эти причины не меняют расчёт, только маркируют потенциально сложные кейсы.
+    try:
+        best = all_sorted[0] if all_sorted else None
+        best_plans = (best or {}).get("factory_plans") or []
+        best_trip_count = int((best or {}).get("trip_count") or 0)
+        if isinstance(best_plans, list) and len(best_plans) > 1:
+            warning_reasons.append("В сценарии несколько заводов (несколько точек загрузки).")
+        if best_trip_count > 1:
+            warning_reasons.append(f"Требуется несколько рейсов: {best_trip_count}.")
+
+        # Контейнеровоз/кран — часто “ручной” кейс из-за нюансов разгрузки/подачи.
+        has_container = False
+        for fp in (best_plans or []):
+            for tr in (fp or {}).get("trips", []) or []:
+                if str(tr.get("tag") or "").strip().lower() == "container_carrier":
+                    has_container = True
+                    break
+            if has_container:
+                break
+        if has_container:
+            warning_reasons.append("Использован контейнеровоз (проверьте подачу/разгрузку).")
+
+        unload_tag = str(((best or {}).get("unloading") or {}).get("tag") or "").strip().lower()
+        if unload_tag == "crane":
+            warning_reasons.append("Разгрузка краном (проверьте доступность техники на объекте).")
+    except Exception:
+        # Никогда не валим /quote из-за формирования предупреждений
+        pass
+
+    # Если нет НИ ОДНОГО варианта, где все позиции можно забрать с одного производства — это повод для проверки логистом.
+    if not best_single_factory:
+        warning_reasons.append("Нет ни одного варианта доставить все позиции с одного производства.")
+
+    if warning_reasons:
+        needs_logistics_check = True
+        logistics_warning_text = logistics_warning_text or "Выполнить проверку логистом!"
+
+    # Детализация видна только логисту и выше (org role).
+    can_view_details = False
+    if current_user is not None:
+        try:
+            r = get_user_org_role(db, current_user)
+            can_view_details = org_role_rank(r) >= org_role_rank(OrgRole.LOGIST)
+        except Exception:
+            can_view_details = False
+
+    # формируем варианты (детально или “сжатый” вид)
     variants = []
     for r in results:
-        shipment_details = build_shipment_details_from_result(r, req)
-        trip_items = build_trip_items_details(r)
+        shipment_details = build_shipment_details_from_result(r, req) if can_view_details else None
+        trip_items = build_trip_items_details(r) if can_view_details else []
         transport_title = r.get("transport_name", "Неизвестный транспорт")
         scenario_weight = r.get("scenario", {}).get("total_weight", 0)
-        variants.append({
-            "totalCost": round(r["material_sum"] + r["delivery_cost"], 2),
+        base_variant = {
+            "totalCost": round(float(r.get("total_cost") or (r.get("material_sum", 0) + r.get("delivery_cost", 0) + r.get("unloading_cost", 0))), 2),
             "materialCost": round(r["material_sum"], 2),
-            "deliveryCost": round(r["delivery_cost"], 2),
+            "deliveryCost": round(float(r.get("delivery_cost") or 0.0), 2),
+            "unloadingCost": round(float(r.get("unloading_cost") or 0.0), 2),
             "totalWeight": round(scenario_weight, 2),
             "transportName": transport_title,
             "tripCount": r.get("trip_count", 0),
-            "transportDetails": r.get("factory_plans", []),
-            "details": shipment_details,
-            "tripItems": trip_items,
-        })
+            "isSingleFactory": _is_single_factory(r),
+            # Название завода — только логисту и выше (иначе это “конкретика”).
+            "singleFactoryName": (_single_factory_name(r) if (can_view_details and _is_single_factory(r)) else None),
+        }
 
-    # выводим в лог лучший результат
-    print("\n=== 📊 ТОП-3 РЕЗУЛЬТАТОВ ===")
+        if can_view_details:
+            base_variant["unloading"] = r.get("unloading") or None
+            base_variant["transportDetails"] = r.get("factory_plans", [])
+            base_variant["details"] = shipment_details
+            base_variant["tripItems"] = trip_items
+
+        variants.append(base_variant)
+
+    # выводим в лог выбранные результаты (топ-3 + опционально "один завод")
+    print(f"\n=== 📊 ВАРИАНТЫ (показано: {len(variants)}) ===")
     for i, v in enumerate(variants, start=1):
-        print(f"{i}) {v['transportName']}: {v['totalCost']}₽ ({v['deliveryCost']} доставка)")
+        unload = v.get("unloadingCost") or 0
+        unload_txt = f", {unload} разгрузка" if unload else ""
+        print(f"{i}) {v['transportName']}: {v['totalCost']}₽ ({v['deliveryCost']} доставка{unload_txt})")
     print("==================================\n")
 
     return JSONResponse(
@@ -121,6 +248,7 @@ async def make_quote(
             "variants": variants,
             "needsLogisticsCheck": needs_logistics_check,
             "warningText": logistics_warning_text,
+            "warningReasons": warning_reasons,
         }
     )
 

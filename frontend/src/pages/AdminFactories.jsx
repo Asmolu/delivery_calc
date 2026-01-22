@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { fetchFactories } from "../api";
+import { adminListFactoriesCatalog, adminSetFactoryActive, adminSetProductActive } from "../api";
 
 export default function AdminFactories() {
   const MotionDiv = motion.div;
@@ -13,11 +13,12 @@ export default function AdminFactories() {
   const reload = async () => {
     setLoading(true);
     try {
-      const f = await fetchFactories();
-      setFactories(Array.isArray(f) ? f : []);
+      const rows = await adminListFactoriesCatalog();
+      setFactories(Array.isArray(rows) ? rows : []);
       setMessage("");
     } catch (e) {
-      setMessage(e?.message || "Ошибка загрузки заводов/товаров");
+      const hint = e?.status === 401 ? " (нужно войти как админ через /login)" : "";
+      setMessage((e?.message || "Ошибка загрузки заводов/товаров") + hint);
     } finally {
       setLoading(false);
     }
@@ -29,14 +30,39 @@ export default function AdminFactories() {
   }, []);
 
   const factoriesList = useMemo(() => {
-    const byName = (factories || []).reduce((acc, f) => {
-      const name = f.name || f["название"] || "Без названия";
-      if (!acc[name]) acc[name] = [];
-      acc[name].push(f);
-      return acc;
-    }, {});
-    return Object.entries(byName).sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+    const arr = Array.isArray(factories) ? factories : [];
+    return arr.slice().sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")));
   }, [factories]);
+
+  const setFactoryActiveLocal = (factoryId, nextActive) => {
+    setFactories((prev) => {
+      const arr = Array.isArray(prev) ? prev.slice() : [];
+      return arr.map((f) => {
+        if (f?.id !== factoryId) return f;
+        const next = { ...f, is_active: !!nextActive };
+        // Требование: если завод выключен — все его товары выключаются
+        if (!next.is_active) {
+          next.products = (Array.isArray(next.products) ? next.products : []).map((p) => ({ ...p, is_active: false }));
+        }
+        return next;
+      });
+    });
+  };
+
+  const setProductActiveLocal = (productId, nextActive) => {
+    setFactories((prev) => {
+      const arr = Array.isArray(prev) ? prev.slice() : [];
+      return arr.map((f) => {
+        const products = Array.isArray(f?.products) ? f.products : [];
+        const has = products.some((p) => p?.id === productId);
+        if (!has) return f;
+        return {
+          ...f,
+          products: products.map((p) => (p?.id === productId ? { ...p, is_active: !!nextActive } : p)),
+        };
+      });
+    });
+  };
 
   return (
     <MotionDiv
@@ -77,46 +103,102 @@ export default function AdminFactories() {
           <p className="text-slate-500">Нет данных о заводах</p>
         ) : (
           <div className="space-y-6 max-h-[75vh] overflow-auto pr-1">
-            {factoriesList.map(([name, items], idx) => (
-              <div key={idx} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <h3 className="text-lg font-semibold text-slate-900">🏢 {name}</h3>
-                    <p className="text-slate-500 text-sm">{items[0]?.category || "—"}</p>
+            {factoriesList.map((f) => {
+              const products = Array.isArray(f?.products) ? f.products : [];
+              const isFactoryActive = !!f?.is_active;
+
+              return (
+                <div key={f?.id ?? f?.name} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-3">
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-semibold text-slate-900 truncate">🏢 {f?.name || "Без названия"}</h3>
+                      <div className="text-xs text-slate-500 whitespace-pre-line">
+                        {f?.contact ? String(f.contact) : "—"}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs px-2 py-1 rounded-full bg-slate-50 text-slate-700 border border-slate-200">
+                        {products.length} позиций
+                      </span>
+                      <label className="flex items-center gap-2 text-sm text-slate-700 select-none">
+                        <input
+                          type="checkbox"
+                          checked={isFactoryActive}
+                          disabled={loading}
+                          onChange={async (e) => {
+                            const next = !!e.target.checked;
+                            setFactoryActiveLocal(f.id, next);
+                            try {
+                              await adminSetFactoryActive(f.id, next);
+                            } catch (err) {
+                              // откат
+                              setFactoryActiveLocal(f.id, !next);
+                              setMessage(err?.message || "Ошибка изменения активности завода");
+                            }
+                          }}
+                          className="w-4 h-4 accent-indigo-600"
+                        />
+                        Активен
+                      </label>
+                    </div>
                   </div>
-                  <span className="text-xs px-2 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
-                    {items.length} позиций
-                  </span>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left text-slate-700 border border-slate-200 rounded-lg">
+                      <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                        <tr>
+                          <th className="px-3 py-2 w-20">Активен</th>
+                          <th className="px-3 py-2">Категория</th>
+                          <th className="px-3 py-2">Подтип</th>
+                          <th className="px-3 py-2">Вес (т)</th>
+                          <th className="px-3 py-2">Цена (₽)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {products
+                          .slice()
+                          .sort((a, b) => String(a?.subtype || "").localeCompare(String(b?.subtype || "")))
+                          .map((p) => {
+                            const canToggle = isFactoryActive && !loading;
+                            return (
+                              <tr
+                                key={p?.id ?? `${p?.category}||${p?.subtype}`}
+                                className="border-t border-slate-100 hover:bg-slate-900/30 transition-colors"
+                              >
+                                <td className="px-3 py-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={isFactoryActive ? !!p?.is_active : false}
+                                    disabled={!canToggle}
+                                    onChange={async (e) => {
+                                      const next = !!e.target.checked;
+                                      setProductActiveLocal(p.id, next);
+                                      try {
+                                        await adminSetProductActive(p.id, next);
+                                      } catch (err) {
+                                        // откат
+                                        setProductActiveLocal(p.id, !next);
+                                        setMessage(err?.message || "Ошибка изменения активности товара");
+                                      }
+                                    }}
+                                    className="w-4 h-4 accent-indigo-600 disabled:opacity-50"
+                                    title={!isFactoryActive ? "Завод выключен — товары недоступны" : ""}
+                                  />
+                                </td>
+                                <td className="px-3 py-2">{p?.category || "—"}</td>
+                                <td className="px-3 py-2">{p?.subtype || "—"}</td>
+                                <td className="px-3 py-2">{p?.weight_per_item ?? 0}</td>
+                                <td className="px-3 py-2 font-medium text-slate-900">{p?.price ?? 0}</td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-left text-slate-700 border border-slate-200 rounded-lg">
-                    <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
-                      <tr>
-                        <th className="px-3 py-2">Подтип</th>
-                        <th className="px-3 py-2">Вес (т)</th>
-                        <th className="px-3 py-2">Макс. за рейс</th>
-                        <th className="px-3 py-2">Особый тариф</th>
-                        <th className="px-3 py-2">Цена (₽)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items
-                        .slice()
-                        .sort((a, b) => (a.subtype || "").localeCompare(b.subtype || ""))
-                        .map((item, i) => (
-                          <tr key={i} className="border-t border-slate-100 hover:bg-slate-50 transition-colors">
-                            <td className="px-3 py-2">{item.subtype || "—"}</td>
-                            <td className="px-3 py-2">{item.weight_per_item ?? 0}</td>
-                            <td className="px-3 py-2">{item.max_per_trip ?? 0}</td>
-                            <td className="px-3 py-2">{item.special_threshold ?? 0}</td>
-                            <td className="px-3 py-2 font-medium text-slate-900">{item.price ?? 0}</td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

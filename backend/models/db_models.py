@@ -29,11 +29,85 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(100), unique=True, index=True, nullable=False)
     email = Column(String(255), unique=True, index=True, nullable=True)
+    first_name = Column(String(100), nullable=True)
+    last_name = Column(String(100), nullable=True)
     hashed_password = Column(String(255), nullable=False)
     role = Column(SQLEnum(UserRole), default=UserRole.USER, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+# === B2B: Organizations / Memberships / Invites =================================
+
+class OrgRole(str, enum.Enum):
+    OWNER = "owner"
+    ADMIN = "admin"
+    LOGIST = "logist"
+    MANAGER = "manager"
+    VIEWER = "viewer"
+
+
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False, unique=True, index=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    members = relationship("OrganizationMember", back_populates="organization", cascade="all, delete-orphan")
+    invites = relationship("OrganizationInvite", back_populates="organization", cascade="all, delete-orphan")
+
+
+class OrganizationMember(Base):
+    __tablename__ = "organization_members"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    role = Column(SQLEnum(OrgRole), default=OrgRole.MANAGER, nullable=False, index=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    organization = relationship("Organization", back_populates="members")
+    user = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint("organization_id", "user_id", name="uq_org_members_org_user"),
+    )
+
+
+class OrganizationInvite(Base):
+    __tablename__ = "organization_invites"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+
+    email = Column(String(255), nullable=False, index=True)
+    role = Column(SQLEnum(OrgRole), default=OrgRole.MANAGER, nullable=False)
+
+    # store only hash of token for safety
+    token_hash = Column(String(128), nullable=False, unique=True, index=True)
+
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    created_by = relationship("User", foreign_keys=[created_by_user_id])
+
+    expires_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True, index=True)
+
+    accepted_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    accepted_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    accepted_by = relationship("User", foreign_keys=[accepted_by_user_id])
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    organization = relationship("Organization", back_populates="invites")
 
 
 class Factory(Base):
@@ -44,6 +118,7 @@ class Factory(Base):
     lat = Column(Float, nullable=True)
     lon = Column(Float, nullable=True)
     contact = Column(String(255), nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -75,6 +150,7 @@ class Product(Base):
     special_threshold = Column(Float, default=0.0)
     max_per_trip = Column(Float, default=0.0)
     price = Column(Float, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
     
     # Связь с заводом
     factory_id = Column(Integer, ForeignKey("factories.id"), nullable=False)
@@ -130,6 +206,11 @@ class Tariff(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     description = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
+
+    # Контейнеровоз: связь с базовым транспортом, от которого берётся цена (например, шаланда)
+    # Храним как (name, tag), потому что тарифные строки дублируются по диапазонам/весовым условиям.
+    base_transport_name = Column(String(255), nullable=True)
+    base_transport_tag = Column(String(50), nullable=True)
 
     # Аудит: кто создал / кто последний изменил
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)

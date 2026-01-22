@@ -122,8 +122,9 @@ export async function adminUpdateTariff(tariffId, payload) {
   return request("PUT", `/admin/tariffs/${tariffId}`, payload, true);
 }
 
-export async function adminDeleteTariff(tariffId) {
-  return request("DELETE", `/admin/tariffs/${tariffId}`, undefined, true);
+export async function adminDeleteTariff(tariffId, password) {
+  const qs = `password=${encodeURIComponent(String(password || ""))}`;
+  return request("DELETE", `/admin/tariffs/${tariffId}?${qs}`, undefined, true);
 }
 
 export async function adminListTariffAudit(limit = 200) {
@@ -134,13 +135,65 @@ export async function adminUpsertTransportCard(payload) {
   return request("POST", "/admin/transports/upsert", payload, true);
 }
 
-export async function adminDeleteTransportCard(name, tag) {
-  const qs = `name=${encodeURIComponent(String(name || ""))}&tag=${encodeURIComponent(String(tag || ""))}`;
+export async function adminDeleteTransportCard(name, tag, password) {
+  const qs =
+    `name=${encodeURIComponent(String(name || ""))}` +
+    `&tag=${encodeURIComponent(String(tag || ""))}` +
+    `&password=${encodeURIComponent(String(password || ""))}`;
   return request("DELETE", `/admin/transports?${qs}`, undefined, true);
 }
 
+// === Users / Invites (admin, org-scoped via default org) ===
+export async function adminGetOrg() {
+  return request("GET", "/admin/org", undefined, true);
+}
+
+export async function adminListOrgMembers() {
+  return request("GET", "/admin/org/members", undefined, true);
+}
+
+export async function adminListOrgInvites() {
+  return request("GET", "/admin/org/invites", undefined, true);
+}
+
+export async function adminCreateOrgInvite(payload) {
+  return request("POST", "/admin/org/invites", payload, true);
+}
+
+export async function adminRevokeOrgInvite(inviteId) {
+  return request("POST", `/admin/org/invites/${encodeURIComponent(String(inviteId))}/revoke`, {}, true);
+}
+
+export async function adminUpdateOrgMember(memberId, payload) {
+  return request("PUT", `/admin/org/members/${encodeURIComponent(String(memberId))}`, payload, true);
+}
+
+// === Invite accept (public) ===
+export async function acceptInvite(token, username, password, firstName, lastName) {
+  return request(
+    "POST",
+    "/auth/invite/accept",
+    { token, username, password, first_name: firstName, last_name: lastName },
+    false
+  );
+}
+
+// === Factories / Products (admin) ===
+export async function adminListFactoriesCatalog() {
+  return request("GET", "/admin/factories", undefined, true);
+}
+
+export async function adminSetFactoryActive(factoryId, isActive) {
+  return request("PUT", `/admin/factories/${encodeURIComponent(String(factoryId))}/active`, { is_active: !!isActive }, true);
+}
+
+export async function adminSetProductActive(productId, isActive) {
+  return request("PUT", `/admin/products/${encodeURIComponent(String(productId))}/active`, { is_active: !!isActive }, true);
+}
+
 export async function getQuote(payload) {
-  const data = await request("POST", "/api/quote", payload);
+  // /api/quote публичный, но детали выдаём только если есть авторизация.
+  const data = await request("POST", "/api/quote", payload, isAuthenticated());
   // если сервер возвращает объект с полем result, разворачиваем
   return data.result || data;
 }
@@ -176,6 +229,10 @@ export async function approveOrder(orderId, decision = {}) {
 
 export async function declineOrder(orderId, decision = {}) {
   return request("POST", `/admin/orders/${orderId}/decline`, decision, true);
+}
+
+export async function deleteOrder(orderId, password) {
+  return request("POST", `/admin/orders/${orderId}/delete`, { password }, true);
 }
 
 

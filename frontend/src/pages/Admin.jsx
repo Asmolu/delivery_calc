@@ -144,6 +144,12 @@ export default function Admin() {
         to: "/admin/orders",
         meta: "admin-only",
       },
+      {
+        title: "👥 Пользователи",
+        desc: "Приглашения (invite-only), роли в организации, список участников.",
+        to: "/admin/users",
+        meta: "invite-only",
+      },
     ],
     [factoriesCount, tariffsCount, transports]
   );

@@ -2,8 +2,10 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Home from "./pages/Home.jsx";
 import Calculator from "./pages/Calculator.jsx";
 import Admin from "./pages/Admin.jsx";
+import AdminUsers from "./pages/AdminUsers.jsx";
 import Login from "./pages/Login.jsx";
 import Orders from "./pages/Orders.jsx";
+import InviteAccept from "./pages/InviteAccept.jsx";
 import { isAuthenticated } from "./api";
 
 // Компонент для защиты маршрутов
@@ -21,6 +23,7 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/calculator" element={<Calculator />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/invite/:token" element={<InviteAccept />} />
         <Route
           path="/admin"
           element={
@@ -34,6 +37,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <Orders />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/users"
+          element={
+            <ProtectedRoute>
+              <AdminUsers />
             </ProtectedRoute>
           }
         />
