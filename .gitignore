@@ -82,3 +82,6 @@ __pypackages__/
 
 # Misc local scratch
 temp_safe/
+
+# Polygon files
+geo_extract/
