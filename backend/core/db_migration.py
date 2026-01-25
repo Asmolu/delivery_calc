@@ -139,7 +139,8 @@ def migrate_tariffs(db: Session):
             max_distance=tariff_data.get("max_distance", 0.0),
             base=tariff_data.get("base", 0.0),
             per_km=tariff_data.get("per_km", 0.0),
-            radius_limit_km=tariff_data.get("radius_limit_km", None),
+            load_zone=tariff_data.get("load_zone", None),
+            unload_zone=tariff_data.get("unload_zone", None),
             service_type=(tariff_data.get("service_type") or "delivery"),
             self_loading=bool(tariff_data.get("self_loading", False)),
             unload_capability=(tariff_data.get("unload_capability") or "none"),
@@ -434,13 +435,11 @@ def ensure_tariffs_schema(db: Session) -> None:
     if "weight_threshold" not in cols:
         _add_col("ALTER TABLE tariffs ADD COLUMN weight_threshold DOUBLE PRECISION NULL")
 
-    # Радиус / ограничения
-    if "radius_limit_km" not in cols:
-        _add_col("ALTER TABLE tariffs ADD COLUMN radius_limit_km DOUBLE PRECISION NULL")
-    if "radius_center_lat" not in cols:
-        _add_col("ALTER TABLE tariffs ADD COLUMN radius_center_lat DOUBLE PRECISION NULL")
-    if "radius_center_lon" not in cols:
-        _add_col("ALTER TABLE tariffs ADD COLUMN radius_center_lon DOUBLE PRECISION NULL")
+    # Геозоны (ограничения загрузки/выгрузки)
+    if "load_zone" not in cols:
+        _add_col("ALTER TABLE tariffs ADD COLUMN load_zone VARCHAR(50) NULL")
+    if "unload_zone" not in cols:
+        _add_col("ALTER TABLE tariffs ADD COLUMN unload_zone VARCHAR(50) NULL")
 
     # Разделение по назначению (доставка/разгрузка)
     if "service_type" not in cols:

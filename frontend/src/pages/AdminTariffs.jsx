@@ -11,6 +11,12 @@ const TRANSPORT_TAGS = [
   { value: "crane", label: "Кран" },
 ];
 
+const GEO_ZONES = [
+  { value: "", label: "Нет" },
+  { value: "MKAD", label: "MKAD" },
+  { value: "MOSCOW_MO", label: "MOSCOW_MO" },
+];
+
 const emptyRange = { min_distance: 0, max_distance: 0, base: 0 };
 const emptyBlock = {
   weight_condition: "any",
@@ -26,8 +32,8 @@ const emptyDraft = {
   tag: "manipulator",
   is_active: true,
 
-  radius_limit_km: "",
-  radius_center: "",
+  load_zone: "",
+  unload_zone: "",
 
   unload_tags: [],
 
@@ -51,17 +57,6 @@ function orgRank(role) {
 function toNum(v, fallback = 0) {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
-}
-
-function parseCoords(raw) {
-  const s = String(raw || "").trim();
-  if (!s) return { lat: null, lon: null };
-  const parts = s.split(",").map((x) => x.trim());
-  if (parts.length < 2) return { lat: null, lon: null };
-  const lat = Number(parts[0]);
-  const lon = Number(parts[1]);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return { lat: null, lon: null };
-  return { lat, lon };
 }
 
 function weightKey(cond, thr) {
@@ -271,9 +266,8 @@ export default function AdminTariffs() {
       max_distance: Number(v.max_distance ?? 0),
       base: Number(v.base ?? 0),
       per_km: Number(v.per_km ?? 0),
-      radius_limit_km: v.radius_limit_km ?? null,
-      radius_center_lat: v.radius_center_lat ?? null,
-      radius_center_lon: v.radius_center_lon ?? null,
+      load_zone: v.load_zone ?? "",
+      unload_zone: v.unload_zone ?? "",
       service_type: v.service_type || "delivery",
       unload_tags: Array.isArray(v.unload_tags) ? v.unload_tags : null,
       unload_capability: v.unload_capability || "none",
@@ -322,10 +316,6 @@ export default function AdminTariffs() {
       }));
 
       const unloadTags = header.unload_tags || (header.unload_capability && header.unload_capability !== "none" ? [header.unload_capability] : []);
-      const radiusCenter =
-        header.radius_center_lat != null && header.radius_center_lon != null
-          ? `${header.radius_center_lat}, ${header.radius_center_lon}`
-          : "";
 
       const baseKey =
         header.base_transport_name && header.base_transport_tag
@@ -338,8 +328,8 @@ export default function AdminTariffs() {
         capacity: header.capacity,
         tag: header.tag,
         is_active: header.is_active !== false,
-        radius_limit_km: header.radius_limit_km ?? null,
-        radius_center: radiusCenter,
+        load_zone: header.load_zone ?? "",
+        unload_zone: header.unload_zone ?? "",
         unload_tags: unloadTags,
         description: header.description || "",
         notes: header.notes || "",
@@ -386,8 +376,8 @@ export default function AdminTariffs() {
       capacity: selectedTransport.capacity || 0,
       tag: selectedTransport.tag || "",
       is_active: selectedTransport.is_active !== false,
-      radius_limit_km: selectedTransport.radius_limit_km ?? "",
-      radius_center: selectedTransport.radius_center || "",
+      load_zone: selectedTransport.load_zone || "",
+      unload_zone: selectedTransport.unload_zone || "",
       unload_tags: Array.isArray(selectedTransport.unload_tags) ? selectedTransport.unload_tags : [],
       enable_delivery: !!selectedTransport.enable_delivery,
       enable_unloading: !!selectedTransport.enable_unloading,
@@ -454,12 +444,6 @@ export default function AdminTariffs() {
       if (!name) throw new Error("Укажите название");
       if (!tag) throw new Error("Укажите тег");
 
-      const radiusLimit = draft.radius_limit_km === "" || draft.radius_limit_km == null ? null : toNum(draft.radius_limit_km, 0);
-      const { lat, lon } = parseCoords(draft.radius_center);
-      if (radiusLimit && (lat == null || lon == null)) {
-        throw new Error("Для радиуса нужны координаты центра в формате: lat, lon");
-      }
-
       const unload = Array.isArray(draft.unload_tags) ? draft.unload_tags : [];
       const baseKey = String(draft.base_transport_key || "").trim();
       const [baseNameRaw, baseTagRaw] = baseKey ? baseKey.split("||") : ["", ""];
@@ -499,9 +483,8 @@ export default function AdminTariffs() {
         tag,
         base_transport_name: isContainer ? baseName : null,
         base_transport_tag: isContainer ? (baseTag || "long_haul") : null,
-        radius_limit_km: radiusLimit,
-        radius_center_lat: lat,
-        radius_center_lon: lon,
+        load_zone: draft.load_zone || null,
+        unload_zone: draft.unload_zone || null,
         unload_tags: isContainer ? ["crane"] : unload,
         is_active: !!draft.is_active,
         description: draft.description || null,
@@ -714,12 +697,32 @@ export default function AdminTariffs() {
           </label>
 
           <label className="text-sm">
-            <div className="text-slate-600 mb-1">Ограничение радиуса (км)</div>
-            <input type="number" step="0.1" value={draft.radius_limit_km} onChange={(e) => setDraft((s) => ({ ...s, radius_limit_km: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-slate-200" placeholder="только число" />
+          <div className="text-slate-600 mb-1">Ограничение загрузки (зона)</div>
+            <select
+              value={draft.load_zone || ""}
+              onChange={(e) => setDraft((s) => ({ ...s, load_zone: e.target.value }))}
+              className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white"
+            >
+              {GEO_ZONES.map((z) => (
+                <option key={z.value || "none"} value={z.value}>
+                  {z.label}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="text-sm md:col-span-2">
-            <div className="text-slate-600 mb-1">Координаты центра радиуса (lat, lon)</div>
-            <input value={draft.radius_center} onChange={(e) => setDraft((s) => ({ ...s, radius_center: e.target.value }))} className="w-full px-3 py-2 rounded-lg border border-slate-200" placeholder="Например: 55.7558, 37.6173" />
+          <div className="text-slate-600 mb-1">Ограничение выгрузки (зона)</div>
+            <select
+              value={draft.unload_zone || ""}
+              onChange={(e) => setDraft((s) => ({ ...s, unload_zone: e.target.value }))}
+              className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white"
+            >
+              {GEO_ZONES.map((z) => (
+                <option key={z.value || "none"} value={z.value}>
+                  {z.label}
+                </option>
+              ))}
+            </select>
           </label>
 
           <label className="text-sm md:col-span-3">

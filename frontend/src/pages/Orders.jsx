@@ -171,6 +171,7 @@ export default function Orders() {
   }, [selectedId, forbidden]);
 
   const selectedStatus = selected?.status;
+  const canDecide = orgRank(user?.orgRole) >= ORG_RANK.logist; // подтверждать/отклонять/ручные решения
   const canManualConfirm = canDecide && selectedStatus === "rejected_for_manual";
   const decision = selected?.decision || null;
 
@@ -586,7 +587,6 @@ export default function Orders() {
     }
   };
 
-  const canDecide = orgRank(user?.orgRole) >= ORG_RANK.logist; // подтверждать/отклонять/ручные решения
   const canViewAdminOnly = orgRank(user?.orgRole) >= ORG_RANK.admin; // события + удаление
   const canDeleteOrder =
     canViewAdminOnly && (selected?.status === "confirmed_auto" || selected?.status === "confirmed_manual" || selected?.status === "rejected_for_manual");
@@ -1858,4 +1858,3 @@ export default function Orders() {
     </MotionDiv>
   );
 }
-

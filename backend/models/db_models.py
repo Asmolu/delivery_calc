@@ -189,11 +189,9 @@ class Tariff(Base):
     max_distance = Column(Float, default=0.0)
     base = Column(Float, nullable=False)  # Базовая цена
     per_km = Column(Float, default=0.0)  # За каждый км после достижения max_distance (если разрешено)
-    # Ограничение по радиусу: если задано, транспорт нельзя использовать дальше этого расстояния
-    radius_limit_km = Column(Float, nullable=True)
-    # Координаты центра, от которого считается радиус (если задан radius_limit_km)
-    radius_center_lat = Column(Float, nullable=True)
-    radius_center_lon = Column(Float, nullable=True)
+    # Геозональные ограничения загрузки/выгрузки
+    load_zone = Column(String(50), nullable=True)
+    unload_zone = Column(String(50), nullable=True)
     # Разделение транспорта: доставка vs разгрузка (будет расширяться)
     service_type = Column(String(20), nullable=False, default="delivery")  # delivery | unloading
     # Новый “тег”: самозагрузка (Y/N)

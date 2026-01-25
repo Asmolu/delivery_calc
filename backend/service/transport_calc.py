@@ -5,6 +5,7 @@ import math
 from backend.core.logger import get_logger
 from backend.service.factories_service import _norm_str, _to_float
 from backend.service.osrm_client import OSRMUnavailableError, get_osrm_distance_km
+from backend.core.geo_zones import normalize_zone_id, point_in_zone
 
 logger = get_logger(__name__)
 
@@ -62,63 +63,36 @@ def _weight_ok(tariff: Dict[str, Any], load_ton: float) -> bool:
     return True
 
 
-def _radius_ok(tariff: Dict[str, Any], distance_km: float) -> bool:
-    r = tariff.get("radius_limit_km", None)
-    if r is None:
-        return True
-    rr = _to_float(r)
-    if rr <= 0:
-        return True
-    return distance_km <= rr + 1e-9
-
-
-def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Great-circle distance between two points in km."""
-    R = 6371.0
-    phi1 = math.radians(lat1)
-    phi2 = math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dl = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dl / 2) ** 2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return R * c
-
-
-def _radius_ok_with_center(
+def _zones_ok(
     tariff: Dict[str, Any],
-    distance_km: float,
-    pickup_lat: Optional[float],
-    pickup_lon: Optional[float],
+    pickup_points: Optional[List[Tuple[float, float]]],
+    dropoff_point: Optional[Tuple[float, float]],
 ) -> bool:
-    """Проверка радиуса работы (ограничивает только точку ЗАГРУЗКИ/подъезда к заводу).
+    raw_load_zone = tariff.get("load_zone")
+    raw_unload_zone = tariff.get("unload_zone")
+    load_zone = normalize_zone_id(raw_load_zone)
+    unload_zone = normalize_zone_id(raw_unload_zone)
 
-    Бизнес-правило:
-    - Радиус влияет только на то, с каких производств машина может ЗАБРАТЬ груз.
-      Разгружаться машина может где угодно (радиус не должен ограничивать выгрузку).
+    if raw_load_zone and load_zone is None:
+        return False
+    if raw_unload_zone and unload_zone is None:
+        return False
 
-    Реализация:
-    - если задан центр (radius_center_lat/lon) и есть координаты завода (pickup_lat/lon) —
-      считаем по прямой (haversine) и сравниваем с radius_limit_km
-    - иначе fallback: сравниваем с distance_km (legacy поведение)
-    """
-    r = tariff.get("radius_limit_km", None)
-    if r is None:
-        return True
-    rr = _to_float(r)
-    if rr <= 0:
-        return True
+    if load_zone:
+        if not pickup_points:
+            return False
+        for lat, lon in pickup_points:
+            if not point_in_zone(load_zone, lat, lon):
+                return False
 
-    clat = tariff.get("radius_center_lat", None)
-    clon = tariff.get("radius_center_lon", None)
-    if clat is not None and clon is not None and pickup_lat is not None and pickup_lon is not None:
-        try:
-            d = _haversine_km(float(clat), float(clon), float(pickup_lat), float(pickup_lon))
-            return d <= rr + 1e-9
-        except Exception:
-            # fallback
-            return distance_km <= rr + 1e-9
+    if unload_zone:
+        if not dropoff_point:
+            return False
+        dlat, dlon = dropoff_point
+        if not point_in_zone(unload_zone, dlat, dlon):
+            return False
 
-    return distance_km <= rr + 1e-9
+    return True
 
 
 def _tariff_group_key(t: Dict[str, Any]) -> Tuple[str, str, str, Optional[float]]:
@@ -143,17 +117,15 @@ def _distance_matches_tariff(
     tariff: Dict[str, Any],
     distance_km: float,
     group_max_distance: Dict[Tuple[str, str, str, Optional[float]], float],
-    pickup_lat: Optional[float],
-    pickup_lon: Optional[float],
+    pickup_points: Optional[List[Tuple[float, float]]],
+    dropoff_point: Optional[Tuple[float, float]],
 ) -> bool:
-    """Проверяет, применим ли тариф к расстоянию с учётом “последнего диапазона” и радиуса."""
+    """Проверяет, применим ли тариф к расстоянию с учётом “последнего диапазона” и геозон."""
     if not bool(tariff.get("is_active", True)):
         return False
 
-    # Радиус применяем только к доставке (pickup/загрузка). Для разгрузки радиус НЕ ограничивает выгрузку.
-    if _norm_str(tariff.get("service_type") or "delivery") == "delivery":
-        if not _radius_ok_with_center(tariff, distance_km, pickup_lat, pickup_lon):
-            return False
+    if not _zones_ok(tariff, pickup_points, dropoff_point):
+        return False
 
     min_d = _to_float(tariff.get("min_distance"))
     max_d = _to_float(tariff.get("max_distance"))
@@ -225,8 +197,8 @@ def _select_tariff_by_name_tag(
     distance_km: float,
     load_ton: float,
     group_max_distance: Dict[Tuple[str, str, str, Optional[float]], float],
-    pickup_lat: Optional[float],
-    pickup_lon: Optional[float],
+    pickup_points: Optional[List[Tuple[float, float]]],
+    dropoff_point: Optional[Tuple[float, float]],
     ignore_capacity: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """Выбрать строку тарифа по точному (name, tag) с учётом дистанции/веса.
@@ -246,7 +218,7 @@ def _select_tariff_by_name_tag(
         tname = _norm_str(t.get("название") or t.get("name") or "")
         if tname != nm:
             continue
-        if not _distance_matches_tariff(t, distance_km, group_max_distance, pickup_lat, pickup_lon):
+        if not _distance_matches_tariff(t, distance_km, group_max_distance, pickup_points, dropoff_point):
             continue
         if not _weight_ok(t, load_ton):
             continue
@@ -266,8 +238,8 @@ def _select_tariff_for_load(
     distance_km: float,
     load_ton: float,
     group_max_distance: Dict[Tuple[str, str, str, Optional[float]], float],
-    pickup_lat: Optional[float],
-    pickup_lon: Optional[float],
+    pickup_points: Optional[List[Tuple[float, float]]],
+    dropoff_point: Optional[Tuple[float, float]],
     name_contains: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Возвращает лучшую строку тарифа под указанный тег/нагрузку."""
@@ -278,7 +250,7 @@ def _select_tariff_for_load(
             continue
         if _norm_str(t.get("tag")) != _norm_str(tag):
             continue
-        if not _distance_matches_tariff(t, distance_km, group_max_distance, pickup_lat, pickup_lon):
+        if not _distance_matches_tariff(t, distance_km, group_max_distance, pickup_points, dropoff_point):
             continue
 
         if name_contains:
@@ -309,8 +281,8 @@ def _linear_plan(
     require_manipulator: bool,
     items: List[Dict[str, Any]],
     group_max_distance: Dict[Tuple[str, str, str, Optional[float]], float],
-    pickup_lat: Optional[float],
-    pickup_lon: Optional[float],
+    pickup_points: Optional[List[Tuple[float, float]]],
+    dropoff_point: Optional[Tuple[float, float]],
 ) -> Optional[Dict[str, Any]]:
     """Жадно заполняем самыми выгодными машинами, сравнивая тарифы по цене/тонне."""
     candidates: List[Dict[str, Any]] = []
@@ -323,7 +295,7 @@ def _linear_plan(
         tag = _norm_str(t.get("tag"))
         if tag not in allowed_tags:
             continue
-        if not _distance_matches_tariff(t, distance_km, group_max_distance, pickup_lat, pickup_lon):
+        if not _distance_matches_tariff(t, distance_km, group_max_distance, pickup_points, dropoff_point):
             continue
 
         capacity = _to_float(t.get("грузоподъёмность")) or 0
@@ -549,8 +521,8 @@ def _linear_plan(
             distance_km=distance_km,
             load_ton=max(real_weight, 0.0),
             group_max_distance=group_max_distance,
-            pickup_lat=pickup_lat,
-            pickup_lon=pickup_lon,
+            pickup_points=pickup_points,
+            dropoff_point=dropoff_point,
             ignore_capacity=True,
         )
         if not base_tariff:
@@ -727,6 +699,27 @@ def evaluate_scenario_transport(
         logger.warning("⚠️ В сценарии нет ни одного завода: %s", scenario)
         return None
 
+    dropoff_point: Optional[Tuple[float, float]] = None
+    try:
+        if req.upload_lat is not None and req.upload_lon is not None:
+            dropoff_point = (float(req.upload_lat), float(req.upload_lon))
+    except Exception:
+        dropoff_point = None
+
+    pickup_points_all: List[Tuple[float, float]] = []
+    for items in factories_map.values():
+        if not items:
+            continue
+        f_obj = items[0].get("factory") or {}
+        lat = f_obj.get("lat")
+        lon = f_obj.get("lon")
+        if lat is None or lon is None:
+            continue
+        try:
+            pickup_points_all.append((float(lat), float(lon)))
+        except Exception:
+            continue
+
     transport_type = _norm_str(getattr(req, "transport_type", "auto"))
     add_manipulator = bool(getattr(req, "add_manipulator", False) or getattr(req, "addManipulator", False))
 
@@ -799,12 +792,38 @@ def evaluate_scenario_transport(
     total_material = 0.0
     factory_distances: Dict[str, float] = {}
 
-    # DP по 2 состояниям: использовали контейнеровоз в доставке или нет.
-    # Это важно, потому что контейнеровоз принуждает разгрузку краном (дороже),
-    # и “самая дешёвая доставка” может оказаться не самым дешёвым ИТОГО.
-    dp: Dict[bool, Dict[str, Any]] = {
-        False: {"delivery_cost": 0.0, "factory_plans": []},
-        True: {"delivery_cost": float("inf"), "factory_plans": []},
+    def _pick_best_mani(
+        left: Optional[Dict[str, Any]],
+        right: Optional[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        if not left:
+            return right
+        if not right:
+            return left
+        if (left.get("capacity_ton") or 0.0, left.get("load_ton") or 0.0) >= (
+            right.get("capacity_ton") or 0.0,
+            right.get("load_ton") or 0.0,
+        ):
+            return left
+        return right
+
+    def _plan_best_mani(trips: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        mani = None
+        for tr in trips or []:
+            if _norm_str(tr.get("tag")) != "manipulator":
+                continue
+            candidate = {
+                "tariff_name": tr.get("tariff_name") or "",
+                "capacity_ton": float(tr.get("capacity_ton") or 0.0),
+                "load_ton": float(tr.get("load_ton") or 0.0),
+            }
+            mani = _pick_best_mani(mani, candidate)
+        return mani
+
+    # DP по состояниям (container_used, delivery_mani_key)
+    # Это важно, потому что разгрузка зависит от того, приезжал ли манипулятор.
+    dp: Dict[Tuple[bool, Optional[str]], Dict[str, Any]] = {
+        (False, None): {"delivery_cost": 0.0, "factory_plans": [], "delivery_mani": None},
     }
 
     for factory_name, items in factories_map.items():
@@ -862,12 +881,25 @@ def evaluate_scenario_transport(
                 require_mani,
                 items,
                 group_max_distance,
-                lat,
-                lon,
+                [(float(lat), float(lon))],
+                dropoff_point,
             )
             if linear_plan:
                 plans.append(linear_plan)
-
+            if "manipulator" in linear_allowed and len(linear_allowed) > 1:
+                manipulator_plan = _linear_plan(
+                    total_weight,
+                    distance_km,
+                    calc_tariffs,
+                    ["manipulator"],
+                    require_mani,
+                    items,
+                    group_max_distance,
+                    [(float(lat), float(lon))],
+                    dropoff_point,
+                )
+                if manipulator_plan:
+                    plans.append(manipulator_plan)
         # Альтернативный план для того же завода: без контейнеровоза.
         # Нужен, чтобы сравнить “контейнеровоз + кран” vs “шаланда + манипулятор (разгрузка манипулятором)”.
         if "container_carrier" in linear_allowed:
@@ -880,8 +912,8 @@ def evaluate_scenario_transport(
                 require_mani,
                 items,
                 group_max_distance,
-                lat,
-                lon,
+                [(float(lat), float(lon))],
+                dropoff_point,
             )
             if alt_plan:
                 plans.append(alt_plan)
@@ -891,13 +923,11 @@ def evaluate_scenario_transport(
             continue
 
         # DP transition
-        next_dp: Dict[bool, Dict[str, Any]] = {
-            False: {"delivery_cost": float("inf"), "factory_plans": []},
-            True: {"delivery_cost": float("inf"), "factory_plans": []},
-        }
-        for prev_container, prev_state in dp.items():
+        next_dp: Dict[Tuple[bool, Optional[str]], Dict[str, Any]] = {}
+        for (prev_container, prev_mani_key), prev_state in dp.items():
             prev_cost = float(prev_state.get("delivery_cost") or 0.0)
             prev_plans = list(prev_state.get("factory_plans") or [])
+            prev_mani = prev_state.get("delivery_mani")
             if not math.isfinite(prev_cost):
                 continue
 
@@ -905,10 +935,16 @@ def evaluate_scenario_transport(
                 trips = p.get("trips") or []
                 uses_container = any((_norm_str(t.get("tag")) == "container_carrier") for t in trips)
                 new_container = bool(prev_container or uses_container)
+                plan_mani = _plan_best_mani(trips)
+                new_mani = _pick_best_mani(prev_mani, plan_mani)
+                new_mani_key = (new_mani.get("tariff_name") if new_mani else None)
                 new_cost = prev_cost + float(p.get("transport_cost") or 0.0)
-                if new_cost < float(next_dp[new_container]["delivery_cost"]):
-                    next_dp[new_container] = {
+                key = (new_container, new_mani_key)
+                existing = next_dp.get(key)
+                if existing is None or new_cost < float(existing.get("delivery_cost") or 0.0):
+                    next_dp[key] = {
                         "delivery_cost": new_cost,
+                        "delivery_mani": new_mani,
                         "factory_plans": prev_plans
                         + [
                             {
@@ -922,7 +958,7 @@ def evaluate_scenario_transport(
                     }
         dp = next_dp
 
-    if not (dp[False]["factory_plans"] or dp[True]["factory_plans"]):
+    if not dp:
         return None
 
     # --- Выбираем лучший state, учитывая разгрузку ---
@@ -953,8 +989,8 @@ def evaluate_scenario_transport(
                 tt,
                 0.0,
                 group_max_distance,
-                None,
-                None,
+                pickup_points_all,
+                dropoff_point,
             ):
                 continue
             if not _weight_ok(tt, scenario_total_weight):
@@ -969,7 +1005,11 @@ def evaluate_scenario_transport(
             return min(candidates, key=lambda x: (_cap(x), _to_float(x.get("base"))))
         return min(candidates, key=lambda x: _to_float(x.get("base")))
 
-    def _compute_unloading(container_used_flag: bool, delivery_factory_plans: List[Dict[str, Any]]) -> Tuple[float, Optional[Dict[str, Any]]]:
+    def _compute_unloading(
+        container_used_flag: bool,
+        delivery_factory_plans: List[Dict[str, Any]],
+        delivery_mani: Optional[Dict[str, Any]],
+    ) -> Tuple[float, Optional[Dict[str, Any]]]:
         """Возвращает (unloading_cost, unloading_info) для данного состояния доставки."""
         # если нет разгрузочных тарифов — просто 0/None (UI всё равно покажет "—")
         if not unloading_tariffs:
@@ -997,20 +1037,7 @@ def evaluate_scenario_transport(
                 allowed_set = {"crane"}
 
         best_unload = None
-        # 1) Если манипулятор уже приехал в доставке — разгружает он (тот, что "на объекте").
-        delivered_manipulators: List[Dict[str, Any]] = []
-        for fp in delivery_factory_plans or []:
-            for tr in (fp.get("trips") or []):
-                if _norm_str(tr.get("tag")) == "manipulator":
-                    delivered_manipulators.append(tr)
-
-        chosen_delivery_mani = None
-        if delivered_manipulators:
-            # берём “самый крупный” манипулятор, который реально участвовал в доставке
-            chosen_delivery_mani = max(
-                delivered_manipulators,
-                key=lambda t: (float(t.get("capacity_ton") or 0.0), float(t.get("load_ton") or 0.0)),
-            )
+        chosen_delivery_mani = delivery_mani
 
         if (not container_used_flag) and chosen_delivery_mani and _norm_str(tag_choice) in ("auto", "manipulator"):
             # Пытаемся подобрать разгрузочный тариф именно под этот манипулятор по имени.
@@ -1023,8 +1050,8 @@ def evaluate_scenario_transport(
                 distance_km=0.0,
                 load_ton=scenario_total_weight,
                 group_max_distance=group_max_distance,
-                pickup_lat=None,
-                pickup_lon=None,
+                pickup_points=pickup_points_all,
+                dropoff_point=dropoff_point,
                 ignore_capacity=True,
             )
 
@@ -1067,22 +1094,25 @@ def evaluate_scenario_transport(
         }
         return cost, info
 
-    # score both states
-    candidates: List[Tuple[float, bool, float, Optional[Dict[str, Any]]]] = []
-    for used_container in (False, True):
-        st = dp[used_container]
-        if not st["factory_plans"]:
+    # score all states
+    candidates: List[Tuple[float, Tuple[bool, Optional[str]], float, Optional[Dict[str, Any]]]] = []
+    for (used_container, mani_key), st in dp.items():
+        if not st.get("factory_plans"):
             continue
-        unload_cost, unload_info = _compute_unloading(used_container, st["factory_plans"])
+        unload_cost, unload_info = _compute_unloading(
+            used_container,
+            st["factory_plans"],
+            st.get("delivery_mani"),
+        )
         total = total_material + float(st["delivery_cost"] or 0.0) + float(unload_cost or 0.0)
-        candidates.append((total, used_container, unload_cost, unload_info))
+        candidates.append((total, (used_container, mani_key), unload_cost, unload_info))
     candidates.sort(key=lambda x: x[0])
     if not candidates:
         return None
 
-    total_cost, container_used, unloading_cost_total, unloading_info = candidates[0]
-    factory_plans = dp[container_used]["factory_plans"]
-    total_delivery = float(dp[container_used]["delivery_cost"] or 0.0)
+    total_cost, best_key, unloading_cost_total, unloading_info = candidates[0]
+    factory_plans = dp[best_key]["factory_plans"]
+    total_delivery = float(dp[best_key]["delivery_cost"] or 0.0)
 
     # Важно: delivery_cost = только доставка (сумма рейсов).
     # unloading_cost = отдельная услуга разгрузки (один раз на заказ).

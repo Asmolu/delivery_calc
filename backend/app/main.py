@@ -8,6 +8,7 @@ from backend.core.data_loader import (
     load_factories_from_google,
 )
 from backend.core.logger import get_logger
+from backend.core.geo_zones import load_zones
 
 # === ЛОГГЕР ===
 log = get_logger("main")
@@ -61,6 +62,8 @@ async def startup_event():
         ensure_default_organization(db)
     finally:
         db.close()
+
+    load_zones()
 
     # Пересоздание товаров/заводов из Google Sheets в БД
     db = SessionLocal()

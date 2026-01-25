@@ -34,6 +34,7 @@ from ..core.data_loader import (
     load_factories_from_google,
     load_factories_and_tariffs,
 )
+from ..core.geo_zones import list_zone_ids, normalize_zone_id
 from ..service.transport_calc import (
     evaluate_scenario_transport,
     build_shipment_details_from_result,
@@ -413,10 +414,9 @@ class TariffUpsert(BaseModel):
     base: float = Field(..., ge=0.0)
     per_km: float = Field(0.0, ge=0.0)
 
-    # Ограничение по радиусу
-    radius_limit_km: float | None = Field(None, ge=0.0)
-    radius_center_lat: float | None = None
-    radius_center_lon: float | None = None
+    # Геозоны
+    load_zone: str | None = None
+    unload_zone: str | None = None
 
     # Разделение на доставку/разгрузку
     service_type: str = Field("delivery", pattern="^(delivery|unloading)$")
@@ -457,10 +457,9 @@ class TransportCardUpsert(BaseModel):
     base_transport_name: str | None = None
     base_transport_tag: str | None = None
 
-    # радиус
-    radius_limit_km: float | None = Field(None, ge=0.0)
-    radius_center_lat: float | None = None
-    radius_center_lon: float | None = None
+    # Геозоны
+    load_zone: str | None = None
+    unload_zone: str | None = None
 
     unload_tags: list[str] = Field(default_factory=list)  # multi
     is_active: bool = True
@@ -734,12 +733,14 @@ def _refresh_tripitems_tariff_labels(trip_items: list, request_payload: dict, ta
 
     upload_lat = request_payload.get("upload_lat")
     upload_lon = request_payload.get("upload_lon")
+    dropoff_point = None
     try:
         ulat = float(upload_lat) if upload_lat is not None else None
         ulon = float(upload_lon) if upload_lon is not None else None
+        if ulat is not None and ulon is not None:
+            dropoff_point = (ulat, ulon)
     except Exception:
-        ulat = None
-        ulon = None
+        dropoff_point = None
 
     group_max_distance = _build_group_max_distance(tariffs)
 
@@ -766,7 +767,7 @@ def _refresh_tripitems_tariff_labels(trip_items: list, request_payload: dict, ta
             name = _norm_str_local(t.get("название") or t.get("name"))
             if name != machine_name:
                 continue
-            if not _distance_matches_tariff(t, distance_km, group_max_distance, ulat, ulon):
+            if not _distance_matches_tariff(t, distance_km, group_max_distance, None, dropoff_point):
                 continue
             if not _weight_ok(t, load_ton):
                 continue
@@ -1020,9 +1021,8 @@ def _tariff_to_dict(t: Tariff) -> dict:
         "max_distance": t.max_distance,
         "base": t.base,
         "per_km": t.per_km,
-        "radius_limit_km": t.radius_limit_km,
-        "radius_center_lat": getattr(t, "radius_center_lat", None),
-        "radius_center_lon": getattr(t, "radius_center_lon", None),
+        "load_zone": getattr(t, "load_zone", None),
+        "unload_zone": getattr(t, "unload_zone", None),
         "service_type": t.service_type,
         "self_loading": bool(t.self_loading),
         "unload_capability": t.unload_capability,
@@ -1058,9 +1058,8 @@ def _tariff_snapshot(t: Tariff) -> dict:
         "max_distance": t.max_distance,
         "base": t.base,
         "per_km": t.per_km,
-        "radius_limit_km": t.radius_limit_km,
-        "radius_center_lat": getattr(t, "radius_center_lat", None),
-        "radius_center_lon": getattr(t, "radius_center_lon", None),
+        "load_zone": getattr(t, "load_zone", None),
+        "unload_zone": getattr(t, "unload_zone", None),
         "service_type": t.service_type,
         "self_loading": bool(t.self_loading),
         "unload_capability": t.unload_capability,
@@ -1099,6 +1098,13 @@ async def admin_create_tariff(
     if not unload_tags and payload.unload_capability in allowed_unload:
         unload_tags = [payload.unload_capability]
 
+    load_zone = normalize_zone_id(payload.load_zone)
+    unload_zone = normalize_zone_id(payload.unload_zone)
+    if payload.load_zone and load_zone is None:
+        raise HTTPException(status_code=400, detail=f"Недопустимая load_zone. Доступно: {', '.join(list_zone_ids())}")
+    if payload.unload_zone and unload_zone is None:
+        raise HTTPException(status_code=400, detail=f"Недопустимая unload_zone. Доступно: {', '.join(list_zone_ids())}")
+
     t = Tariff(
         name=payload.name.strip(),
         capacity=float(payload.capacity),
@@ -1111,9 +1117,8 @@ async def admin_create_tariff(
         max_distance=float(payload.max_distance),
         base=float(payload.base),
         per_km=float(payload.per_km),
-        radius_limit_km=payload.radius_limit_km,
-        radius_center_lat=payload.radius_center_lat,
-        radius_center_lon=payload.radius_center_lon,
+        load_zone=load_zone,
+        unload_zone=unload_zone,
         service_type=payload.service_type,
         self_loading=bool(payload.self_loading),
         unload_capability=(unload_tags[0] if unload_tags else "none"),
@@ -1165,6 +1170,13 @@ async def admin_update_tariff(
     if payload.weight_condition != "any" and payload.weight_threshold is None:
         raise HTTPException(status_code=400, detail="weight_threshold обязателен, если weight_condition != any")
 
+    load_zone = normalize_zone_id(payload.load_zone)
+    unload_zone = normalize_zone_id(payload.unload_zone)
+    if payload.load_zone and load_zone is None:
+        raise HTTPException(status_code=400, detail=f"Недопустимая load_zone. Доступно: {', '.join(list_zone_ids())}")
+    if payload.unload_zone and unload_zone is None:
+        raise HTTPException(status_code=400, detail=f"Недопустимая unload_zone. Доступно: {', '.join(list_zone_ids())}")
+
     t.name = payload.name.strip()
     t.capacity = float(payload.capacity)
     t.tag = payload.tag.strip().lower()
@@ -1175,9 +1187,8 @@ async def admin_update_tariff(
     t.max_distance = float(payload.max_distance)
     t.base = float(payload.base)
     t.per_km = float(payload.per_km)
-    t.radius_limit_km = payload.radius_limit_km
-    t.radius_center_lat = payload.radius_center_lat
-    t.radius_center_lon = payload.radius_center_lon
+    t.load_zone = load_zone
+    t.unload_zone = unload_zone
     t.service_type = payload.service_type
     t.self_loading = bool(payload.self_loading)
     t.unload_capability = (unload_tags[0] if unload_tags else "none")
@@ -1273,7 +1284,7 @@ async def admin_upsert_transport_card(
     db: Session = Depends(get_db),
 ):
     """Пакетное сохранение "карточки транспорта":
-    - общие поля (name/capacity/tag/радиус/теги разгрузки/активность/описание/заметки)
+    - общие поля (name/capacity/tag/геозоны/теги разгрузки/активность/описание/заметки)
     - 1-2 весовых условия, каждое со своими диапазонами доставки и (опционально) ценой разгрузки
     """
     ensure_tariffs_schema(db)
@@ -1295,14 +1306,16 @@ async def admin_upsert_transport_card(
         if tags_norm != ["crane"]:
             raise HTTPException(status_code=400, detail="Для контейнеровоза unload_tags должны быть ровно ['crane']")
 
-    if payload.radius_limit_km and (payload.radius_limit_km or 0) > 0:
-        if payload.radius_center_lat is None or payload.radius_center_lon is None:
-            raise HTTPException(status_code=400, detail="Для radius_limit_km нужно указать radius_center_lat/lon")
-
     allowed_unload = {"crane", "manipulator", "self"}
     unload_tags = [str(x).strip().lower() for x in (payload.unload_tags or []) if str(x).strip()]
     unload_tags = [x for x in unload_tags if x in allowed_unload]
     unload_capability = (unload_tags[0] if unload_tags else "none")
+    load_zone = normalize_zone_id(payload.load_zone)
+    unload_zone = normalize_zone_id(payload.unload_zone)
+    if payload.load_zone and load_zone is None:
+        raise HTTPException(status_code=400, detail=f"Недопустимая load_zone. Доступно: {', '.join(list_zone_ids())}")
+    if payload.unload_zone and unload_zone is None:
+        raise HTTPException(status_code=400, detail=f"Недопустимая unload_zone. Доступно: {', '.join(list_zone_ids())}")
 
     blocks = payload.weight_blocks or []
     if tag == "container_carrier":
@@ -1373,9 +1386,8 @@ async def admin_upsert_transport_card(
                     max_distance=float(dr.max_distance),
                     base=float(dr.base),
                     per_km=float(b.per_km or 0.0),
-                    radius_limit_km=payload.radius_limit_km,
-                    radius_center_lat=payload.radius_center_lat,
-                    radius_center_lon=payload.radius_center_lon,
+                    load_zone=load_zone,
+                    unload_zone=unload_zone,
                     service_type="delivery",
                     self_loading=False,
                     unload_capability=unload_capability,
@@ -1404,9 +1416,8 @@ async def admin_upsert_transport_card(
                 max_distance=0.0,
                 base=float(b.unloading_price),
                 per_km=0.0,
-                radius_limit_km=payload.radius_limit_km,
-                radius_center_lat=payload.radius_center_lat,
-                radius_center_lon=payload.radius_center_lon,
+                load_zone=load_zone,
+                unload_zone=unload_zone,
                 service_type="unloading",
                 self_loading=False,
                 unload_capability=unload_capability,
