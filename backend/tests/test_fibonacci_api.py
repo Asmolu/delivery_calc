@@ -37,6 +37,12 @@ def test_fibonacci_sequence_endpoint_validates_count_range(client) -> None:
     assert response.status_code == 422
     assert "count" in response.text
 
+def test_fibonacci_sequence_endpoint_rejects_overflow(client) -> None:
+    response = client.get("/api/fibonacci", params={"count": 1001})
+
+    assert response.status_code == 422
+    assert "count" in response.text
+
 
 def test_fibonacci_service_handles_larger_sequences() -> None:
     sequence = fibonacci_sequence(20)
@@ -44,3 +50,8 @@ def test_fibonacci_service_handles_larger_sequences() -> None:
     assert len(sequence) == 20
     assert sequence[:5] == [0, 1, 1, 2, 3]
     assert sequence[-1] == 4181
+
+
+def test_fibonacci_service_handles_small_sequences() -> None:
+    assert fibonacci_sequence(1) == [0]
+    assert fibonacci_sequence(2) == [0, 1]
