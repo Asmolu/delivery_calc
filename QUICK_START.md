@@ -65,4 +65,14 @@ docker compose logs -f
 
 ---
 
+## ✅ Тесты
+
+```bash
+python -m pytest backend/tests
+```
+
+> Примечание: API-тесты используют `httpx`, он уже включён в `backend/requirements.txt`.
+
+---
+
 **Подробная инструкция:** см. `README.md`

@@ -135,6 +135,7 @@ docker compose up --build
 ```bash
 python -m pytest backend/tests
 ```
+Тесты покрывают API-эндпоинты (`/api/factories`, `/api/tariffs`, `/api/categories`, `/api/quote`, `/api/fibonacci`) и сервисную логику. Для API-тестов нужен пакет `httpx` (он уже указан в `backend/requirements.txt`). Если `httpx` не установлен, эти тесты будут пропущены.
 
 ## 💡 Эксплуатационные советы
 - Для продакшена выставляйте `VITE_API_BASE` на публичный адрес backend.
