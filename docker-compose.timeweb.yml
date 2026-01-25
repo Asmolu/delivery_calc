@@ -7,35 +7,41 @@ services:
       dockerfile: Dockerfile.backend
     env_file: .env
     environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /app/secrets/google_credentials.json
       OSRM_BASE_URL: ${OSRM_BASE_URL:-http://osrm:5000}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-delivery_calc}
     ports:
       - "8000:8000"
     volumes:
       - ./google_credentials.json:/app/secrets/google_credentials.json:ro
       - ./backend/storage:/app/backend/storage
-    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      osrm:
+        condition: service_healthy
+    restart: unless-stopped
     healthcheck:
-      # Проверяем, отвечает ли FastAPI на эндпоинт factories
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/factories"]
-      interval: 30s       # интервал между проверками
-      timeout: 5s         # ожидание ответа
-      retries: 3          # после 3 неудач контейнер считается unhealthy
-      start_period: 15s   # ждём 15 сек перед первой проверкой
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
       args:
-        - VITE_API_BASE=${VITE_API_BASE:-http://62.113.36.49:8000}
+        - VITE_API_BASE=${VITE_API_BASE:-http://localhost:8000}
     ports:
       - "80:80"
     depends_on:
-      - backend
-    restart: always
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
     healthcheck:
-      # Проверяем, что nginx возвращает 200 OK на главную страницу
-      test: ["CMD", "curl", "-f", "http://localhost"]
+      test: ["CMD", "wget", "-qO-", "http://localhost"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -43,16 +49,35 @@ services:
 
   osrm:
     image: osrm/osrm-backend
-    command: osrm-routed --algorithm mld /data/central-fed-district-latest.osrm
+    command: osrm-routed --algorithm mld /data/${OSRM_DATASET:-central-fed-district-latest.osrm}
     ports:
       - "5000:5000"
     volumes:
       - ./osrm-data:/data
-    restart: always
+    restart: unless-stopped
     healthcheck:
-      # Проверяем, что OSRM отвечает на корневой маршрут
       test: ["CMD", "curl", "-f", "http://localhost:5000"]
       interval: 60s
       timeout: 10s
       retries: 3
       start_period: 30s
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-delivery_calc}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

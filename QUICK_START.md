@@ -1,4 +1,4 @@
-# ⚡ Быстрый старт - Docker локально
+# ⚡ Быстрый старт (Docker) — с пересборкой контейнеров
 
 ## 🎯 За 3 шага
 
@@ -22,10 +22,14 @@ ADMIN_PASSWORD=admin
 
 **Положите `google_credentials.json` в корень проекта**
 
-### 2️⃣ Запуск
+### 2️⃣ Пересборка и запуск
 
 ```bash
-docker compose up --build
+# Остановить и удалить старые контейнеры (если были)
+docker compose down --remove-orphans
+
+# Пересобрать образы и поднять сервисы
+docker compose up -d --build
 ```
 
 ### 3️⃣ Откройте в браузере
@@ -40,7 +44,7 @@ docker compose up --build
 ## 🛑 Остановка
 
 ```bash
-# Остановить (Ctrl+C или):
+# Остановить контейнеры
 docker compose stop
 
 # Остановить и удалить:
@@ -61,4 +65,4 @@ docker compose logs -f
 
 ---
 
-**Подробная инструкция:** см. `DOCKER_LOCAL_SETUP.md`
+**Подробная инструкция:** см. `README.md`
