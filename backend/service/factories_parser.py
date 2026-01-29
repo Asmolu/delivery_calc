@@ -75,15 +75,17 @@ def parse_google_sheet(ALLOWED_SHEETS=None, include_vehicles: bool = False):
 
 
         # === Парсинг товаров и заводов ===
-        if len(data) < 5:
+        if len(data) < 3:
             print(f"⚠️ Пропущен лист {category_name} — недостаточно строк для парсинга.")
             continue
-
+        # Layout:
+        # row 0: weights, row 1: subtypes, row 2+: factories
+        # col 0: update date, col 1: factory name, col 2: contacts, col 3: coords, col 4+: prices
+        
         weights_row = data[0]
-        # DEPRECATED: больше не читаем special_threshold / max_per_trip (особый тариф и максимум на рейс)
-        subtypes_row = data[3]
+        subtypes_row = data[1]
 
-        col_start = 3
+        col_start = 4
         col_end = len(subtypes_row)
 
         subtypes = []
@@ -93,16 +95,16 @@ def parse_google_sheet(ALLOWED_SHEETS=None, include_vehicles: bool = False):
                 subtypes.append((col, subtype_name))
 
         category_items = []
-        for row in data[4:]:
-            if not row or len(row) < 4:
+        for row in data[2:]:
+            if not row or len(row) < 5:
                 continue
-            factory_name = row[0].strip()
+            factory_name = row[1].strip()
             if not factory_name:
                 continue
 
             lat = lon = None
-            if len(row) > 2 and row[2]:
-                coords = str(row[2]).strip()
+            if len(row) > 3 and row[3]:
+                coords = str(row[3]).strip()
                 # Разделяем по запятой или пробелу
                 if "," in coords:
                     parts = coords.replace(";", ",").split(",")
@@ -117,7 +119,7 @@ def parse_google_sheet(ALLOWED_SHEETS=None, include_vehicles: bool = False):
                 except Exception:
                     pass
 
-            contact = row[1].strip() if len(row) > 1 else ""
+            contact = row[2].strip() if len(row) > 2 else ""
 
             for col, subtype in subtypes:
                 try:
