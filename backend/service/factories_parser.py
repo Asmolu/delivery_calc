@@ -78,14 +78,38 @@ def parse_google_sheet(ALLOWED_SHEETS=None, include_vehicles: bool = False):
         if len(data) < 3:
             print(f"⚠️ Пропущен лист {category_name} — недостаточно строк для парсинга.")
             continue
-        # Layout:
-        # row 0: weights, row 1: subtypes, row 2+: factories
-        # col 0: update date, col 1: factory name, col 2: contacts, col 3: coords, col 4+: prices
-        
-        weights_row = data[0]
-        subtypes_row = data[1]
+        # Layouts:
+        # New: row 0 weights, row 1 subtypes, row 2+ factories
+        #      col 0 update date, col 1 factory name, col 2 contacts, col 3 coords, col 4+ prices
+        # Old: row 0 weights, row 1 special tariff, row 2 max per trip, row 3 subtypes, row 4+ factories
+        #      col 0 factory name, col 1 contacts, col 2 coords, col 3+ prices
+        header_hint = _norm_str(data[1][0]) if len(data[1]) > 0 else ""
+        has_date_column = "дата" in header_hint
+        has_old_header = False
+        if len(data) > 2:
+            row1_hint = _norm_str(data[1][0]) if len(data[1]) > 0 else ""
+            row2_hint = _norm_str(data[2][0]) if len(data[2]) > 0 else ""
+            has_old_header = row1_hint.startswith("особ") or row2_hint.startswith("максим")
+        if not has_date_column and not has_old_header and len(data) > 3:
+            has_old_header = any(cell.strip() for cell in data[3][3:])
 
-        col_start = 4
+        if has_date_column or not has_old_header:
+            weights_row = data[0]
+            subtypes_row = data[1]
+            data_rows = data[2:]
+            col_start = 4
+            name_idx = 1
+            contact_idx = 2
+            coord_idx = 3
+        else:
+            weights_row = data[0]
+            subtypes_row = data[3]
+            data_rows = data[4:]
+            col_start = 3
+            name_idx = 0
+            contact_idx = 1
+            coord_idx = 2
+
         col_end = len(subtypes_row)
 
         subtypes = []
@@ -95,16 +119,16 @@ def parse_google_sheet(ALLOWED_SHEETS=None, include_vehicles: bool = False):
                 subtypes.append((col, subtype_name))
 
         category_items = []
-        for row in data[2:]:
-            if not row or len(row) < 5:
+        for row in data_rows:
+            if not row or len(row) <= coord_idx:
                 continue
-            factory_name = row[1].strip()
+            factory_name = row[name_idx].strip()
             if not factory_name:
                 continue
 
             lat = lon = None
-            if len(row) > 3 and row[3]:
-                coords = str(row[3]).strip()
+            if len(row) > coord_idx and row[coord_idx]:
+                coords = str(row[coord_idx]).strip()
                 # Разделяем по запятой или пробелу
                 if "," in coords:
                     parts = coords.replace(";", ",").split(",")
@@ -119,7 +143,7 @@ def parse_google_sheet(ALLOWED_SHEETS=None, include_vehicles: bool = False):
                 except Exception:
                     pass
 
-            contact = row[2].strip() if len(row) > 2 else ""
+            contact = row[contact_idx].strip() if len(row) > contact_idx else ""
 
             for col, subtype in subtypes:
                 try:
