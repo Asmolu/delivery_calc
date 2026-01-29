@@ -200,6 +200,7 @@ def _select_tariff_by_name_tag(
     pickup_points: Optional[List[Tuple[float, float]]],
     dropoff_point: Optional[Tuple[float, float]],
     ignore_capacity: bool = False,
+    ignore_weight_rules: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """Выбрать строку тарифа по точному (name, tag) с учётом дистанции/веса.
 
@@ -220,7 +221,7 @@ def _select_tariff_by_name_tag(
             continue
         if not _distance_matches_tariff(t, distance_km, group_max_distance, pickup_points, dropoff_point):
             continue
-        if not _weight_ok(t, load_ton):
+        if not ignore_weight_rules and not _weight_ok(t, load_ton):
             continue
         if not ignore_capacity:
             capacity = _to_float(t.get("грузоподъёмность"))
@@ -341,83 +342,7 @@ def _linear_plan(
         Поэтому один вызов аллоцирует товары только из ОДНОЙ категории.
         """
 
-        assigned: List[str] = []
-        qty_rows: List[Dict[str, Any]] = []
-        load_used = 0.0
-        if load_limit <= 0:
-            return assigned, load_used, qty_rows
-
-        # Выбираем категорию для этого рейса: берём ту, у которой больше всего
-        # оставшегося веса (или количества, если веса нет).
-        cat_candidates = []
-        for it in remaining_items:
-            qty_left = _to_float(it.get("remaining_qty", 0))
-            if qty_left <= 0:
-                continue
-            wpi = _to_float(it.get("weight_per_item"))
-            cat = it.get("category")
-            if not cat:
-                continue
-            cat_candidates.append((cat, qty_left * (wpi if wpi > 0 else 1.0)))
-
-        if not cat_candidates:
-            return assigned, load_used, qty_rows
-
-        # категория с максимальным “объёмом” к отгрузке
-        target_category = max(cat_candidates, key=lambda x: x[1])[0]
-
-        for item in remaining_items:
-            if load_limit - load_used < 0.01:
-                break
-
-            if (item.get("category") or "") != target_category:
-                continue
-
-            qty_left = item.get("remaining_qty", 0)
-            if qty_left <= 0:
-                continue
-
-            weight_per_item = _to_float(item.get("weight_per_item"))
-            if weight_per_item <= 0:
-                # Нулевой вес — просто отгружаем остаток
-                take_qty = int(qty_left)
-                if take_qty > 0:
-                    item["remaining_qty"] = qty_left - take_qty
-                    qty_rows.append(
-                        {
-                            "category": item.get("category"),
-                            "subtype": item.get("subtype"),
-                            "qty": int(take_qty),
-                            "weight_per_item": 0.0,
-                        }
-                    )
-                    assigned.append(
-                        f"{item.get('category')} {item.get('subtype')}: {take_qty} шт"
-                    )
-                continue
-
-            max_qty_by_weight = int((load_limit - load_used + 1e-6) // weight_per_item)
-            if max_qty_by_weight <= 0:
-                continue
-
-            take_qty = min(qty_left, max_qty_by_weight)
-            if take_qty <= 0:
-                continue
-
-            load_used += take_qty * weight_per_item
-            item["remaining_qty"] = qty_left - take_qty
-            qty_rows.append(
-                {
-                    "category": item.get("category"),
-                    "subtype": item.get("subtype"),
-                    "qty": int(take_qty),
-                    "weight_per_item": float(weight_per_item),
-                }
-            )
-            assigned.append(
-                f"{item.get('category')} {item.get('subtype')}: {int(take_qty)} шт"
-            )
-        return assigned, load_used, qty_rows
+        return _allocate_items_from_state(remaining_items, load_limit, mutate=True)
 
     def _preview_allocate_items_for_trip(load_limit: float) -> Tuple[List[str], float, List[Dict[str, Any]]]:
         """Как _allocate_items_for_trip, но без мутации remaining_items."""
@@ -430,7 +355,14 @@ def _linear_plan(
             }
             for it in (remaining_items or [])
         ]
+        return _allocate_items_from_state(state, load_limit, mutate=False)
 
+    def _allocate_items_from_state(
+        state: List[Dict[str, Any]],
+        load_limit: float,
+        *,
+        mutate: bool,
+    ) -> Tuple[List[str], float, List[Dict[str, Any]]]:
         assigned: List[str] = []
         qty_rows: List[Dict[str, Any]] = []
         load_used = 0.0
@@ -452,40 +384,59 @@ def _linear_plan(
 
         target_category = max(cat_candidates, key=lambda x: x[1])[0]
 
+        category_items: List[Dict[str, Any]] = []
         for item in state:
-            if load_limit - load_used < 0.01:
-                break
+
             if (item.get("category") or "") != target_category:
                 continue
-            qty_left = item.get("remaining_qty", 0)
-            if qty_left <= 0:
+            if _to_float(item.get("remaining_qty", 0)) <= 0:
                 continue
+            category_items.append(item)
 
-            weight_per_item = _to_float(item.get("weight_per_item"))
-            if weight_per_item <= 0:
-                take_qty = int(qty_left)
-                if take_qty > 0:
-                    item["remaining_qty"] = qty_left - take_qty
-                    qty_rows.append(
-                        {
-                            "category": item.get("category"),
-                            "subtype": item.get("subtype"),
-                            "qty": int(take_qty),
-                            "weight_per_item": 0.0,
-                        }
-                    )
-                    assigned.append(f"{item.get('category')} {item.get('subtype')}: {take_qty} шт")
-                continue
+        def _best_mix_for_weight(
+            items_in_cat: List[Dict[str, Any]],
+            limit_ton: float,
+        ) -> List[int]:
+            scale = 100
+            limit_int = int(math.floor(limit_ton * scale + 1e-9))
+            if limit_int <= 0 or not items_in_cat:
+                return [0] * len(items_in_cat)
 
-            max_qty_by_weight = int((load_limit - load_used + 1e-6) // weight_per_item)
-            if max_qty_by_weight <= 0:
-                continue
-            take_qty = min(qty_left, max_qty_by_weight)
+            dp: Dict[int, List[int]] = {0: [0] * len(items_in_cat)}
+            for idx, it in enumerate(items_in_cat):
+                weight_per_item = _to_float(it.get("weight_per_item"))
+                if weight_per_item <= 0:
+                    continue
+                w_int = int(round(weight_per_item * scale))
+                if w_int <= 0:
+                    continue
+                qty_left = int(_to_float(it.get("remaining_qty", 0)))
+                max_take = min(qty_left, limit_int // w_int)
+                if max_take <= 0:
+                    continue
+                current = dp.copy()
+                for weight_int, alloc in dp.items():
+                    for take_qty in range(1, max_take + 1):
+                        new_weight = weight_int + take_qty * w_int
+                        if new_weight > limit_int:
+                            break
+                        if new_weight not in current:
+                            new_alloc = alloc.copy()
+                            new_alloc[idx] += take_qty
+                            current[new_weight] = new_alloc
+                dp = current
+
+            best_weight = max(dp.keys(), default=0)
+            return dp.get(best_weight, [0] * len(items_in_cat))
+
+        alloc_counts = _best_mix_for_weight(category_items, load_limit)
+        for item, take_qty in zip(category_items, alloc_counts):
             if take_qty <= 0:
                 continue
-
+            weight_per_item = _to_float(item.get("weight_per_item"))
             load_used += take_qty * weight_per_item
-            item["remaining_qty"] = qty_left - take_qty
+            if mutate:
+                item["remaining_qty"] = _to_float(item.get("remaining_qty", 0)) - take_qty
             qty_rows.append(
                 {
                     "category": item.get("category"),
@@ -495,6 +446,27 @@ def _linear_plan(
                 }
             )
             assigned.append(f"{item.get('category')} {item.get('subtype')}: {int(take_qty)} шт")
+
+        for item in category_items:
+            if load_limit - load_used < 0.01:
+                break
+            weight_per_item = _to_float(item.get("weight_per_item"))
+            if weight_per_item > 0:
+                continue
+            qty_left = int(_to_float(item.get("remaining_qty", 0)))
+            if qty_left <= 0:
+                continue
+            if mutate:
+                item["remaining_qty"] = _to_float(item.get("remaining_qty", 0)) - qty_left
+            qty_rows.append(
+                {
+                    "category": item.get("category"),
+                    "subtype": item.get("subtype"),
+                    "qty": int(qty_left),
+                    "weight_per_item": 0.0,
+                }
+            )
+            assigned.append(f"{item.get('category')} {item.get('subtype')}: {int(qty_left)} шт")
 
         return assigned, load_used, qty_rows
 
@@ -524,6 +496,7 @@ def _linear_plan(
             pickup_points=pickup_points,
             dropoff_point=dropoff_point,
             ignore_capacity=True,
+            ignore_weight_rules=True,
         )
         if not base_tariff:
             return None, None
