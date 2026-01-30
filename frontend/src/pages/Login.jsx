@@ -36,7 +36,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+    <div className="min-h-screen flex items-center justify-center p-4">
       <MotionDiv
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -98,9 +98,6 @@ export default function Login() {
           </button>
         </form>
 
-        <div className="mt-6 text-center text-sm text-slate-500">
-          <p>По умолчанию: admin / admin</p>
-        </div>
       </MotionDiv>
     </div>
   );
