@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { login, isAuthenticated } from "../api";
+import { getCurrentUser, login, isAuthenticated } from "../api";
 import { motion } from "framer-motion";
 
 export default function Login() {
@@ -9,15 +9,36 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const fromPath = location.state?.from?.pathname || "/admin";
 
   // Если уже авторизован, перенаправляем
   React.useEffect(() => {
-    if (isAuthenticated()) {
-      navigate(fromPath, { replace: true });
-    }
+    let isMounted = true;
+    const checkSession = async () => {
+      if (!isAuthenticated()) return;
+      setCheckingSession(true);
+      try {
+        await getCurrentUser();
+        if (isMounted) {
+          navigate(fromPath, { replace: true });
+        }
+      } catch (err) {
+        if (isMounted) {
+          setError(err?.message || "Сессия истекла. Войдите снова.");
+        }
+      } finally {
+        if (isMounted) {
+          setCheckingSession(false);
+        }
+      }
+    };
+    checkSession();
+    return () => {
+      isMounted = false;
+    };
   }, [navigate, fromPath]);
 
   const handleSubmit = async (e) => {
@@ -49,6 +70,11 @@ export default function Login() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
+        {checkingSession && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-lg text-sm">
+              Проверяем сессию. Если база недоступна, войдите повторно позже.
+            </div>
+          )}
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
               {error}
@@ -87,14 +113,14 @@ export default function Login() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || checkingSession}
             className={`w-full py-3 rounded-lg font-semibold transition shadow-md ${
-              loading
+              loading || checkingSession
                 ? "bg-slate-300 text-slate-500 cursor-wait"
                 : "bg-emerald-500 text-white hover:bg-emerald-600"
             }`}
           >
-            {loading ? "⏳ Вход..." : "Войти"}
+            {loading || checkingSession ? "⏳ Вход..." : "Войти"}
           </button>
         </form>
 

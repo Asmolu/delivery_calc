@@ -37,8 +37,19 @@ async function request(method, path, body, requireAuth = false) {
     options.body = JSON.stringify(body);
   }
 
-  const resp = await fetch(url, options);
-  const rawText = await resp.text().catch(() => "");
+  let resp;
+  let rawText = "";
+  try {
+    resp = await fetch(url, options);
+    rawText = await resp.text().catch(() => "");
+  } catch (error) {
+    if (path === "/auth/me") {
+      setToken(null);
+    }
+    const err = new Error(error?.message || "Ошибка сети");
+    err.status = 0;
+    throw err;
+  }
 
   let parsed = null;
   if (rawText) {
@@ -50,8 +61,7 @@ async function request(method, path, body, requireAuth = false) {
   }
 
   if (!resp.ok) {
-    // Если 401, очищаем токен
-    if (resp.status === 401) {
+    if (resp.status === 401 || path === "/auth/me") {
       setToken(null);
     }
     const detail = parsed?.detail || parsed?.message || rawText || resp.statusText;
