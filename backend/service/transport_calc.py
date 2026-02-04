@@ -984,6 +984,15 @@ def evaluate_scenario_transport(
         delivery_mani: Optional[Dict[str, Any]],
     ) -> Tuple[float, Optional[Dict[str, Any]]]:
         """Возвращает (unloading_cost, unloading_info) для данного состояния доставки."""
+        # локальные копии ограничений
+        tag_choice = unloading_transport_tag
+        allowed_set = set(allowed_unloading or set())
+        forbidden_set = set(forbidden_unloading or set())
+
+        # явное отключение разгрузки
+        if _norm_str(tag_choice) == "none" or "none" in allowed_set:
+            return 0.0, None
+
         # если нет разгрузочных тарифов — просто 0/None (UI всё равно покажет "—")
         if not unloading_tariffs:
             if container_used_flag:
@@ -997,10 +1006,6 @@ def evaluate_scenario_transport(
                 }
             return 0.0, None
 
-        # локальные копии ограничений
-        tag_choice = unloading_transport_tag
-        allowed_set = set(allowed_unloading or set())
-        forbidden_set = set(forbidden_unloading or set())
 
         # контейнеровоз -> кран
         if container_used_flag:

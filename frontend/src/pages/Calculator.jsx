@@ -195,6 +195,11 @@ export default function Calculator() {
     return unloadingTransportTag === "none" || allowedUnloadingSet.has("none");
   }, [unloadingTransportTag, allowedUnloadingSet]);
 
+  const manualUnloadingDisabled = React.useMemo(() => {
+    const hasManualNone = (manualUnloadingMachines || []).some((x) => normStr(x).toLowerCase() === "none");
+    return unloadingDisabled || hasManualNone;
+  }, [manualUnloadingMachines, unloadingDisabled]);
+
   const getTariffName = (t) => t?.name || t?.["название"] || "";
   const getTariffTag = (t) => t?.tag || t?.["тег"] || "";
   const getTariffServiceType = (t) => t?.service_type || t?.serviceType || "delivery";
@@ -476,9 +481,9 @@ export default function Calculator() {
     }
     const canPickDeliveryMachine = deliveryMachineOptions.length > 0 || uniqueTransportNames.length > 0;
     const canPickUnloadingMachine =
-      !unloadingDisabled && (unloadingMachineOptions.length > 0 || uniqueTransportNames.length > 0);
+    !manualUnloadingDisabled && (unloadingMachineOptions.length > 0 || uniqueTransportNames.length > 0);
     const deliveryNames = (manualDeliveryMachines || []).map((x) => normStr(x)).filter(Boolean);
-    const unloadingNames = unloadingDisabled
+    const unloadingNames = manualUnloadingDisabled
       ? []
       : (manualUnloadingMachines || []).map((x) => normStr(x)).filter(Boolean);
     if (canPickDeliveryMachine && deliveryNames.length === 0) {
@@ -502,16 +507,16 @@ export default function Calculator() {
     try {
       setActionBusy(true);
       const deliveryNameFinal = (deliveryNames.join(" + ") || "manual").trim();
-      const unloadingNameFinal = unloadingDisabled ? "none" : (unloadingNames.join(" + ") || "manual").trim();
+      const unloadingNameFinal = manualUnloadingDisabled ? "none" : (unloadingNames.join(" + ") || "manual").trim();
       const manualPayload = {
         deliveryMachineName: deliveryNameFinal, // legacy single string
         unloadingMachineName: unloadingNameFinal, // legacy single string
         deliveryMachines: deliveryNames,
         unloadingMachines: unloadingNames,
         deliveryTransportTag,
-        unloadingTransportTag: unloadingDisabled ? "none" : unloadingTransportTag,
+        unloadingTransportTag: manualUnloadingDisabled ? "none" : unloadingTransportTag,
         allowedDeliveryTags: Array.from(allowedDeliverySet),
-        allowedUnloadingTags: unloadingDisabled ? ["none"] : Array.from(allowedUnloadingSet),
+        allowedUnloadingTags: manualUnloadingDisabled ? ["none"] : Array.from(allowedUnloadingSet),
         items: itemsSnap.map((it, idx) => ({
           category: it?.category,
           subtype: it?.subtype,
@@ -1232,7 +1237,8 @@ export default function Calculator() {
                   <button
                     type="button"
                     onClick={() => setManualUnloadingMachines((prev) => [...(prev || [""]), ""])}
-                    className="px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 font-semibold hover:bg-indigo-100"
+                    className="px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 font-semibold hover:bg-indigo-100 disabled:opacity-60"
+                    disabled={manualUnloadingDisabled}
                   >
                     ➕ Добавить машину
                   </button>
@@ -1246,13 +1252,16 @@ export default function Calculator() {
                           const v = e.target.value;
                           setManualUnloadingMachines((prev) => {
                             const next = Array.isArray(prev) ? [...prev] : [];
+                            if (v === "none") return ["none"];
                             next[idx] = v;
-                            return next;
+                            return next.filter((x) => normStr(x).toLowerCase() !== "none");
                           });
                         }}
                         className="flex-1 px-3 py-3 rounded-lg bg-white border border-slate-200 text-slate-800 shadow-sm"
+                        disabled={manualUnloadingDisabled && normStr(val).toLowerCase() !== "none"}
                       >
                         <option value="">Выберите машину разгрузки…</option>
+                        <option value="none">Нет разгрузки (на объекте есть техника)</option>
                         {(unloadingMachineOptions.length
                           ? unloadingMachineOptions
                           : uniqueTransportNames.map((n) => ({ name: n }))).map((x) => (
@@ -1280,6 +1289,7 @@ export default function Calculator() {
                 </div>
                 <div className="text-xs text-slate-500 mt-2">
                   Список берётся из тарифов и фильтруется по выбранному “транспорту разгрузки”.
+                  {manualUnloadingDisabled ? " Разгрузка отключена (на объекте есть своя техника)." : ""}
                 </div>
               </div>
 
