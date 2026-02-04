@@ -749,7 +749,7 @@ export default function AdminTariffs() {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <label className="text-sm">
-                  <div className="text-slate-600 mb-1">Весовое условие</div>
+                <div className="text-slate-600 mb-1">Весовое условие (как применять порог)</div>
                   <select
                     value={b.weight_condition}
                     onChange={(e) =>
@@ -761,13 +761,13 @@ export default function AdminTariffs() {
                     }
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white"
                   >
-                    <option value="any">any</option>
-                    <option value="le">≤ threshold</option>
-                    <option value="gt">{">"} threshold</option>
+                    <option value="any">Не учитывать вес</option>
+                    <option value="le">Применять тариф, если вес заказа меньше или равен весовому порогу (т)</option>
+                    <option value="gt">Применять тариф, если вес заказа больше весового порога (т, до максимума машины)</option>
                   </select>
                 </label>
                 <label className="text-sm">
-                  <div className="text-slate-600 mb-1">Весовой порог</div>
+                <div className="text-slate-600 mb-1">Весовой порог (т)</div>
                   <input
                     type="number"
                     step="0.1"
