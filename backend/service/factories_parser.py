@@ -98,6 +98,7 @@ def parse_google_sheet(ALLOWED_SHEETS=None, include_vehicles: bool = False):
             subtypes_row = data[1]
             data_rows = data[2:]
             col_start = 4
+            update_date_idx = 0
             name_idx = 1
             contact_idx = 2
             coord_idx = 3
@@ -106,6 +107,7 @@ def parse_google_sheet(ALLOWED_SHEETS=None, include_vehicles: bool = False):
             subtypes_row = data[3]
             data_rows = data[4:]
             col_start = 3
+            update_date_idx = None
             name_idx = 0
             contact_idx = 1
             coord_idx = 2
@@ -125,6 +127,9 @@ def parse_google_sheet(ALLOWED_SHEETS=None, include_vehicles: bool = False):
             factory_name = row[name_idx].strip()
             if not factory_name:
                 continue
+            update_date = None
+            if update_date_idx is not None and len(row) > update_date_idx:
+                update_date = str(row[update_date_idx]).strip() or None
 
             lat = lon = None
             if len(row) > coord_idx and row[coord_idx]:
@@ -168,7 +173,8 @@ def parse_google_sheet(ALLOWED_SHEETS=None, include_vehicles: bool = False):
                         "lat": lat,
                         "lon": lon,
                         "price": price,
-                        "contact": contact
+                        "contact": contact,
+                        "update_date": update_date,
                     }
                 })
 

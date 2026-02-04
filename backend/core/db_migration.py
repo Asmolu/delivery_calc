@@ -63,7 +63,8 @@ def migrate_factories_and_products(db: Session):
                     name=factory_name,
                     lat=factory_data.get("lat"),
                     lon=factory_data.get("lon"),
-                    contact=factory_data.get("contact")
+                    contact=factory_data.get("contact"),
+                    update_date=factory_data.get("update_date"),
                 )
                 db.add(factory)
                 db.flush()  # Получаем ID
@@ -324,6 +325,9 @@ def ensure_catalog_normalization(db: Session) -> None:
         if "is_active" not in fcols:
             log.info("🧱 Добавляем factories.is_active...")
             _add_col_safe("ALTER TABLE factories ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE")
+        if "update_date" not in fcols:
+            log.info("🧱 Добавляем factories.update_date...")
+            _add_col_safe("ALTER TABLE factories ADD COLUMN update_date VARCHAR(32) NULL")
 
     # 2) products.category_id
     if insp.has_table("products"):

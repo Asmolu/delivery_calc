@@ -945,6 +945,7 @@ async def admin_list_factories_catalog(
                 "lat": f.lat,
                 "lon": f.lon,
                 "contact": f.contact,
+                "update_date": getattr(f, "update_date", None),
                 "is_active": bool(getattr(f, "is_active", True)),
                 "products": [
                     {

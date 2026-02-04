@@ -83,6 +83,7 @@ def _save_factories_to_db(db: Session, factories_products: dict) -> None:
                     lat=factory_data.get("lat"),
                     lon=factory_data.get("lon"),
                     contact=factory_data.get("contact"),
+                    update_date=factory_data.get("update_date"),
                     is_active=True,
                 )
                 db.add(factory)
@@ -93,6 +94,7 @@ def _save_factories_to_db(db: Session, factories_products: dict) -> None:
                 factory.lat = factory_data.get("lat")
                 factory.lon = factory_data.get("lon")
                 factory.contact = factory_data.get("contact")
+                factory.update_date = factory_data.get("update_date")
                 db.add(factory)
             factory_map[factory_name] = factory
 
@@ -272,7 +274,8 @@ def load_factories_and_tariffs_from_db(db: Session) -> Tuple[Dict, List]:
                 "lat": product.factory.lat,
                 "lon": product.factory.lon,
                 "price": product.price,
-                "contact": product.factory.contact
+                "contact": product.factory.contact,
+                "update_date": getattr(product.factory, "update_date", None),
             }
         })
     

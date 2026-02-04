@@ -159,6 +159,7 @@ export default function Calculator() {
   );
 
   const normStr = (x) => String(x ?? "").trim();
+  const normKey = (x) => normStr(x).toLowerCase();
 
   const forbiddenTransportOptions = React.useMemo(() => {
     return (TRANSPORT_TAGS || [])
@@ -182,6 +183,18 @@ export default function Calculator() {
     if (v.length === 1) return v[0];
     return "auto";
   }, [allowedUnloadingTags]);
+
+  const factoryUpdateDateByName = React.useMemo(() => {
+    const map = new Map();
+    for (const row of factoriesFlat || []) {
+      const name = normKey(row?.name || row?.["название"]);
+      if (!name) continue;
+      const date = normStr(row?.update_date || row?.updateDate || row?.["дата актуализации"] || row?.["дата"]);
+      if (!date) continue;
+      if (!map.has(name)) map.set(name, date);
+    }
+    return map;
+  }, [factoriesFlat]);
 
   const allowedDeliverySet = React.useMemo(() => {
     return new Set((allowedDeliveryTags || []).map((x) => normStr(x).toLowerCase()).filter(Boolean));
@@ -271,7 +284,6 @@ export default function Calculator() {
   }, []);
 
   useEffect(() => {
-    if (!manualOpen) return;
     if (Array.isArray(factoriesFlat) && factoriesFlat.length > 0) return;
 
     fetchFactories()
@@ -280,7 +292,7 @@ export default function Calculator() {
         console.error("Ошибка загрузки /api/factories:", e);
         setFactoriesFlat([]);
       });
-  }, [manualOpen, factoriesFlat]);
+    }, [factoriesFlat]);
 
   const uniqueTransportNames = React.useMemo(() => {
     const names = new Set();
@@ -836,61 +848,64 @@ export default function Calculator() {
             </div>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-4">
-            {result.variants.map((variant, idx) => (
-              <button
-                type="button"
-                key={idx}
-                onClick={() => setResult({ ...result, selectedVariant: idx })}
-                className={`text-left rounded-xl p-4 transition shadow-sm border ${
-                  result.selectedVariant === idx
-                    ? "bg-indigo-50 border-indigo-200 shadow-md"
-                    : "bg-white border-slate-200 hover:border-indigo-200"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <div className="text-sm text-slate-500">Вариант #{idx + 1}</div>
-                  {variant?.isSingleFactory ? (
-                    <div className="text-[11px] font-semibold px-2 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
-                      1 завод{variant?.singleFactoryName ? `: ${variant.singleFactoryName}` : ""}
-                    </div>
-                  ) : null}
-                </div>
-                {(() => {
-                  const plans = Array.isArray(variant?.transportDetails) ? variant.transportDetails : [];
-                  const factories = Array.from(new Set(plans.map((p) => p?.factory_name).filter(Boolean)));
-                  const productionLabel =
-                    variant?.singleFactoryName ||
-                    (factories.length === 1 ? factories[0] : (factories.length ? factories.join(", ") : "—"));
-                  const unloadingMachine =
-                    Number(variant?.unloadingCost || 0) > 0 ? (variant?.unloading?.tariff_name || "—") : "—";
-                  const deliveryMachine = variant?.transportName || "—";
-
-                  return (
-                    <>
-                      <div className="text-lg font-semibold mb-1">🚚 {deliveryMachine}</div>
-                      <p className="text-indigo-700 font-bold text-xl mb-1">
-                        {variant.totalCost != null ? `${variant.totalCost.toLocaleString()} ₽` : "—"}
-                      </p>
-                      <div className="mt-2 text-sm text-slate-600 space-y-1">
-                        <div>
-                          <span className="text-slate-400">Производство:</span> {productionLabel}
-                        </div>
-                        <div>
-                          <span className="text-slate-400">Количество рейсов:</span> {variant.tripCount ?? 0}
-                        </div>
-                        <div>
-                          <span className="text-slate-400">Машина разгрузки:</span> {unloadingMachine}
-                        </div>
-                        <div>
-                          <span className="text-slate-400">Машина доставки:</span> {deliveryMachine}
-                        </div>
+          <div className="grid gap-4 md:grid-cols-6">
+            {result.variants.map((variant, idx) => {
+              const layoutClass = idx < 3 ? "md:col-span-2" : "md:col-span-3";
+              return (
+                <button
+                  type="button"
+                  key={idx}
+                  onClick={() => setResult({ ...result, selectedVariant: idx })}
+                  className={`text-left rounded-xl p-4 transition shadow-sm border ${layoutClass} ${
+                    result.selectedVariant === idx
+                      ? "bg-indigo-50 border-indigo-200 shadow-md"
+                      : "bg-white border-slate-200 hover:border-indigo-200"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <div className="text-sm text-slate-500">Вариант #{idx + 1}</div>
+                    {variant?.isSingleFactory ? (
+                      <div className="text-[11px] font-semibold px-2 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        1 завод{variant?.singleFactoryName ? `: ${variant.singleFactoryName}` : ""}
                       </div>
-                    </>
-                  );
-                })()}
-              </button>
-            ))}
+                    ) : null}
+                    </div>
+                    {(() => {
+                      const plans = Array.isArray(variant?.transportDetails) ? variant.transportDetails : [];
+                      const factories = Array.from(new Set(plans.map((p) => p?.factory_name).filter(Boolean)));
+                      const productionLabel =
+                        variant?.singleFactoryName ||
+                        (factories.length === 1 ? factories[0] : (factories.length ? factories.join(", ") : "—"));
+                      const unloadingMachine =
+                        Number(variant?.unloadingCost || 0) > 0 ? (variant?.unloading?.tariff_name || "—") : "—";
+                      const deliveryMachine = variant?.transportName || "—";
+  
+                      return (
+                        <>
+                          <div className="text-lg font-semibold mb-1">🚚 {deliveryMachine}</div>
+                          <p className="text-indigo-700 font-bold text-xl mb-1">
+                            {variant.totalCost != null ? `${variant.totalCost.toLocaleString()} ₽` : "—"}
+                          </p>
+                          <div className="mt-2 text-sm text-slate-600 space-y-1">
+                            <div>
+                              <span className="text-slate-400">Производство:</span> {productionLabel}
+                            </div>
+                            <div>
+                              <span className="text-slate-400">Количество рейсов:</span> {variant.tripCount ?? 0}
+                            </div>
+                            <div>
+                              <span className="text-slate-400">Машина разгрузки:</span> {unloadingMachine}
+                            </div>
+                            <div>
+                              <span className="text-slate-400">Машина доставки:</span> {deliveryMachine}
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </button>
+                );
+              })}
           </div>
 
           {result.selectedVariant !== undefined && (() => {
@@ -941,6 +956,7 @@ export default function Calculator() {
                         <thead className="bg-slate-900/50 text-slate-300 border-b border-slate-800">
                           <tr>
                             <th className="p-3 text-left">Производство</th>
+                            <th className="p-3 text-left">Дата актуализации</th>
                             <th className="p-3 text-left">Контакт</th>
                             <th className="p-3 text-left">Товар</th>
                             <th className="p-3 text-left">Материал (₽)</th>
@@ -955,6 +971,9 @@ export default function Calculator() {
                           {detailRows.map((d, idx) => (
                             <tr key={idx} className="border-b border-slate-800">
                               <td className="p-3 whitespace-nowrap">{d["завод"]}</td>
+                              <td className="p-3 whitespace-nowrap">
+                                {factoryUpdateDateByName.get(normKey(d["завод"])) || "—"}
+                              </td>
                               <td className="p-3 whitespace-pre-line text-slate-400">{d["контакт"] || "—"}</td>
                               <td className="p-3">{d["товар"]}</td>
                               <td className="p-3">{d["стоимость_материала"]?.toLocaleString()}</td>
@@ -971,12 +990,12 @@ export default function Calculator() {
                           {detailRows.length > 1 ? (
                             <>
                               <tr className="border-t border-slate-700 bg-slate-900/30">
-                                <td className="p-3 font-semibold" colSpan={7}>Разгрузка</td>
+                              <td className="p-3 font-semibold" colSpan={8}>Разгрузка</td>
                                 <td className="p-3 text-indigo-200 font-semibold">{unloadingCost.toLocaleString()} ₽</td>
                                 <td className="p-3">—</td>
                               </tr>
                               <tr className="border-t border-slate-700 bg-slate-900/40">
-                                <td className="p-3 font-bold" colSpan={3}>Итого по варианту</td>
+                              <td className="p-3 font-bold" colSpan={4}>Итого по варианту</td>
                                 <td className="p-3 font-bold text-slate-100">{sumMaterial.toLocaleString()} ₽</td>
                                 <td className="p-3">—</td>
                                 <td className="p-3 font-bold text-slate-100">{sumDelivery.toLocaleString()} ₽</td>
@@ -999,6 +1018,7 @@ export default function Calculator() {
                           <thead className="bg-slate-900/50 text-slate-300 border-b border-slate-800">
                             <tr>
                               <th className="p-3 text-left">Производство</th>
+                              <th className="p-3 text-left">Дата актуализации</th>
                               <th className="p-3 text-left">Расстояние (км)</th>
                               <th className="p-3 text-left">Машина</th>
                               <th className="p-3 text-left">Тариф</th>
@@ -1012,6 +1032,9 @@ export default function Calculator() {
                             {tripItems.map((trip, i) => (
                               <tr key={i} className="border-b border-slate-800 align-top">
                                 <td className="p-3 whitespace-nowrap">{trip["завод"]}</td>
+                                <td className="p-3 whitespace-nowrap">
+                                  {factoryUpdateDateByName.get(normKey(trip["завод"])) || "—"}
+                                </td>
                                 <td className="p-3">{trip["расстояние_км"]}</td>
                                 <td className="p-3">{trip["машина"]}</td>
                                 <td className="p-3 text-slate-300 whitespace-pre-line">{trip["тариф"] || "—"}</td>
@@ -1026,6 +1049,7 @@ export default function Calculator() {
                               <tr className="border-t border-slate-700 bg-slate-900/30">
                                 <td className="p-3 font-semibold whitespace-nowrap">Разгрузка</td>
                                 <td className="p-3">—</td>
+                                <td className="p-3">—</td>
                                 <td className="p-3">{unloading.tariff_name || unloading.tag || "—"}</td>
                                 <td className="p-3 text-slate-300 whitespace-pre-line">{unloading.tariff_label || "—"}</td>
                                 <td className="p-3 text-slate-100">—</td>
@@ -1035,7 +1059,7 @@ export default function Calculator() {
                               </tr>
                             ) : null}
                             <tr className="border-t border-slate-700 bg-slate-900/40">
-                              <td className="p-3 font-bold" colSpan={7}>Итого по варианту</td>
+                            <td className="p-3 font-bold" colSpan={8}>Итого по варианту</td>
                               <td className="p-3 font-bold text-indigo-200">{(sumDelivery + unloadingCost).toLocaleString()} ₽</td>
                             </tr>
                           </tbody>

@@ -100,8 +100,72 @@ async def make_quote(
 
     all_sorted = sorted(valid_results, key=lambda x: x["total_cost"])
 
-    # Топ-3 самых дешёвых вариантов
-    top3 = all_sorted[:3]
+
+    def _has_container(r: dict) -> bool:
+        for fp in (r or {}).get("factory_plans") or []:
+            for tr in (fp or {}).get("trips", []) or []:
+                if str(tr.get("tag") or "").strip().lower() == "container_carrier":
+                    return True
+        return False
+
+    def _scenario_id(r: dict) -> int | None:
+        sc = (r or {}).get("scenario") or {}
+        try:
+            sid = sc.get("scenario_id")
+            return int(sid) if sid is not None else None
+        except Exception:
+            return None
+
+    def _scenario_key(r: dict) -> int | str:
+        sid = _scenario_id(r)
+        return sid if sid is not None else f"mem:{id(r)}"
+
+    def _unique_by_scenario(items: list[dict]) -> list[dict]:
+        seen: set[int | str] = set()
+        unique: list[dict] = []
+        for item in items:
+            key = _scenario_key(item)
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(item)
+        return unique
+
+    def _transport_signature(r: dict) -> tuple:
+        trips = [
+            (
+                str(tr.get("tag") or "").strip().lower(),
+                str(tr.get("tariff_name") or "").strip().lower(),
+            )
+            for fp in (r or {}).get("factory_plans") or []
+            for tr in (fp or {}).get("trips", []) or []
+        ]
+        return tuple(sorted(trips))
+
+    def _pick_unique_by_transport(candidates: list[dict], limit: int) -> list[dict]:
+        seen: set[tuple] = set()
+        picked: list[dict] = []
+        for cand in candidates:
+            signature = _transport_signature(cand)
+            if signature in seen:
+                continue
+            seen.add(signature)
+            picked.append(cand)
+            if len(picked) >= limit:
+                break
+        return picked
+
+    all_sorted = _unique_by_scenario(all_sorted)
+
+
+    # Топ-3 самых дешёвых вариантов без контейнеровоза
+    non_container_sorted = [r for r in all_sorted if not _has_container(r)]
+    has_non_container = bool(non_container_sorted)
+    if not has_non_container:
+        # fallback: если нет ни одного варианта без контейнеровоза, показываем общие варианты
+        # (чтобы не возвращать пустой список)
+        non_container_sorted = list(all_sorted)
+    top3 = _pick_unique_by_transport(non_container_sorted, 3)
 
     # Спец-вариант: все позиции из одного производства (если существует).
     # Корректный критерий: один и тот же factory_id (из БД). Если id нет (legacy JSON) — fallback на имя.
@@ -142,22 +206,52 @@ async def make_quote(
     single_factory_results = [r for r in all_sorted if isinstance(r, dict) and _is_single_factory(r)]
     best_single_factory = single_factory_results[0] if single_factory_results else None
 
+    container_sorted = [r for r in all_sorted if _has_container(r)]
+    best_container = container_sorted[0] if container_sorted else None
+
     # Итоговый список результатов для отображения:
     # - всегда топ-3
     # - + отдельный вариант "один завод", если он есть и не попал в топ-3
-    def _scenario_id(r: dict) -> int | None:
-        sc = (r or {}).get("scenario") or {}
-        try:
-            sid = sc.get("scenario_id")
-            return int(sid) if sid is not None else None
-        except Exception:
-            return None
 
-    top3_ids = { _scenario_id(r) for r in top3 }
-    results = list(top3)
-    # Добавляем "один завод" как 4-й вариант, если это другой сценарий (по scenario_id).
-    if best_single_factory and (_scenario_id(best_single_factory) not in top3_ids):
-        results.append(best_single_factory)
+    def _in_results(candidate: dict, current: list[dict]) -> bool:
+        if candidate is None:
+            return False
+        candidate_key = _scenario_key(candidate)
+        return any(_scenario_key(r) == candidate_key for r in current)
+
+    def _pick_unique(candidates: list[dict], current: list[dict]) -> dict | None:
+        for c in candidates:
+            if not _in_results(c, current):
+                return c
+        return None
+
+    results: list[dict] = list(top3)
+    # 4-й вариант: все позиции из одного производства (если есть).
+    single_factory_candidate = _pick_unique(single_factory_results, results) or best_single_factory
+    if single_factory_candidate and (has_non_container and not _has_container(single_factory_candidate) or not has_non_container):
+        results.append(single_factory_candidate)
+
+    # Заполняем до 4-го места только без контейнеровоза.
+    while len(results) < 4:
+        filler = _pick_unique(non_container_sorted, results)
+        if not filler:
+            break
+        results.append(filler)
+
+    # 5-й вариант: самый дешёвый вариант с контейнеровозом (если есть),
+    # и только если можем поставить его именно пятым.
+    container_candidate = _pick_unique(container_sorted, results) or best_container
+    if container_candidate and len(results) == 4:
+        results.append(container_candidate)
+
+    # добираем до 5 уникальными вариантами, если получилось меньше
+    # (при этом контейнеровозы остаются только в 5-м варианте).
+    if len(results) < 5:
+        for r in non_container_sorted:
+            if len(results) >= 5:
+                break
+            if not _in_results(r, results):
+                results.append(r)
 
     # Дополнительные правила "нужна проверка логистом" — по лучшему (самому дешёвому) сценарию.
     # Эти причины не меняют расчёт, только маркируют потенциально сложные кейсы.
@@ -269,6 +363,7 @@ def get_factories(db: Session = Depends(get_db)):
                 "lat": f.get("lat"),
                 "lon": f.get("lon"),
                 "contact": f.get("contact"),
+                "update_date": f.get("update_date"),
                 "category": category,
                 "subtype": item.get("subtype"),
                 "weight_per_item": item.get("weight_per_item"),

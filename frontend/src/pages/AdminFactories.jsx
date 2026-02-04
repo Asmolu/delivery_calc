@@ -115,6 +115,9 @@ export default function AdminFactories() {
                       <div className="text-xs text-slate-500 whitespace-pre-line">
                         {f?.contact ? String(f.contact) : "—"}
                       </div>
+                      <div className="text-xs text-slate-500 mt-1">
+                        Дата актуализации: {f?.update_date || "—"}
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-3">
