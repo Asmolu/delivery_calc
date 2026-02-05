@@ -62,6 +62,46 @@ def _weight_ok(tariff: Dict[str, Any], load_ton: float) -> bool:
         return load_ton > thr + 1e-9
     return True
 
+def _weight_priority_key(tariff: Dict[str, Any]) -> Tuple[int, float, float]:
+    """Возвращает ключ приоритета для весовых условий.
+
+    Чем выше ключ, тем более специфичен тариф при совпадении веса.
+    Формат ключа: (rank, min_weight, max_weight).
+    """
+    cond, thr = _parse_weight_rule(tariff)
+    if cond == "any" or thr is None or thr <= 0:
+        return (0, 0.0, float("inf"))
+    if cond == "le":
+        return (1, 0.0, float(thr))
+    if cond == "gt":
+        return (2, float(thr), float("inf"))
+    return (0, 0.0, float("inf"))
+
+
+def _select_best_weighted_tariff(
+    candidates: List[Dict[str, Any]],
+    load_ton: float,
+    distance_km: float,
+) -> Optional[Dict[str, Any]]:
+    """Выбирает тариф по весовому приоритету среди уже отфильтрованных кандидатов."""
+    matching = [t for t in candidates if _weight_ok(t, load_ton)]
+    if not matching:
+        return None
+
+    weighted: List[Tuple[Tuple[int, float, float], Dict[str, Any]]] = [
+        (_weight_priority_key(t), t) for t in matching
+    ]
+    best_key = max(k for k, _ in weighted)
+    best_candidates = [t for k, t in weighted if k == best_key]
+    return min(
+        best_candidates,
+        key=lambda x: (
+            _trip_cost(x, distance_km),
+            _to_float(x.get("id") or 0.0),
+            _norm_str(x.get("name") or x.get("название") or ""),
+        ),
+    )
+
 
 def _zones_ok(
     tariff: Dict[str, Any],
@@ -221,8 +261,6 @@ def _select_tariff_by_name_tag(
             continue
         if not _distance_matches_tariff(t, distance_km, group_max_distance, pickup_points, dropoff_point):
             continue
-        if not ignore_weight_rules and not _weight_ok(t, load_ton):
-            continue
         if not ignore_capacity:
             capacity = _to_float(t.get("грузоподъёмность"))
             if capacity and load_ton > capacity:
@@ -230,7 +268,9 @@ def _select_tariff_by_name_tag(
         candidates.append(t)
     if not candidates:
         return None
-    return min(candidates, key=lambda x: _trip_cost(x, distance_km))
+    if ignore_weight_rules:
+        return min(candidates, key=lambda x: _trip_cost(x, distance_km))
+    return _select_best_weighted_tariff(candidates, load_ton, distance_km)
 
 
 def _select_tariff_for_load(
@@ -259,8 +299,6 @@ def _select_tariff_for_load(
             if name_contains.lower() not in name:
                 continue
 
-        if not _weight_ok(t, load_ton):
-            continue
 
         capacity = _to_float(t.get("грузоподъёмность"))
         if capacity and load_ton > capacity:
@@ -270,8 +308,64 @@ def _select_tariff_for_load(
     if not candidates:
         return None
 
-    # выбираем минимальную стоимость рейса
-    return min(candidates, key=lambda x: _trip_cost(x, distance_km))
+    return _select_best_weighted_tariff(candidates, load_ton, distance_km)
+
+
+def _container_trip_cost(
+    container_tariff: Dict[str, Any],
+    qty_rows: List[Dict[str, Any]],
+    real_weight: float,
+    *,
+    tariffs: List[Dict[str, Any]],
+    distance_km: float,
+    group_max_distance: Dict[Tuple[str, str, str, Optional[float]], float],
+    pickup_points: Optional[List[Tuple[float, float]]],
+    dropoff_point: Optional[Tuple[float, float]],
+) -> Tuple[Optional[float], Optional[str]]:
+    """Стоимость рейса контейнеровоза: shalanda_trip_cost * Σ(qty/maxPiecesInShalanda).
+
+    Возвращает (cost, label). Если не удалось посчитать — (None, None).
+    """
+    base_name = _norm_str(container_tariff.get("base_transport_name") or "")
+    base_tag = _norm_str(container_tariff.get("base_transport_tag") or "")
+    if not base_name or not base_tag:
+        return None, None
+
+    base_tariff = _select_tariff_by_name_tag(
+        tariffs,
+        name=base_name,
+        tag=base_tag,
+        service_type="delivery",
+        distance_km=distance_km,
+        load_ton=max(real_weight, 0.0),
+        group_max_distance=group_max_distance,
+        pickup_points=pickup_points,
+        dropoff_point=dropoff_point,
+        ignore_capacity=True,
+        ignore_weight_rules=False,
+    )
+    if not base_tariff:
+        return None, None
+
+    shalanda_cost = _trip_cost(base_tariff, distance_km)
+    base_capacity = _to_float(base_tariff.get("грузоподъёмность") or base_tariff.get("capacity") or 0.0)
+    if base_capacity <= 0:
+        return None, None
+
+    eq = 0.0
+    for r in qty_rows or []:
+        qty = _to_float(r.get("qty"))
+        wpi = _to_float(r.get("weight_per_item"))
+        if qty <= 0 or wpi <= 0:
+            return None, None
+        max_pieces = int(math.floor(base_capacity / wpi + 1e-9))
+        if max_pieces <= 0:
+            return None, None
+        eq += qty / max_pieces
+
+    cost = shalanda_cost * eq
+    label = f"контейнеровоз: {round(cost):g}р (шаланда {round(shalanda_cost):g}р × {eq:.3g})"
+    return cost, label
 
 
 def _linear_plan(
@@ -470,56 +564,6 @@ def _linear_plan(
 
         return assigned, load_used, qty_rows
 
-    def _container_trip_cost(
-        container_tariff: Dict[str, Any],
-        qty_rows: List[Dict[str, Any]],
-        real_weight: float,
-    ) -> Tuple[Optional[float], Optional[str]]:
-        """Стоимость рейса контейнеровоза: shalanda_trip_cost * Σ(qty/maxPiecesInShalanda).
-
-        Возвращает (cost, label). Если не удалось посчитать — (None, None).
-        """
-        base_name = _norm_str(container_tariff.get("base_transport_name") or "")
-        base_tag = _norm_str(container_tariff.get("base_transport_tag") or "")
-        if not base_name or not base_tag:
-            return None, None
-
-        # выбираем "как у шаланды" строку по дистанции/весу (без проверки capacity)
-        base_tariff = _select_tariff_by_name_tag(
-            tariffs,
-            name=base_name,
-            tag=base_tag,
-            service_type="delivery",
-            distance_km=distance_km,
-            load_ton=max(real_weight, 0.0),
-            group_max_distance=group_max_distance,
-            pickup_points=pickup_points,
-            dropoff_point=dropoff_point,
-            ignore_capacity=True,
-            ignore_weight_rules=True,
-        )
-        if not base_tariff:
-            return None, None
-
-        shalanda_cost = _trip_cost(base_tariff, distance_km)
-        base_capacity = _to_float(base_tariff.get("грузоподъёмность") or base_tariff.get("capacity") or 0.0)
-        if base_capacity <= 0:
-            return None, None
-
-        eq = 0.0
-        for r in qty_rows or []:
-            qty = _to_float(r.get("qty"))
-            wpi = _to_float(r.get("weight_per_item"))
-            if qty <= 0 or wpi <= 0:
-                return None, None
-            max_pieces = int(math.floor(base_capacity / wpi + 1e-9))
-            if max_pieces <= 0:
-                return None, None
-            eq += qty / max_pieces
-
-        cost = shalanda_cost * eq
-        label = f"контейнеровоз: {round(cost):g}р (шаланда {round(shalanda_cost):g}р × {eq:.3g})"
-        return cost, label
 
     def _assign_trip(tag: str, info: Dict[str, Any], load: float, tariff: Dict[str, Any], base_cost: float) -> bool:
         nonlocal weight_left
@@ -544,7 +588,16 @@ def _linear_plan(
             # повторно валидируем на реальном весе (на всякий случай)
             if real_weight < CONTAINER_CARRIER_MIN_LOAD_TON - 1e-6:
                 return False
-            ccost, clabel = _container_trip_cost(tariff, qty_rows, real_weight)
+            ccost, clabel = _container_trip_cost(
+                tariff,
+                qty_rows,
+                real_weight,
+                tariffs=tariffs,
+                distance_km=distance_km,
+                group_max_distance=group_max_distance,
+                pickup_points=pickup_points,
+                dropoff_point=dropoff_point,
+            )
             if ccost is None:
                 return False
             trip_cost = float(ccost)
@@ -606,7 +659,16 @@ def _linear_plan(
                 # Бизнес-правило: контейнеровоз только при достаточной загрузке
                 if real_w_preview < CONTAINER_CARRIER_MIN_LOAD_TON - 1e-6:
                     continue
-                ccost, _ = _container_trip_cost(info["tariff"], qty_rows_preview, real_w_preview)
+                ccost, _ = _container_trip_cost(
+                    info["tariff"],
+                    qty_rows_preview,
+                    real_w_preview,
+                    tariffs=tariffs,
+                    distance_km=distance_km,
+                    group_max_distance=group_max_distance,
+                    pickup_points=pickup_points,
+                    dropoff_point=dropoff_point,
+                )
                 if ccost is None:
                     continue
                 cost = float(ccost)
