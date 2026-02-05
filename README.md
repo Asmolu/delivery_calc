@@ -141,3 +141,29 @@ python -m pytest backend/tests
 - Для продакшена выставляйте `VITE_API_BASE` на публичный адрес backend.
 - В `docker-compose.yml` подключение `backend/storage` вынесено в volume: можно обновлять json без пересборки образа.
 - UI адаптивный: таблицы внутри карточек имеют горизонтальную прокрутку, элементы управления увеличены для смартфонов.
+
+## 💾 Резервное копирование БД (JSON-снимок)
+Для экспорта и импорта всех таблиц, управляемых SQLAlchemy, используйте скрипты:
+
+```bash
+python backend/scripts/export_db_json.py --output db_snapshot.json
+```
+Снимок сохраняется в путь, указанный в `--output` (по умолчанию — `db_snapshot.json` в текущей папке).
+В Windows/PowerShell используйте именно `python ...`, запуск через `./backend/scripts/*.py` может открыть файл в редакторе вместо выполнения.
+
+Если вы запускаете БД в Docker, проще выполнить экспорт внутри контейнера backend и сохранить файл в `backend/storage`,
+который примонтирован как volume:
+
+```bash
+docker compose exec backend python backend/scripts/export_db_json.py --output /app/backend/storage/db_snapshot.json
+```
+
+```bash
+python backend/scripts/import_db_json.py --input db_snapshot.json
+```
+Импорт по умолчанию удаляет текущие строки и восстанавливает данные из снимка. Чтобы сохранить текущие данные, используйте `--no-truncate`.
+Для Docker поместите файл в `backend/storage` и выполните импорт внутри контейнера:
+
+```bash
+docker compose exec backend python backend/scripts/import_db_json.py --input /app/backend/storage/db_snapshot.json
+```
