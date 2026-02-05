@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
-from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Any, Optional, TYPE_CHECKING
 
 from backend.core.logger import get_logger
 from backend.core.database import get_db
@@ -12,11 +11,17 @@ from backend.models.dto import QuoteRequest
 from backend.core.data_loader import load_factories_and_tariffs
 from backend.service.osrm_client import OSRMUnavailableError
 from backend.service.transport_calc import (
+    MAX_PLANS,
     build_shipment_details_from_result,
     build_trip_items_details,
-    evaluate_scenario_transport,
+    evaluate_scenario_transport_variants,
 )
 from backend.service.scenario_builder import build_factory_scenarios_v2
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+else:
+    Session = Any
 
 router = APIRouter(tags=["quote"])
 log = get_logger("routes.quote")
@@ -65,6 +70,10 @@ async def make_quote(
     items_data = [item.dict() for item in req.items]
 
     scenarios = build_factory_scenarios_v2(factories_list, items_data)
+    if len(scenarios) > MAX_PLANS:
+        log.info("⚠️ Сценариев больше лимита: %s -> %s", len(scenarios), MAX_PLANS)
+        scenarios = scenarios[:MAX_PLANS]
+    log.info("📊 num_plans_generated=%s", len(scenarios))
 
     if not scenarios:
         return JSONResponse(
@@ -76,14 +85,15 @@ async def make_quote(
 
     try:
         for sc in scenarios:
-            r = evaluate_scenario_transport(sc, req, tariffs)
-            if r:
-                results.append(r)
+            variants = evaluate_scenario_transport_variants(sc, req, tariffs)
+            if variants:
+                results.extend(variants)
     except OSRMUnavailableError:
         return JSONResponse(
             status_code=503,
             content={"detail": "OSRM недоступен, попробуйте позже"},
         )
+    log.info("📊 num_variants_generated=%s", len(results))
 
     if not results:
         return JSONResponse(

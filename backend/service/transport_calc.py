@@ -1,7 +1,9 @@
 """Transport planning and tariff selection utilities."""
 
 from typing import Any, Dict, List, Optional, Tuple
+from itertools import product
 import math
+import os
 from backend.core.logger import get_logger
 from backend.service.factories_service import _norm_str, _to_float
 from backend.service.osrm_client import OSRMUnavailableError, get_osrm_distance_km
@@ -11,7 +13,9 @@ logger = get_logger(__name__)
 
 # Бизнес-правило: контейнеровоз участвует только при достаточной загрузке (тонны).
 CONTAINER_CARRIER_MIN_LOAD_TON = 44.0
-
+MAX_PLANS = int(os.getenv("MAX_PLANS", "50"))
+MAX_VEHICLE_COMBOS_PER_PLAN = int(os.getenv("MAX_VEHICLE_COMBOS_PER_PLAN", "8"))
+MAX_VARIANTS = int(os.getenv("MAX_VARIANTS", "200"))
 
 # === БАЗОВЫЕ УТИЛИТЫ =========================================================
 
@@ -102,6 +106,45 @@ def _select_best_weighted_tariff(
         ),
     )
 
+def _transport_signature(trips: List[Dict[str, Any]]) -> Tuple[Tuple[str, str], ...]:
+    signature = [
+        (
+            str(tr.get("tag") or "").strip().lower(),
+            str(tr.get("tariff_name") or "").strip().lower(),
+        )
+        for tr in trips or []
+    ]
+    return tuple(sorted(signature))
+
+
+def _pick_best_mani(
+    left: Optional[Dict[str, Any]],
+    right: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    if not left:
+        return right
+    if not right:
+        return left
+    if (left.get("capacity_ton") or 0.0, left.get("load_ton") or 0.0) >= (
+        right.get("capacity_ton") or 0.0,
+        right.get("load_ton") or 0.0,
+    ):
+        return left
+    return right
+
+
+def _plan_best_mani(trips: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    mani = None
+    for tr in trips or []:
+        if _norm_str(tr.get("tag")) != "manipulator":
+            continue
+        candidate = {
+            "tariff_name": tr.get("tariff_name") or "",
+            "capacity_ton": float(tr.get("capacity_ton") or 0.0),
+            "load_ton": float(tr.get("load_ton") or 0.0),
+        }
+        mani = _pick_best_mani(mani, candidate)
+    return mani
 
 def _zones_ok(
     tariff: Dict[str, Any],
@@ -708,6 +751,71 @@ def _linear_plan(
         "trips": trips,
     }
 
+def _build_delivery_plan_options(
+    *,
+    total_weight: float,
+    distance_km: float,
+    tariffs: List[Dict[str, Any]],
+    allowed_tags: List[str],
+    require_manipulator: bool,
+    items: List[Dict[str, Any]],
+    group_max_distance: Dict[Tuple[str, str, str, Optional[float]], float],
+    pickup_points: Optional[List[Tuple[float, float]]],
+    dropoff_point: Optional[Tuple[float, float]],
+    max_vehicle_combos_per_plan: int,
+) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+    delivery_tags = [t for t in allowed_tags if t in ("long_haul", "container_carrier", "flatbed", "manipulator")]
+    plan_options: List[Dict[str, Any]] = []
+    filter_reasons = {
+        "container_min_load": 0,
+        "no_plan": 0,
+        "trimmed_vehicle_combos": 0,
+    }
+
+    tag_sets: List[List[str]] = []
+    for tag in delivery_tags:
+        if tag == "container_carrier" and total_weight < CONTAINER_CARRIER_MIN_LOAD_TON - 1e-6:
+            filter_reasons["container_min_load"] += 1
+            continue
+        tag_set = [tag]
+        if require_manipulator and tag != "manipulator" and "manipulator" not in tag_set:
+            tag_set.append("manipulator")
+        tag_sets.append(tag_set)
+
+    if len(delivery_tags) > 1:
+        tag_sets.append(list(allowed_tags))
+
+    for tag_set in tag_sets:
+        plan = _linear_plan(
+            total_weight,
+            distance_km,
+            tariffs,
+            tag_set,
+            require_manipulator,
+            items,
+            group_max_distance,
+            pickup_points,
+            dropoff_point,
+        )
+        if not plan:
+            filter_reasons["no_plan"] += 1
+            continue
+        plan_options.append(plan)
+
+    unique_plans: Dict[Tuple[Tuple[str, str], ...], Dict[str, Any]] = {}
+    for plan in plan_options:
+        signature = _transport_signature(plan.get("trips") or [])
+        if signature not in unique_plans:
+            unique_plans[signature] = plan
+    plan_options = list(unique_plans.values())
+
+    plan_options.sort(key=lambda x: float(x.get("transport_cost") or 0.0))
+    if max_vehicle_combos_per_plan > 0 and len(plan_options) > max_vehicle_combos_per_plan:
+        filter_reasons["trimmed_vehicle_combos"] = len(plan_options) - max_vehicle_combos_per_plan
+        plan_options = plan_options[:max_vehicle_combos_per_plan]
+
+    return plan_options, filter_reasons
+
 # DEPRECATED: ранее был отдельный расчёт DAF по special_threshold/max_per_trip.
 # На новом этапе мы не используем “особый тариф” и “максимум на рейс”, поэтому
 # оставляем только базовый (linear) подбор транспорта.
@@ -715,24 +823,26 @@ def _linear_plan(
 
 # === ОСНОВНОЙ РАСЧЁТ ========================================================
 
-def evaluate_scenario_transport(
+def evaluate_scenario_transport_variants(
     scenario: Dict[str, Any],
     req,
     calc_tariffs: Optional[List[Dict[str, Any]]],
-) -> Optional[Dict[str, Any]]:
-    """Подобрать оптимальный транспортный план для выбранного сценария."""
+    *,
+    max_vehicle_combos_per_plan: int = MAX_VEHICLE_COMBOS_PER_PLAN,
+    max_variants: int = MAX_VARIANTS,
+) -> List[Dict[str, Any]]:
+    """Подобрать все возможные транспортные комбинации для выбранного сценария."""
 
     if not calc_tariffs:
         logger.warning("⚠️ calc_tariffs пуст или None, расчёт невозможен.")
-        return None
+        return []
 
-    # Считаем “последний диапазон” для каждой машины под весовое условие
     group_max_distance = _build_group_max_distance(calc_tariffs)
 
     factories_map = scenario.get("factories") or {}
     if not factories_map:
         logger.warning("⚠️ В сценарии нет ни одного завода: %s", scenario)
-        return None
+        return []
 
     dropoff_point: Optional[Tuple[float, float]] = None
     try:
@@ -790,22 +900,17 @@ def evaluate_scenario_transport(
     delivery_tags = ["long_haul", "container_carrier", "flatbed"]
     all_tags = delivery_tags + ["manipulator", "crane"]
 
-    # Если задан whitelist по тегам — он приоритетнее одиночного delivery_transport_tag/legacy transport_type.
-    # Пустой список = без ограничений.
     if allowed_delivery:
-        forbidden_delivery -= allowed_delivery  # whitelist не должен сам себя блокировать
+        forbidden_delivery -= allowed_delivery
         allowed_tags = [t for t in all_tags if _norm_str(t).lower() in allowed_delivery]
         require_mani = add_manipulator and ("manipulator" in [x.lower() for x in (allowed_tags or [])])
-        # Если по ошибке пришли несуществующие теги — трактуем как "без ограничений"
         if not allowed_tags:
             allowed_tags = delivery_tags + (["manipulator"] if add_manipulator else [])
             require_mani = add_manipulator
-    # Доставка: если явно выбран тег — используем его, иначе fallback на старое transport_type
     elif delivery_transport_tag and delivery_transport_tag != "auto":
-        # если пользователь явно выбрал тег, он не должен сам себя "запрещать"
         forbidden_delivery.discard(_norm_str(delivery_transport_tag).lower())
         allowed_tags = [delivery_transport_tag] if delivery_transport_tag in all_tags else delivery_tags
-        require_mani = False  # отдельный манипулятор теперь добавляется только через add_manipulator
+        require_mani = False
     else:
         # legacy route
         if transport_type == "manipulator":
@@ -826,39 +931,12 @@ def evaluate_scenario_transport(
 
     total_material = 0.0
     factory_distances: Dict[str, float] = {}
-
-    def _pick_best_mani(
-        left: Optional[Dict[str, Any]],
-        right: Optional[Dict[str, Any]],
-    ) -> Optional[Dict[str, Any]]:
-        if not left:
-            return right
-        if not right:
-            return left
-        if (left.get("capacity_ton") or 0.0, left.get("load_ton") or 0.0) >= (
-            right.get("capacity_ton") or 0.0,
-            right.get("load_ton") or 0.0,
-        ):
-            return left
-        return right
-
-    def _plan_best_mani(trips: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-        mani = None
-        for tr in trips or []:
-            if _norm_str(tr.get("tag")) != "manipulator":
-                continue
-            candidate = {
-                "tariff_name": tr.get("tariff_name") or "",
-                "capacity_ton": float(tr.get("capacity_ton") or 0.0),
-                "load_ton": float(tr.get("load_ton") or 0.0),
-            }
-            mani = _pick_best_mani(mani, candidate)
-        return mani
-
-    # DP по состояниям (container_used, delivery_mani_key)
-    # Это важно, потому что разгрузка зависит от того, приезжал ли манипулятор.
-    dp: Dict[Tuple[bool, Optional[str]], Dict[str, Any]] = {
-        (False, None): {"delivery_cost": 0.0, "factory_plans": [], "delivery_mani": None},
+    plans_by_factory: List[Dict[str, Any]] = []
+    vehicle_combo_reasons = {
+        "container_min_load": 0,
+        "no_plan": 0,
+        "trimmed_vehicle_combos": 0,
+        "max_variants": 0,
     }
 
     for factory_name, items in factories_map.items():
@@ -875,7 +953,7 @@ def evaluate_scenario_transport(
             distance_km = get_osrm_distance_km(lon, lat, req.upload_lon, req.upload_lat)
         except OSRMUnavailableError as exc:
             logger.error("OSRM недоступен для %s: %s", factory_name, exc)
-            return None
+            return []
 
         factory_distances[factory_name] = distance_km
 
@@ -887,18 +965,7 @@ def evaluate_scenario_transport(
         )
         total_material += material_cost
 
-        # варианты планов
-        plans: List[Dict[str, Any]] = []
         linear_allowed = [t for t in allowed_tags if t in ("manipulator", "long_haul", "container_carrier", "flatbed", "crane")]
-        # Бизнес-правило: контейнеровоз участвует только если тоннаж по этому заводу >= порога.
-        # Это более строгое правило, чем проверка на уровне отдельного рейса.
-        if total_weight < CONTAINER_CARRIER_MIN_LOAD_TON - 1e-6:
-            linear_allowed = [t for t in linear_allowed if t != "container_carrier"]
-
-        # UX-правило (умный довоз):
-        # В auto-режиме (без whitelist и без явного выбора тега доставки) допускаем манипулятор как ДОСТАВКУ
-        # для небольших "хвостов", чтобы не отправлять длинномер с 1-2 тоннами.
-        # Это не ломает ограничения: если манипулятор запрещён — мы его не добавляем.
         if (
             not allowed_delivery
             and _norm_str(delivery_transport_tag) == "auto"
@@ -907,94 +974,37 @@ def evaluate_scenario_transport(
             and ("manipulator" not in { _norm_str(x).lower() for x in (forbidden_delivery or set()) })
         ):
             linear_allowed = linear_allowed + ["manipulator"]
-        if linear_allowed:
-            linear_plan = _linear_plan(
-                total_weight,
-                distance_km,
-                calc_tariffs,
-                linear_allowed,
-                require_mani,
-                items,
-                group_max_distance,
-                [(float(lat), float(lon))],
-                dropoff_point,
-            )
-            if linear_plan:
-                plans.append(linear_plan)
-            if "manipulator" in linear_allowed and len(linear_allowed) > 1:
-                manipulator_plan = _linear_plan(
-                    total_weight,
-                    distance_km,
-                    calc_tariffs,
-                    ["manipulator"],
-                    require_mani,
-                    items,
-                    group_max_distance,
-                    [(float(lat), float(lon))],
-                    dropoff_point,
-                )
-                if manipulator_plan:
-                    plans.append(manipulator_plan)
-        # Альтернативный план для того же завода: без контейнеровоза.
-        # Нужен, чтобы сравнить “контейнеровоз + кран” vs “шаланда + манипулятор (разгрузка манипулятором)”.
-        if "container_carrier" in linear_allowed:
-            alt_allowed = [t for t in linear_allowed if t != "container_carrier"]
-            alt_plan = _linear_plan(
-                total_weight,
-                distance_km,
-                calc_tariffs,
-                alt_allowed,
-                require_mani,
-                items,
-                group_max_distance,
-                [(float(lat), float(lon))],
-                dropoff_point,
-            )
-            if alt_plan:
-                plans.append(alt_plan)
+
+        plans, reasons = _build_delivery_plan_options(
+            total_weight=total_weight,
+            distance_km=distance_km,
+            tariffs=calc_tariffs,
+            allowed_tags=linear_allowed,
+            require_manipulator=require_mani,
+            items=items,
+            group_max_distance=group_max_distance,
+            pickup_points=[(float(lat), float(lon))],
+            dropoff_point=dropoff_point,
+            max_vehicle_combos_per_plan=max_vehicle_combos_per_plan,
+        )
+        for reason, count in reasons.items():
+            vehicle_combo_reasons[reason] = vehicle_combo_reasons.get(reason, 0) + count
 
         if not plans:
             logger.warning("⚠️ Не удалось построить план для завода %s", factory_name)
-            continue
+            return []
 
-        # DP transition
-        next_dp: Dict[Tuple[bool, Optional[str]], Dict[str, Any]] = {}
-        for (prev_container, prev_mani_key), prev_state in dp.items():
-            prev_cost = float(prev_state.get("delivery_cost") or 0.0)
-            prev_plans = list(prev_state.get("factory_plans") or [])
-            prev_mani = prev_state.get("delivery_mani")
-            if not math.isfinite(prev_cost):
-                continue
+        plans_by_factory.append(
+            {
+                "factory_name": factory_name,
+                "distance_km": distance_km,
+                "material_cost": material_cost,
+                "plan_options": plans,
+            }
+        )
 
-            for p in plans:
-                trips = p.get("trips") or []
-                uses_container = any((_norm_str(t.get("tag")) == "container_carrier") for t in trips)
-                new_container = bool(prev_container or uses_container)
-                plan_mani = _plan_best_mani(trips)
-                new_mani = _pick_best_mani(prev_mani, plan_mani)
-                new_mani_key = (new_mani.get("tariff_name") if new_mani else None)
-                new_cost = prev_cost + float(p.get("transport_cost") or 0.0)
-                key = (new_container, new_mani_key)
-                existing = next_dp.get(key)
-                if existing is None or new_cost < float(existing.get("delivery_cost") or 0.0):
-                    next_dp[key] = {
-                        "delivery_cost": new_cost,
-                        "delivery_mani": new_mani,
-                        "factory_plans": prev_plans
-                        + [
-                            {
-                                "factory_name": factory_name,
-                                "distance_km": distance_km,
-                                "transport_cost": float(p.get("transport_cost") or 0.0),
-                                "trips": trips,
-                                "material_cost": material_cost,
-                            }
-                        ],
-                    }
-        dp = next_dp
-
-    if not dp:
-        return None
+    if not plans_by_factory:
+        return []
 
     # --- Выбираем лучший state, учитывая разгрузку ---
     unloading_tariffs = [t for t in (calc_tariffs or []) if _norm_str(t.get("service_type")) == "unloading"]
@@ -1148,63 +1158,111 @@ def evaluate_scenario_transport(
         }
         return cost, info
 
-    # score all states
-    candidates: List[Tuple[float, Tuple[bool, Optional[str]], float, Optional[Dict[str, Any]]]] = []
-    for (used_container, mani_key), st in dp.items():
-        if not st.get("factory_plans"):
-            continue
-        unload_cost, unload_info = _compute_unloading(
-            used_container,
-            st["factory_plans"],
-            st.get("delivery_mani"),
-        )
-        total = total_material + float(st["delivery_cost"] or 0.0) + float(unload_cost or 0.0)
-        candidates.append((total, (used_container, mani_key), unload_cost, unload_info))
-    candidates.sort(key=lambda x: x[0])
-    if not candidates:
-        return None
+    plan_options_counts = {p["factory_name"]: len(p["plan_options"]) for p in plans_by_factory}
+    num_vehicle_combos_generated = math.prod(plan_options_counts.values()) if plan_options_counts else 0
 
-    total_cost, best_key, unloading_cost_total, unloading_info = candidates[0]
-    factory_plans = dp[best_key]["factory_plans"]
-    total_delivery = float(dp[best_key]["delivery_cost"] or 0.0)
+    variants: List[Dict[str, Any]] = []
+    if num_vehicle_combos_generated:
+        for combo in product(*[p["plan_options"] for p in plans_by_factory]):
+            if max_variants > 0 and len(variants) >= max_variants:
+                vehicle_combo_reasons["max_variants"] += 1
+                break
+            factory_plans: List[Dict[str, Any]] = []
+            total_delivery = 0.0
+            container_used = False
+            delivery_mani = None
+            for plan_info, plan in zip(plans_by_factory, combo):
+                trips = plan.get("trips") or []
+                total_delivery += float(plan.get("transport_cost") or 0.0)
+                if any(_norm_str(t.get("tag")) == "container_carrier" for t in trips):
+                    container_used = True
+                delivery_mani = _pick_best_mani(delivery_mani, _plan_best_mani(trips))
+                factory_plans.append(
+                    {
+                        "factory_name": plan_info["factory_name"],
+                        "distance_km": plan_info["distance_km"],
+                        "transport_cost": float(plan.get("transport_cost") or 0.0),
+                        "trips": trips,
+                        "material_cost": plan_info["material_cost"],
+                    }
+                )
+            unloading_cost_total, unloading_info = _compute_unloading(
+                container_used,
+                factory_plans,
+                delivery_mani,
+            )
+            total_cost = total_material + total_delivery + float(unloading_cost_total or 0.0)
+            trip_count = sum(len(f["trips"]) for f in factory_plans)
+            transport_names = sorted(
+                {
+                    t.get("tariff_name") or t.get("tag")
+                    for f in factory_plans
+                    for t in f["trips"]
+                }
+            )
+            factories_output = [
+                {
+                    "factory_name": plan.get("factory_name"),
+                    "distance_km": plan.get("distance_km"),
+                    "trips": plan.get("trips", []),
+                }
+                for plan in factory_plans
+            ]
+            debug_info = {
+                "num_vehicle_combos_generated": num_vehicle_combos_generated,
+                "num_vehicle_combos_feasible": min(num_vehicle_combos_generated, max_variants or num_vehicle_combos_generated),
+                "num_variants_final": 0,
+                "factory_plan_counts": plan_options_counts,
+                "vehicle_combo_filter_reasons": vehicle_combo_reasons,
+            }
+            variants.append(
+                {
+                    "scenario": scenario,
+                    "material_sum": total_material,
+                    "delivery_cost": total_delivery,
+                    "unloading_cost": unloading_cost_total,
+                    "unloading": unloading_info,
+                    "total_cost": float(total_cost),
+                    "trip_count": trip_count,
+                    "transport_name": ", ".join(transport_names),
+                    "factory_distances": factory_distances,
+                    "factory_plans": factory_plans,
+                    "factories": factories_output,
+                    "debug": debug_info,
+                }
+            )
 
-    # Важно: delivery_cost = только доставка (сумма рейсов).
-    # unloading_cost = отдельная услуга разгрузки (один раз на заказ).
-    total_cost = float(total_cost)
-    trip_count = sum(len(f["trips"]) for f in factory_plans)
-    # "transport_name" должен быть стабильным коротким названием (без дистанции),
-    # поэтому используем tariff_name, а не tariff_label.
-    transport_names = sorted(
-        {
-            t.get("tariff_name") or t.get("tag")
-            for f in factory_plans
-            for t in f["trips"]
-        }
+    variants.sort(key=lambda x: float(x.get("total_cost") or 0.0))
+    for variant in variants:
+        if isinstance(variant.get("debug"), dict):
+            variant["debug"]["num_variants_final"] = len(variants)
+
+    logger.info(
+        "📊 combos=%s variants=%s plans=%s filters=%s",
+        num_vehicle_combos_generated,
+        len(variants),
+        plan_options_counts,
+        vehicle_combo_reasons,
     )
+    return variants
 
 
-    factories_output = [
-        {
-            "factory_name": plan.get("factory_name"),
-            "distance_km": plan.get("distance_km"),
-            "trips": plan.get("trips", []),
-        }
-        for plan in factory_plans
-    ]
-
-    return {
-        "scenario": scenario,
-        "material_sum": total_material,
-        "delivery_cost": total_delivery,
-        "unloading_cost": unloading_cost_total,
-        "unloading": unloading_info,
-        "total_cost": total_cost,
-        "trip_count": trip_count,
-        "transport_name": ", ".join(transport_names),
-        "factory_distances": factory_distances,
-        "factory_plans": factory_plans,
-        "factories": factories_output,
-    }
+def evaluate_scenario_transport(
+    scenario: Dict[str, Any],
+    req,
+    calc_tariffs: Optional[List[Dict[str, Any]]],
+) -> Optional[Dict[str, Any]]:
+    """Подобрать оптимальный транспортный план для выбранного сценария."""
+    variants = evaluate_scenario_transport_variants(
+        scenario,
+        req,
+        calc_tariffs,
+        max_vehicle_combos_per_plan=MAX_VEHICLE_COMBOS_PER_PLAN,
+        max_variants=MAX_VARIANTS,
+    )
+    if not variants:
+        return None
+    return variants[0]
 
 def build_shipment_details_from_result(best_result, req):
     """Формирует детальный список по каждому рейсу и товарам."""
