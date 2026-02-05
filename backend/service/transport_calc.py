@@ -1062,6 +1062,20 @@ def evaluate_scenario_transport(
                 }
             return 0.0, None
 
+        def _has_other_delivery_targets(factory_plans: List[Dict[str, Any]]) -> bool:
+            for plan in factory_plans or []:
+                for trip in plan.get("trips", []) or []:
+                    if _norm_str(trip.get("tag")) != "manipulator":
+                        return True
+            return False
+
+        if (
+            chosen_delivery_mani
+            and _norm_str(best_unload.get("tag")) == "manipulator"
+            and not _has_other_delivery_targets(delivery_factory_plans)
+        ):
+            return 0.0, None
+
         cost = _to_float(best_unload.get("base"))
         info = {
             "service_type": "unloading",
