@@ -17,7 +17,7 @@ MAX_PLANS = int(os.getenv("MAX_PLANS", "50"))
 MAX_VEHICLE_COMBOS_PER_PLAN = int(os.getenv("MAX_VEHICLE_COMBOS_PER_PLAN", "8"))
 MAX_VARIANTS = int(os.getenv("MAX_VARIANTS", "200"))
 MAX_UNLOAD_CANDIDATES_PER_DELIVERY = int(os.getenv("MAX_UNLOAD_CANDIDATES_PER_DELIVERY", "7"))
-TOP_N_VARIANTS = int(os.getenv("TOP_N_VARIANTS", "5"))
+TOP_N_VARIANTS = int(os.getenv("TOP_N_VARIANTS", "150"))
 K_PER_DELIVERY_TAG = int(os.getenv("K_PER_DELIVERY_TAG", "3"))
 K_PER_TARIFF_GROUP = int(os.getenv("K_PER_TARIFF_GROUP", "1"))
 
@@ -833,6 +833,48 @@ def _linear_plan(
                     "cost": cost,
                     "eff_cpt": eff_cpt,
                 }
+        if best_choice and weight_left > 0.0:
+            max_capacity = max((float(c.get("capacity") or 0.0) for c in candidates), default=0.0)
+            if max_capacity > 0 and weight_left <= max_capacity + 1e-9:
+                cheapest = None
+                for info in candidates:
+                    tag = info["tag"]
+                    load = min(weight_left, float(info.get("capacity") or 0.0))
+                    if load <= 0:
+                        continue
+                    if not _weight_ok(info["tariff"], load):
+                        continue
+                    cost = _trip_cost(info["tariff"], distance_km)
+                    if tag == "container_carrier":
+                        _, real_w_preview, qty_rows_preview = _preview_allocate_items_for_trip(load)
+                        if real_w_preview <= 0:
+                            continue
+                        if real_w_preview < CONTAINER_CARRIER_MIN_LOAD_TON - 1e-6:
+                            continue
+                        ccost, _ = _container_trip_cost(
+                            info["tariff"],
+                            qty_rows_preview,
+                            real_w_preview,
+                            tariffs=tariffs,
+                            distance_km=distance_km,
+                            group_max_distance=group_max_distance,
+                            pickup_points=pickup_points,
+                            dropoff_point=dropoff_point,
+                        )
+                        if ccost is None:
+                            continue
+                        cost = float(ccost)
+                    if cheapest is None or cost < cheapest["cost"] - 1e-6:
+                        cheapest = {
+                            "tag": tag,
+                            "info": info,
+                            "load": load,
+                            "tariff": info["tariff"],
+                            "cost": cost,
+                            "eff_cpt": cost / load if load > 0 else float("inf"),
+                        }
+                if cheapest and cheapest["cost"] < best_choice["cost"] - 1e-6:
+                    best_choice = cheapest
         # если ничего не изменилось — выходим, чтобы избежать бесконечного цикла
         if not best_choice:
             return None
@@ -851,6 +893,44 @@ def _linear_plan(
             if not candidates:
                 return None
             continue
+    reprice_tag_list = reprice_tag_list if reprice_tag_list is not None else allowed_tags
+
+    for trip in trips:
+        load = float(trip.get("load_ton") or 0.0)
+        if load <= 0:
+            continue
+        best_alt = None
+        for tag in reprice_tag_list:
+            if tag == "container_carrier":
+                continue
+            tariff = _select_tariff_for_load(
+                tariffs,
+                tag,
+                distance_km,
+                load,
+                group_max_distance,
+                pickup_points,
+                dropoff_point,
+            )
+            if not tariff:
+                continue
+            if not _weight_ok(tariff, load):
+                continue
+            cost = _trip_cost(tariff, distance_km)
+            capacity = float(_to_float(tariff.get("грузоподъёмность")) or 0.0)
+            if best_alt is None or cost < best_alt["cost"] - 1e-6:
+                best_alt = {
+                    "tag": tag,
+                    "tariff": tariff,
+                    "cost": cost,
+                    "capacity": capacity,
+                }
+        if best_alt and best_alt["cost"] < float(trip.get("trip_cost") or 0.0) - 1e-6:
+            trip["tag"] = best_alt["tag"]
+            trip["tariff_name"] = best_alt["tariff"].get("название") or best_alt["tariff"].get("name") or best_alt["tag"]
+            trip["tariff_label"] = _tariff_label(best_alt["tariff"], distance_km=distance_km)
+            trip["trip_cost"] = float(best_alt["cost"])
+            trip["capacity_ton"] = float(best_alt["capacity"] or 0.0)
 
     total_cost = sum(t["trip_cost"] for t in trips)
     return {
@@ -870,6 +950,7 @@ def _build_delivery_plan_options(
     group_max_distance: Dict[Tuple[str, str, str, Optional[float]], float],
     pickup_points: Optional[List[Tuple[float, float]]],
     dropoff_point: Optional[Tuple[float, float]],
+    reprice_tag_list: Optional[List[str]] = None,
     max_vehicle_combos_per_plan: int,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
     delivery_tags = [t for t in allowed_tags if t in ("long_haul", "container_carrier", "flatbed", "manipulator")]
@@ -907,6 +988,7 @@ def _build_delivery_plan_options(
             group_max_distance,
             pickup_points,
             dropoff_point,
+            reprice_tag_list=allowed_tags,
         )
         if not plan:
             filter_reasons["no_plan"] += 1

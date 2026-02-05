@@ -108,7 +108,7 @@ async def make_quote(
         print("⚠️ Нет валидных результатов с total_cost")
         return {"ok": False, "reason": "Не удалось рассчитать стоимость"}
 
-    all_sorted = sorted(valid_results, key=lambda x: x["total_cost"])
+    all_sorted_full = sorted(valid_results, key=lambda x: x["total_cost"])
 
 
     def _has_container(r: dict) -> bool:
@@ -130,55 +130,6 @@ async def make_quote(
         sid = _scenario_id(r)
         return sid if sid is not None else f"mem:{id(r)}"
 
-    def _unique_by_scenario(items: list[dict]) -> list[dict]:
-        seen: set[int | str] = set()
-        unique: list[dict] = []
-        for item in items:
-            key = _scenario_key(item)
-            if key in seen:
-                continue
-            seen.add(key)
-            unique.append(item)
-        return unique
-
-    def _transport_signature(r: dict) -> tuple:
-        trips = [
-            (
-                str(tr.get("tag") or "").strip().lower(),
-                str(tr.get("tariff_name") or "").strip().lower(),
-            )
-            for fp in (r or {}).get("factory_plans") or []
-            for tr in (fp or {}).get("trips", []) or []
-        ]
-        return tuple(sorted(trips))
-
-    def _pick_unique_by_transport(candidates: list[dict], limit: int) -> list[dict]:
-        seen: set[tuple] = set()
-        picked: list[dict] = []
-        for cand in candidates:
-            signature = _transport_signature(cand)
-            if signature in seen:
-                continue
-            seen.add(signature)
-            picked.append(cand)
-            if len(picked) >= limit:
-                break
-        return picked
-
-    all_sorted = _unique_by_scenario(all_sorted)
-
-
-    # Топ-3 самых дешёвых вариантов без контейнеровоза
-    non_container_sorted = [r for r in all_sorted if not _has_container(r)]
-    has_non_container = bool(non_container_sorted)
-    if not has_non_container:
-        # fallback: если нет ни одного варианта без контейнеровоза, показываем общие варианты
-        # (чтобы не возвращать пустой список)
-        non_container_sorted = list(all_sorted)
-    top3 = _pick_unique_by_transport(non_container_sorted, 3)
-
-    # Спец-вариант: все позиции из одного производства (если существует).
-    # Корректный критерий: один и тот же factory_id (из БД). Если id нет (legacy JSON) — fallback на имя.
     def _factory_key_from_items(items: list) -> str:
         if not items:
             return ""
@@ -191,14 +142,49 @@ async def make_quote(
                 return f"id:{str(fid).strip()}"
         return str(f.get("name") or "").strip().lower()
 
-    def _is_single_factory(r: dict) -> bool:
+    def _production_combo_key(r: dict) -> tuple[str, ...]:
         sc = (r or {}).get("scenario") or {}
         factories_map = (sc or {}).get("factories") or {}
         if not isinstance(factories_map, dict) or not factories_map:
-            return False
-        keys = { _factory_key_from_items(items) for items in factories_map.values() if isinstance(items, list) and items }
+            return tuple()
+        keys = {
+            _factory_key_from_items(items)
+            for items in factories_map.values()
+            if isinstance(items, list) and items
+        }
         keys = {k for k in keys if k}
-        return len(keys) == 1
+        return tuple(sorted(keys))
+
+    def _unique_by_scenario(items: list[dict]) -> list[dict]:
+        seen: set[int | str] = set()
+        unique: list[dict] = []
+        for item in items:
+            key = _scenario_key(item)
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(item)
+        return unique
+
+    all_sorted = _unique_by_scenario(all_sorted_full)
+
+
+    # Топ-3 самых дешёвых вариантов без контейнеровоза (уникальные комбинации производств).
+    top3: list[dict] = []
+    seen_combos: set[tuple[str, ...]] = set()
+    for candidate in all_sorted_full:
+        if _has_container(candidate):
+            continue
+        combo = _production_combo_key(candidate)
+        if combo in seen_combos:
+            continue
+        seen_combos.add(combo)
+        top3.append(candidate)
+        if len(top3) >= 3:
+            break
+
+    def _is_single_factory(r: dict) -> bool:
+        return len(_production_combo_key(r)) == 1
 
     def _single_factory_name(r: dict) -> str | None:
         sc = (r or {}).get("scenario") or {}
@@ -213,10 +199,10 @@ async def make_quote(
                 return nm or None
         return None
 
-    single_factory_results = [r for r in all_sorted if isinstance(r, dict) and _is_single_factory(r)]
+    single_factory_results = [r for r in all_sorted_full if isinstance(r, dict) and _is_single_factory(r)]
     best_single_factory = single_factory_results[0] if single_factory_results else None
 
-    container_sorted = [r for r in all_sorted if _has_container(r)]
+    container_sorted = [r for r in all_sorted_full if _has_container(r)]
     best_container = container_sorted[0] if container_sorted else None
 
     # Итоговый список результатов для отображения:
@@ -238,26 +224,17 @@ async def make_quote(
     results: list[dict] = list(top3)
     # 4-й вариант: все позиции из одного производства (если есть).
     single_factory_candidate = _pick_unique(single_factory_results, results) or best_single_factory
-    if single_factory_candidate and (has_non_container and not _has_container(single_factory_candidate) or not has_non_container):
+    if single_factory_candidate:
         results.append(single_factory_candidate)
 
-    # Заполняем до 4-го места только без контейнеровоза.
-    while len(results) < 4:
-        filler = _pick_unique(non_container_sorted, results)
-        if not filler:
-            break
-        results.append(filler)
-
-    # 5-й вариант: самый дешёвый вариант с контейнеровозом (если есть),
-    # и только если можем поставить его именно пятым.
+    # 5-й вариант: самый дешёвый вариант с контейнеровозом (если есть).
     container_candidate = _pick_unique(container_sorted, results) or best_container
-    if container_candidate and len(results) == 4:
+    if container_candidate and len(results) < 5:
         results.append(container_candidate)
 
     # добираем до 5 уникальными вариантами, если получилось меньше
-    # (при этом контейнеровозы остаются только в 5-м варианте).
     if len(results) < 5:
-        for r in non_container_sorted:
+        for r in all_sorted_full:
             if len(results) >= 5:
                 break
             if not _in_results(r, results):
