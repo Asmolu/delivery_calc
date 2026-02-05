@@ -163,12 +163,15 @@ def _diversity_trim_plans(
     indexed = list(enumerate(plan_options))
     grouped: Dict[str, List[Tuple[int, Dict[str, Any]]]] = {}
     tag_tariff_groups: Dict[Tuple[str, str], List[Tuple[int, Dict[str, Any]]]] = {}
+    tag_kind_groups: Dict[Tuple[str, str], List[Tuple[int, Dict[str, Any]]]] = {}
     for idx, plan in indexed:
         trips = plan.get("trips") or []
         primary_tag = _primary_delivery_tag(trips)
         grouped.setdefault(primary_tag, []).append((idx, plan))
         tariff_name = _primary_tariff_name(trips, primary_tag)
         tag_tariff_groups.setdefault((primary_tag, tariff_name), []).append((idx, plan))
+        kind = _norm_str(plan.get("kind") or "single_tag") or "single_tag"
+        tag_kind_groups.setdefault((primary_tag, kind), []).append((idx, plan))
 
     trimmed_per_tag = 0
     kept_by_tag: Dict[str, int] = {}
@@ -177,6 +180,12 @@ def _diversity_trim_plans(
     for tag, group in grouped.items():
         group_sorted = sorted(group, key=lambda item: _plan_sort_key(item[1], item[0]))
         kept_local: List[Tuple[int, Dict[str, Any]]] = []
+        for (k_tag, k_kind), k_group in tag_kind_groups.items():
+            if k_tag != tag:
+                continue
+            sorted_k_group = sorted(k_group, key=lambda item: _plan_sort_key(item[1], item[0]))
+            if sorted_k_group:
+                kept_local.append(sorted_k_group[0])
         if k_per_tariff_group > 0:
             for (t_tag, t_name), t_group in tag_tariff_groups.items():
                 if t_tag != tag:
@@ -204,12 +213,21 @@ def _diversity_trim_plans(
     trimmed_final_cap = 0
     if max_total > 0 and len(merged_sorted) > max_total:
         tags = list(grouped.keys())
+        base_kind_count = len({(_primary_delivery_tag(item[1].get("trips") or []), _norm_str(item[1].get("kind") or "single_tag")) for item in merged_sorted})
+        if max_total < base_kind_count:
+            max_total = base_kind_count
         min_cap = max_total if max_total >= len(tags) else len(tags)
         base_kept: List[Tuple[int, Dict[str, Any]]] = []
         for tag in tags:
             tag_items = [item for item in merged_sorted if _primary_delivery_tag(item[1].get("trips") or []) == tag]
             if tag_items:
                 base_kept.append(tag_items[0])
+                by_kind: Dict[str, Tuple[int, Dict[str, Any]]] = {}
+                for item in tag_items:
+                    kind = _norm_str(item[1].get("kind") or "single_tag") or "single_tag"
+                    if kind not in by_kind:
+                        by_kind[kind] = item
+                base_kept.extend(by_kind.values())
         base_ids = {item[0] for item in base_kept}
         remaining = [item for item in merged_sorted if item[0] not in base_ids]
         fill = remaining[: max(min_cap - len(base_kept), 0)]
@@ -462,6 +480,166 @@ def _select_tariff_for_load(
     return _select_best_weighted_tariff(candidates, load_ton, distance_km)
 
 
+def _init_remaining_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    remaining_items: List[Dict[str, Any]] = []
+    for it in items:
+        qty = _to_float(it.get("quantity") or it.get("count") or 0)
+        if qty <= 0:
+            continue
+        remaining_items.append(
+            {
+                "category": it.get("category"),
+                "subtype": it.get("subtype"),
+                "weight_per_item": _to_float(it.get("weight_per_item")),
+                "remaining_qty": qty,
+            }
+        )
+    return remaining_items
+
+
+def _allocate_items_from_state(
+    state: List[Dict[str, Any]],
+    load_limit: float,
+    *,
+    mutate: bool,
+) -> Tuple[List[str], float, List[Dict[str, Any]]]:
+    assigned: List[str] = []
+    qty_rows: List[Dict[str, Any]] = []
+    load_used = 0.0
+    if load_limit <= 0:
+        return assigned, load_used, qty_rows
+
+    cat_candidates = []
+    for it in state:
+        qty_left = _to_float(it.get("remaining_qty", 0))
+        if qty_left <= 0:
+            continue
+        wpi = _to_float(it.get("weight_per_item"))
+        cat = it.get("category")
+        if not cat:
+            continue
+        cat_candidates.append((cat, qty_left * (wpi if wpi > 0 else 1.0)))
+    if not cat_candidates:
+        return assigned, load_used, qty_rows
+
+    target_category = max(cat_candidates, key=lambda x: x[1])[0]
+
+    category_items: List[Dict[str, Any]] = []
+    for item in state:
+        if (item.get("category") or "") != target_category:
+            continue
+        if _to_float(item.get("remaining_qty", 0)) <= 0:
+            continue
+        category_items.append(item)
+
+    def _best_mix_for_weight(
+        items_in_cat: List[Dict[str, Any]],
+        limit_ton: float,
+    ) -> List[int]:
+        scale = 100
+        limit_int = int(math.floor(limit_ton * scale + 1e-9))
+        if limit_int <= 0 or not items_in_cat:
+            return [0] * len(items_in_cat)
+
+        dp: Dict[int, List[int]] = {0: [0] * len(items_in_cat)}
+        for idx, it in enumerate(items_in_cat):
+            weight_per_item = _to_float(it.get("weight_per_item"))
+            if weight_per_item <= 0:
+                continue
+            w_int = int(round(weight_per_item * scale))
+            if w_int <= 0:
+                continue
+            qty_left = int(_to_float(it.get("remaining_qty", 0)))
+            max_take = min(qty_left, limit_int // w_int)
+            if max_take <= 0:
+                continue
+            current = dp.copy()
+            for weight_int, alloc in dp.items():
+                for take_qty in range(1, max_take + 1):
+                    new_weight = weight_int + take_qty * w_int
+                    if new_weight > limit_int:
+                        break
+                    if new_weight not in current:
+                        new_alloc = alloc.copy()
+                        new_alloc[idx] += take_qty
+                        current[new_weight] = new_alloc
+            dp = current
+
+        best_weight = max(dp.keys(), default=0)
+        return dp.get(best_weight, [0] * len(items_in_cat))
+
+    alloc_counts = _best_mix_for_weight(category_items, load_limit)
+    for item, take_qty in zip(category_items, alloc_counts):
+        if take_qty <= 0:
+            continue
+        weight_per_item = _to_float(item.get("weight_per_item"))
+        load_used += take_qty * weight_per_item
+        if mutate:
+            item["remaining_qty"] = _to_float(item.get("remaining_qty", 0)) - take_qty
+        qty_rows.append(
+            {
+                "category": item.get("category"),
+                "subtype": item.get("subtype"),
+                "qty": int(take_qty),
+                "weight_per_item": float(weight_per_item),
+            }
+        )
+        assigned.append(f"{item.get('category')} {item.get('subtype')}: {int(take_qty)} шт")
+
+    for item in category_items:
+        if load_limit - load_used < 0.01:
+            break
+        weight_per_item = _to_float(item.get("weight_per_item"))
+        if weight_per_item > 0:
+            continue
+        qty_left = int(_to_float(item.get("remaining_qty", 0)))
+        if qty_left <= 0:
+            continue
+        if mutate:
+            item["remaining_qty"] = _to_float(item.get("remaining_qty", 0)) - qty_left
+        qty_rows.append(
+            {
+                "category": item.get("category"),
+                "subtype": item.get("subtype"),
+                "qty": int(qty_left),
+                "weight_per_item": 0.0,
+            }
+        )
+        assigned.append(f"{item.get('category')} {item.get('subtype')}: {int(qty_left)} шт")
+
+    return assigned, load_used, qty_rows
+
+
+def _allocate_items_for_trip(
+    remaining_items: List[Dict[str, Any]],
+    load_limit: float,
+) -> Tuple[List[str], float, List[Dict[str, Any]]]:
+    """Возвращает список товаров, помещённых в рейс, их мета и фактический вес.
+
+    ВАЖНО (бизнес-правило): в одной машине нельзя смешивать разные категории.
+    Поэтому один вызов аллоцирует товары только из ОДНОЙ категории.
+    """
+
+    return _allocate_items_from_state(remaining_items, load_limit, mutate=True)
+
+
+def _preview_allocate_items_for_trip(
+    remaining_items: List[Dict[str, Any]],
+    load_limit: float,
+) -> Tuple[List[str], float, List[Dict[str, Any]]]:
+    """Как _allocate_items_for_trip, но без мутации remaining_items."""
+    state: List[Dict[str, Any]] = [
+        {
+            "category": it.get("category"),
+            "subtype": it.get("subtype"),
+            "weight_per_item": _to_float(it.get("weight_per_item")),
+            "remaining_qty": _to_float(it.get("remaining_qty")),
+        }
+        for it in (remaining_items or [])
+    ]
+    return _allocate_items_from_state(state, load_limit, mutate=False)
+
+
 def _container_trip_cost(
     container_tariff: Dict[str, Any],
     qty_rows: List[Dict[str, Any]],
@@ -566,154 +744,7 @@ def _linear_plan(
     trips: List[Dict[str, Any]] = []
 
     # готовим остатки по позициям, чтобы понимать, что едет в каждой машине
-    remaining_items: List[Dict[str, Any]] = []
-    for it in items:
-        qty = _to_float(it.get("quantity") or it.get("count") or 0)
-        if qty <= 0:
-            continue
-        remaining_items.append(
-            {
-                "category": it.get("category"),
-                "subtype": it.get("subtype"),
-                "weight_per_item": _to_float(it.get("weight_per_item")),
-                "remaining_qty": qty,
-            }
-        )
-
-    def _allocate_items_for_trip(load_limit: float) -> Tuple[List[str], float, List[Dict[str, Any]]]:
-        """Возвращает список товаров, помещённых в рейс, их мета и фактический вес.
-
-        ВАЖНО (бизнес-правило): в одной машине нельзя смешивать разные категории.
-        Поэтому один вызов аллоцирует товары только из ОДНОЙ категории.
-        """
-
-        return _allocate_items_from_state(remaining_items, load_limit, mutate=True)
-
-    def _preview_allocate_items_for_trip(load_limit: float) -> Tuple[List[str], float, List[Dict[str, Any]]]:
-        """Как _allocate_items_for_trip, но без мутации remaining_items."""
-        state: List[Dict[str, Any]] = [
-            {
-                "category": it.get("category"),
-                "subtype": it.get("subtype"),
-                "weight_per_item": _to_float(it.get("weight_per_item")),
-                "remaining_qty": _to_float(it.get("remaining_qty")),
-            }
-            for it in (remaining_items or [])
-        ]
-        return _allocate_items_from_state(state, load_limit, mutate=False)
-
-    def _allocate_items_from_state(
-        state: List[Dict[str, Any]],
-        load_limit: float,
-        *,
-        mutate: bool,
-    ) -> Tuple[List[str], float, List[Dict[str, Any]]]:
-        assigned: List[str] = []
-        qty_rows: List[Dict[str, Any]] = []
-        load_used = 0.0
-        if load_limit <= 0:
-            return assigned, load_used, qty_rows
-
-        cat_candidates = []
-        for it in state:
-            qty_left = _to_float(it.get("remaining_qty", 0))
-            if qty_left <= 0:
-                continue
-            wpi = _to_float(it.get("weight_per_item"))
-            cat = it.get("category")
-            if not cat:
-                continue
-            cat_candidates.append((cat, qty_left * (wpi if wpi > 0 else 1.0)))
-        if not cat_candidates:
-            return assigned, load_used, qty_rows
-
-        target_category = max(cat_candidates, key=lambda x: x[1])[0]
-
-        category_items: List[Dict[str, Any]] = []
-        for item in state:
-
-            if (item.get("category") or "") != target_category:
-                continue
-            if _to_float(item.get("remaining_qty", 0)) <= 0:
-                continue
-            category_items.append(item)
-
-        def _best_mix_for_weight(
-            items_in_cat: List[Dict[str, Any]],
-            limit_ton: float,
-        ) -> List[int]:
-            scale = 100
-            limit_int = int(math.floor(limit_ton * scale + 1e-9))
-            if limit_int <= 0 or not items_in_cat:
-                return [0] * len(items_in_cat)
-
-            dp: Dict[int, List[int]] = {0: [0] * len(items_in_cat)}
-            for idx, it in enumerate(items_in_cat):
-                weight_per_item = _to_float(it.get("weight_per_item"))
-                if weight_per_item <= 0:
-                    continue
-                w_int = int(round(weight_per_item * scale))
-                if w_int <= 0:
-                    continue
-                qty_left = int(_to_float(it.get("remaining_qty", 0)))
-                max_take = min(qty_left, limit_int // w_int)
-                if max_take <= 0:
-                    continue
-                current = dp.copy()
-                for weight_int, alloc in dp.items():
-                    for take_qty in range(1, max_take + 1):
-                        new_weight = weight_int + take_qty * w_int
-                        if new_weight > limit_int:
-                            break
-                        if new_weight not in current:
-                            new_alloc = alloc.copy()
-                            new_alloc[idx] += take_qty
-                            current[new_weight] = new_alloc
-                dp = current
-
-            best_weight = max(dp.keys(), default=0)
-            return dp.get(best_weight, [0] * len(items_in_cat))
-
-        alloc_counts = _best_mix_for_weight(category_items, load_limit)
-        for item, take_qty in zip(category_items, alloc_counts):
-            if take_qty <= 0:
-                continue
-            weight_per_item = _to_float(item.get("weight_per_item"))
-            load_used += take_qty * weight_per_item
-            if mutate:
-                item["remaining_qty"] = _to_float(item.get("remaining_qty", 0)) - take_qty
-            qty_rows.append(
-                {
-                    "category": item.get("category"),
-                    "subtype": item.get("subtype"),
-                    "qty": int(take_qty),
-                    "weight_per_item": float(weight_per_item),
-                }
-            )
-            assigned.append(f"{item.get('category')} {item.get('subtype')}: {int(take_qty)} шт")
-
-        for item in category_items:
-            if load_limit - load_used < 0.01:
-                break
-            weight_per_item = _to_float(item.get("weight_per_item"))
-            if weight_per_item > 0:
-                continue
-            qty_left = int(_to_float(item.get("remaining_qty", 0)))
-            if qty_left <= 0:
-                continue
-            if mutate:
-                item["remaining_qty"] = _to_float(item.get("remaining_qty", 0)) - qty_left
-            qty_rows.append(
-                {
-                    "category": item.get("category"),
-                    "subtype": item.get("subtype"),
-                    "qty": int(qty_left),
-                    "weight_per_item": 0.0,
-                }
-            )
-            assigned.append(f"{item.get('category')} {item.get('subtype')}: {int(qty_left)} шт")
-
-        return assigned, load_used, qty_rows
+    remaining_items = _init_remaining_items(items)
 
 
     def _assign_trip(tag: str, info: Dict[str, Any], load: float, tariff: Dict[str, Any], base_cost: float) -> bool:
@@ -722,14 +753,14 @@ def _linear_plan(
         # Бизнес-правило: контейнеровоз не может ехать с недогрузом.
         # Проверяем через превью-аллокацию, чтобы не мутировать состояние.
         if tag == "container_carrier":
-            _, real_w_preview, qty_rows_preview = _preview_allocate_items_for_trip(load)
+            _, real_w_preview, qty_rows_preview = _preview_allocate_items_for_trip(remaining_items, load)
             if real_w_preview < CONTAINER_CARRIER_MIN_LOAD_TON - 1e-6:
                 return False
             # если аллокация невозможна — тоже отказываем
             if real_w_preview <= 0:
                 return False
 
-        items_loaded, real_weight, qty_rows = _allocate_items_for_trip(load)
+        items_loaded, real_weight, qty_rows = _allocate_items_for_trip(remaining_items, load)
         if real_weight <= 0 and weight_left > 0:
             return False
 
@@ -804,7 +835,7 @@ def _linear_plan(
             if tag == "container_carrier":
                 # для контейнеровоза стоимость зависит от конкретной загрузки (в штуках),
                 # поэтому считаем по превью аллокации
-                _, real_w_preview, qty_rows_preview = _preview_allocate_items_for_trip(load)
+                _, real_w_preview, qty_rows_preview = _preview_allocate_items_for_trip(remaining_items, load)
                 if real_w_preview <= 0:
                     continue
                 # Бизнес-правило: контейнеровоз только при достаточной загрузке
@@ -846,7 +877,7 @@ def _linear_plan(
                         continue
                     cost = _trip_cost(info["tariff"], distance_km)
                     if tag == "container_carrier":
-                        _, real_w_preview, qty_rows_preview = _preview_allocate_items_for_trip(load)
+                        _, real_w_preview, qty_rows_preview = _preview_allocate_items_for_trip(remaining_items, load)
                         if real_w_preview <= 0:
                             continue
                         if real_w_preview < CONTAINER_CARRIER_MIN_LOAD_TON - 1e-6:
@@ -937,7 +968,99 @@ def _linear_plan(
         "type": "linear",
         "transport_cost": total_cost,
         "trips": trips,
+        "kind": "single_tag",
     }
+
+
+def _build_tail_mani_plans(
+    *,
+    total_weight: float,
+    distance_km: float,
+    tariffs: List[Dict[str, Any]],
+    long_haul_tariffs: List[Dict[str, Any]],
+    items: List[Dict[str, Any]],
+    allowed_tags: List[str],
+    group_max_distance: Dict[Tuple[str, str, str, Optional[float]], float],
+    pickup_points: Optional[List[Tuple[float, float]]],
+    dropoff_point: Optional[Tuple[float, float]],
+) -> List[Dict[str, Any]]:
+    if "long_haul" not in allowed_tags or "manipulator" not in allowed_tags:
+        return []
+
+    mixed_plans: List[Dict[str, Any]] = []
+    for long_tariff in long_haul_tariffs:
+        if _norm_str(long_tariff.get("service_type") or "delivery") != "delivery":
+            continue
+        if _norm_str(long_tariff.get("tag")) != "long_haul":
+            continue
+        if not _distance_matches_tariff(long_tariff, distance_km, group_max_distance, pickup_points, dropoff_point):
+            continue
+        capacity = _to_float(long_tariff.get("грузоподъёмность")) or 0.0
+        if capacity <= 0:
+            continue
+        if total_weight <= capacity + 1e-6:
+            continue
+
+        remaining_items = _init_remaining_items(items)
+        main_items, main_weight, _ = _allocate_items_for_trip(remaining_items, capacity)
+        if main_weight <= 0:
+            continue
+        if not _weight_ok(long_tariff, main_weight):
+            continue
+
+        tail_target = max(total_weight - main_weight, 0.0)
+        tail_items, tail_weight, _ = _allocate_items_for_trip(remaining_items, tail_target)
+        if tail_weight <= 0:
+            continue
+
+        manip_tariff = _select_tariff_for_load(
+            tariffs,
+            "manipulator",
+            distance_km,
+            tail_weight,
+            group_max_distance,
+            pickup_points,
+            dropoff_point,
+        )
+        if not manip_tariff:
+            continue
+        if not _weight_ok(manip_tariff, tail_weight):
+            continue
+
+        long_cost = _trip_cost(long_tariff, distance_km)
+        manip_cost = _trip_cost(manip_tariff, distance_km)
+        trips = [
+            {
+                "tag": "long_haul",
+                "tariff_name": long_tariff.get("название") or long_tariff.get("name") or "long_haul",
+                "tariff_label": _tariff_label(long_tariff, distance_km=distance_km),
+                "trip_cost": float(long_cost),
+                "load_ton": round(main_weight, 2),
+                "capacity_ton": float(capacity),
+                "distance_km": distance_km,
+                "items": main_items or [f"Смешанная загрузка ({round(main_weight,2)}т)"],
+            },
+            {
+                "tag": "manipulator",
+                "tariff_name": manip_tariff.get("название") or manip_tariff.get("name") or "manipulator",
+                "tariff_label": _tariff_label(manip_tariff, distance_km=distance_km),
+                "trip_cost": float(manip_cost),
+                "load_ton": round(tail_weight, 2),
+                "capacity_ton": float(_to_float(manip_tariff.get("грузоподъёмность")) or 0.0),
+                "distance_km": distance_km,
+                "items": tail_items or [f"Смешанная загрузка ({round(tail_weight,2)}т)"],
+            },
+        ]
+        mixed_plans.append(
+            {
+                "type": "mixed_tail_mani",
+                "transport_cost": float(long_cost) + float(manip_cost),
+                "trips": trips,
+                "kind": "mixed_tail_mani",
+            }
+        )
+
+    return mixed_plans
 
 def _build_delivery_plan_options(
     *,
@@ -995,6 +1118,20 @@ def _build_delivery_plan_options(
 
     for tag_set in tag_sets:
         _append_plan(tag_set)
+        if "long_haul" in tag_set:
+            plan_options.extend(
+                _build_tail_mani_plans(
+                    total_weight=total_weight,
+                    distance_km=distance_km,
+                    tariffs=tariffs,
+                    long_haul_tariffs=tariffs,
+                    items=items,
+                    allowed_tags=allowed_tags,
+                    group_max_distance=group_max_distance,
+                    pickup_points=pickup_points,
+                    dropoff_point=dropoff_point,
+                )
+            )
 
     # Дополнительные варианты по конкретным тарифным группам (tag + name).
     delivery_tariffs = [
@@ -1036,6 +1173,20 @@ def _build_delivery_plan_options(
                 ]
                 tariffs_subset = tariffs_subset + base_tariffs
         _append_plan(tag_set, tariffs_subset)
+        if tag == "long_haul":
+            plan_options.extend(
+                _build_tail_mani_plans(
+                    total_weight=total_weight,
+                    distance_km=distance_km,
+                    tariffs=tariffs,
+                    long_haul_tariffs=group_tariffs,
+                    items=items,
+                    allowed_tags=allowed_tags,
+                    group_max_distance=group_max_distance,
+                    pickup_points=pickup_points,
+                    dropoff_point=dropoff_point,
+                )
+            )
         filter_reasons["tariff_group_plans"] += 1
 
     unique_plans: Dict[Tuple[Tuple[str, str], ...], Dict[str, Any]] = {}
@@ -1271,6 +1422,35 @@ def generate_unload_candidates(
         if allowed_set:
             allowed_set = {"crane"}
 
+    prefer_delivery_mani = False
+    preferred_unload = None
+    preferred_key = None
+    mani_name = ""
+    if (
+        not container_used_flag
+        and delivery_mani
+        and _norm_str(tag_choice) == "auto"
+        and "manipulator" not in forbidden_set
+        and (not allowed_set or "manipulator" in allowed_set)
+    ):
+        prefer_delivery_mani = True
+        mani_name = str(delivery_mani.get("tariff_name") or "")
+        if mani_name:
+            preferred_unload = _select_tariff_by_name_tag(
+                calc_tariffs or [],
+                name=mani_name,
+                tag="manipulator",
+                service_type="unloading",
+                distance_km=0.0,
+                load_ton=scenario_total_weight,
+                group_max_distance=group_max_distance,
+                pickup_points=pickup_points_all,
+                dropoff_point=dropoff_point,
+                ignore_capacity=True,
+            )
+            if preferred_unload:
+                preferred_key = _tariff_group_key(preferred_unload)
+
     candidates, reasons = _filter_unloading_tariffs(
         unloading_tariffs,
         scenario_total_weight=scenario_total_weight,
@@ -1283,22 +1463,16 @@ def generate_unload_candidates(
     )
 
     extra_candidates: List[Dict[str, Any]] = []
-    if delivery_mani and _norm_str(tag_choice) in ("auto", "manipulator"):
-        mani_name = delivery_mani.get("tariff_name") or ""
-        best_unload = _select_tariff_by_name_tag(
-            calc_tariffs or [],
-            name=str(mani_name),
-            tag="manipulator",
-            service_type="unloading",
-            distance_km=0.0,
-            load_ton=scenario_total_weight,
-            group_max_distance=group_max_distance,
-            pickup_points=pickup_points_all,
-            dropoff_point=dropoff_point,
-            ignore_capacity=True,
-        )
-        if best_unload:
-            extra_candidates.append(best_unload)
+    if prefer_delivery_mani and preferred_unload:
+        extra_candidates.append(preferred_unload)
+
+    if prefer_delivery_mani and mani_name:
+        candidates = [
+            cand
+            for cand in candidates
+            if _norm_str(cand.get("tag")) != "manipulator"
+            or _norm_str(cand.get("название") or cand.get("name") or "") == _norm_str(mani_name)
+        ]
 
     merged = candidates + extra_candidates
     if not merged:
@@ -1329,6 +1503,8 @@ def generate_unload_candidates(
 
     unload_candidates = []
     for cand in grouped.values():
+        cand_key = _tariff_group_key(cand)
+        preferred = bool(preferred_key and cand_key == preferred_key)
         cost = _to_float(cand.get("base"))
         unload_candidates.append(
             {
@@ -1340,10 +1516,11 @@ def generate_unload_candidates(
                     "cost": cost,
                 },
                 "cost": cost,
+                "preferred": preferred,
             }
         )
 
-    unload_candidates.sort(key=lambda x: float(x.get("cost") or 0.0))
+    unload_candidates.sort(key=lambda x: (-1 if x.get("preferred") else 0, float(x.get("cost") or 0.0)))
     if max_unload_candidates > 0 and len(unload_candidates) > max_unload_candidates:
         trimmed = len(unload_candidates) - max_unload_candidates
         unload_candidates = unload_candidates[:max_unload_candidates]
