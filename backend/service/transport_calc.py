@@ -893,7 +893,7 @@ def _linear_plan(
             if not candidates:
                 return None
             continue
-    reprice_tag_list = reprice_tag_list if reprice_tag_list is not None else allowed_tags
+    reprice_tag_list = allowed_tags
 
     for trip in trips:
         load = float(trip.get("load_ton") or 0.0)
@@ -950,7 +950,6 @@ def _build_delivery_plan_options(
     group_max_distance: Dict[Tuple[str, str, str, Optional[float]], float],
     pickup_points: Optional[List[Tuple[float, float]]],
     dropoff_point: Optional[Tuple[float, float]],
-    reprice_tag_list: Optional[List[str]] = None,
     max_vehicle_combos_per_plan: int,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
     delivery_tags = [t for t in allowed_tags if t in ("long_haul", "container_carrier", "flatbed", "manipulator")]
@@ -988,7 +987,6 @@ def _build_delivery_plan_options(
             group_max_distance,
             pickup_points,
             dropoff_point,
-            reprice_tag_list=allowed_tags,
         )
         if not plan:
             filter_reasons["no_plan"] += 1
