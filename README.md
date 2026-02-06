@@ -158,6 +158,36 @@ python backend/scripts/export_db_json.py --output db_snapshot.json
 docker compose exec backend python backend/scripts/export_db_json.py --output /app/backend/storage/db_snapshot.json
 ```
 
+## Автоматический снапшот каждые 6 часов
+
+Добавлен планировщик `backend/scripts/scheduled_db_snapshot.py`, который по умолчанию
+перезаписывает `backend/storage/db_snapshot.json` каждые 6 часов.
+
+Локально (в т.ч. Windows):
+
+```bash
+python backend/scripts/scheduled_db_snapshot.py
+```
+
+Проверка одного запуска:
+
+```bash
+python backend/scripts/scheduled_db_snapshot.py --once
+```
+
+Windows Task Scheduler (каждые 6 часов) можно создать так:
+
+```powershell
+schtasks /Create /SC HOURLY /MO 6 /TN "DeliveryCalcDbSnapshot" /TR "python C:\path\to\delivery_calc\backend\scripts\scheduled_db_snapshot.py"
+```
+
+Docker/VDS: включите отдельный сервис снапшотов, который пишет в тот же volume `backend/storage`:
+
+```bash
+docker compose up -d db_snapshot
+```
+Если запускать все сервисы сразу (`docker compose up -d`), `db_snapshot` тоже поднимется и будет работать в фоне с перезапуском (`restart: unless-stopped`).
+
 ```bash
 python backend/scripts/import_db_json.py --input db_snapshot.json
 ```
