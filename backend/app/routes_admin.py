@@ -430,6 +430,7 @@ class TariffUpsert(BaseModel):
     unload_capability: str = Field("none", pattern="^(none|crane|manipulator)$")
 
     is_active: bool = True
+    unloading_included: bool = False
     description: str | None = None
     notes: str | None = None
 
@@ -463,6 +464,7 @@ class TransportCardUpsert(BaseModel):
 
     unload_tags: list[str] = Field(default_factory=list)  # multi
     is_active: bool = True
+    unloading_included: bool = False
     description: str | None = None
     notes: str | None = None
 
@@ -1029,6 +1031,7 @@ def _tariff_to_dict(t: Tariff) -> dict:
         "unload_capability": t.unload_capability,
         "unload_tags": getattr(t, "unload_tags", None),
         "is_active": bool(t.is_active),
+        "unloading_included": bool(getattr(t, "unloading_included", False)),
         "description": t.description,
         "notes": t.notes,
         "createdAt": t.created_at.isoformat() if getattr(t, "created_at", None) else None,
@@ -1066,6 +1069,7 @@ def _tariff_snapshot(t: Tariff) -> dict:
         "unload_capability": t.unload_capability,
         "unload_tags": getattr(t, "unload_tags", None),
         "is_active": bool(t.is_active),
+        "unloading_included": bool(getattr(t, "unloading_included", False)),
         "description": t.description,
         "notes": t.notes,
     }
@@ -1125,6 +1129,7 @@ async def admin_create_tariff(
         unload_capability=(unload_tags[0] if unload_tags else "none"),
         unload_tags=(unload_tags or None),
         is_active=bool(payload.is_active),
+        unloading_included=bool(getattr(payload, "unloading_included", False)),
         description=(payload.description or "").strip() or None,
         notes=(payload.notes or "").strip() or None,
         created_by_user_id=current_user.id,
@@ -1195,6 +1200,7 @@ async def admin_update_tariff(
     t.unload_capability = (unload_tags[0] if unload_tags else "none")
     t.unload_tags = (unload_tags or None)
     t.is_active = bool(payload.is_active)
+    t.unloading_included = bool(getattr(payload, "unloading_included", False))
     t.description = (payload.description or "").strip() or None
     t.notes = (payload.notes or "").strip() or None
     t.updated_by_user_id = current_user.id
@@ -1394,6 +1400,7 @@ async def admin_upsert_transport_card(
                     unload_capability=unload_capability,
                     unload_tags=(unload_tags or None),
                     is_active=bool(payload.is_active),
+                    unloading_included=bool(getattr(payload, "unloading_included", False)),
                     description=(payload.description or "").strip() or None,
                     notes=(payload.notes or "").strip() or None,
                     created_by_user_id=current_user.id,
@@ -1424,6 +1431,7 @@ async def admin_upsert_transport_card(
                 unload_capability=unload_capability,
                 unload_tags=(unload_tags or None),
                 is_active=bool(payload.is_active),
+                unloading_included=False,
                 description=(payload.description or "").strip() or None,
                 notes=(payload.notes or "").strip() or None,
                 created_by_user_id=current_user.id,

@@ -305,6 +305,7 @@ def load_factories_and_tariffs_from_db(db: Session) -> Tuple[Dict, List]:
             "base_transport_name": getattr(tariff, "base_transport_name", None),
             "base_transport_tag": getattr(tariff, "base_transport_tag", None),
             "is_active": bool(getattr(tariff, "is_active", True)),
+            "unloading_included": bool(getattr(tariff, "unloading_included", False)),
             "описание": tariff.description or "",
             "заметки": tariff.notes or ""
         })

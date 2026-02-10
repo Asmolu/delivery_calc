@@ -145,6 +145,7 @@ def migrate_tariffs(db: Session):
             service_type=(tariff_data.get("service_type") or "delivery"),
             self_loading=bool(tariff_data.get("self_loading", False)),
             unload_capability=(tariff_data.get("unload_capability") or "none"),
+            unloading_included=bool(tariff_data.get("unloading_included", False)),
             is_active=bool(tariff_data.get("is_active", True)),
             description=tariff_data.get("описание", ""),
             notes=tariff_data.get("заметки", "")
@@ -461,6 +462,10 @@ def ensure_tariffs_schema(db: Session) -> None:
     # Флаг активности
     if "is_active" not in cols:
         _add_col("ALTER TABLE tariffs ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE")
+
+    # Доставка уже включает разгрузку (фиксированные кейсы)
+    if "unloading_included" not in cols:
+        _add_col("ALTER TABLE tariffs ADD COLUMN unloading_included BOOLEAN NOT NULL DEFAULT FALSE")
 
     # Контейнеровоз: привязка к базовому транспорту (шаланда и т.п.)
     if "base_transport_name" not in cols:

@@ -10,7 +10,7 @@
         "name": "тубетон",
         "lat": 55.577505,
         "lon": 36.498658,
-        "price": 8100.0,
+        "price": 8300.0,
         "contact": "7 903 005-07-77",
         "update_date": "03.02"
       }
@@ -25,7 +25,7 @@
         "name": "тубетон",
         "lat": 55.577505,
         "lon": 36.498658,
-        "price": 11000.0,
+        "price": 12000.0,
         "contact": "7 903 005-07-77",
         "update_date": "03.02"
       }
@@ -688,6 +688,66 @@
         "price": 9000.0,
         "contact": "7 977 647 9878",
         "update_date": "03.02"
+      }
+    },
+    {
+      "category": "Дорожные ПЛИТЫ/ПАГИ",
+      "subtype": "ПАГ 14 ТУ",
+      "weight_per_item": 4.2,
+      "special_threshold": 0.0,
+      "max_per_trip": 0.0,
+      "factory": {
+        "name": "мосжелезобетон",
+        "lat": 55.99585,
+        "lon": 37.261563,
+        "price": 24000.0,
+        "contact": "7 977 647 9878",
+        "update_date": "03.02"
+      }
+    },
+    {
+      "category": "Дорожные ПЛИТЫ/ПАГИ",
+      "subtype": "ПАГ 14 ГОСТ",
+      "weight_per_item": 4.2,
+      "special_threshold": 0.0,
+      "max_per_trip": 0.0,
+      "factory": {
+        "name": "мосжелезобетон",
+        "lat": 55.99585,
+        "lon": 37.261563,
+        "price": 25000.0,
+        "contact": "7 977 647 9878",
+        "update_date": "03.02"
+      }
+    },
+    {
+      "category": "Дорожные ПЛИТЫ/ПАГИ",
+      "subtype": "ПАГ 18 ГОСТ",
+      "weight_per_item": 5.2,
+      "special_threshold": 0.0,
+      "max_per_trip": 0.0,
+      "factory": {
+        "name": "мосжелезобетон",
+        "lat": 55.99585,
+        "lon": 37.261563,
+        "price": 31000.0,
+        "contact": "7 977 647 9878",
+        "update_date": "03.02"
+      }
+    },
+    {
+      "category": "Дорожные ПЛИТЫ/ПАГИ",
+      "subtype": "2п30.18.30 ТУ",
+      "weight_per_item": 2.2,
+      "special_threshold": 0.0,
+      "max_per_trip": 0.0,
+      "factory": {
+        "name": "автоматорная 5",
+        "lat": 55.848766,
+        "lon": 37.536113,
+        "price": 9200.0,
+        "contact": "7 9161186866",
+        "update_date": "04.02"
       }
     }
   ],

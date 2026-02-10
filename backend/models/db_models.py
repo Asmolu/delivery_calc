@@ -203,6 +203,8 @@ class Tariff(Base):
     unload_tags = Column(JSON, nullable=True)
     # Возможность отключать тариф без удаления
     is_active = Column(Boolean, nullable=False, default=True)
+    # Цена доставки уже включает разгрузку (для фиксированных спец-кейсов)
+    unloading_included = Column(Boolean, nullable=False, default=False)
     description = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
 

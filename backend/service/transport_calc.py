@@ -795,6 +795,7 @@ def _linear_plan(
                 # полезно для выбора “манипулятора на объекте” для разгрузки
                 "capacity_ton": float(info.get("capacity") or 0.0),
                 "distance_km": distance_km,
+                "unloading_included": bool(tariff.get("unloading_included", False)),
                 "items": items_loaded or [f"Смешанная загрузка ({round(load,2)}т)"],
             }
         )
@@ -1711,10 +1712,10 @@ def evaluate_scenario_transport_variants(
         for it in (its or [])
     )
 
-    def _has_other_delivery_targets(factory_plans: List[Dict[str, Any]]) -> bool:
+    def _delivery_has_unloading_included(factory_plans: List[Dict[str, Any]]) -> bool:
         for plan in factory_plans or []:
             for trip in plan.get("trips", []) or []:
-                if _norm_str(trip.get("tag")) != "manipulator":
+                if bool(trip.get("unloading_included", False)):
                     return True
         return False
 
@@ -1791,12 +1792,7 @@ def evaluate_scenario_transport_variants(
             for unload_candidate in unload_candidates:
                 unloading_info = unload_candidate.get("unloading")
                 unloading_cost_total = float(unload_candidate.get("cost") or 0.0)
-                if (
-                    delivery_mani
-                    and unloading_info
-                    and _norm_str(unloading_info.get("tag")) == "manipulator"
-                    and not _has_other_delivery_targets(factory_plans)
-                ):
+                if _delivery_has_unloading_included(factory_plans):
                     unloading_cost_total = 0.0
                     unloading_info = None
 

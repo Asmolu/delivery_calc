@@ -31,6 +31,7 @@ const emptyDraft = {
   capacity: 0,
   tag: "manipulator",
   is_active: true,
+  unloading_included: false,
 
   load_zone: "",
   unload_zone: "",
@@ -69,7 +70,7 @@ function MultiSelectDropdown({ options, value, onChange, placeholder = "Нет",
   const [open, setOpen] = React.useState(false);
   const rootRef = React.useRef(null);
 
-  const selected = Array.isArray(value) ? value : [];
+  const selected = React.useMemo(() => (Array.isArray(value) ? value : []), [value]);
   const selectedSet = React.useMemo(() => new Set(selected), [selected]);
   const available = React.useMemo(
     () => (options || []).filter((o) => !selectedSet.has(o.value)),
@@ -272,6 +273,7 @@ export default function AdminTariffs() {
       unload_tags: Array.isArray(v.unload_tags) ? v.unload_tags : null,
       unload_capability: v.unload_capability || "none",
       is_active: v.is_active !== false,
+      unloading_included: v.unloading_included === true,
       description: v.description || v["описание"] || "",
       notes: v.notes || v["заметки"] || "",
     }));
@@ -328,6 +330,7 @@ export default function AdminTariffs() {
         capacity: header.capacity,
         tag: header.tag,
         is_active: header.is_active !== false,
+        unloading_included: rows.some((x) => x.service_type === "delivery" && x.unloading_included === true),
         load_zone: header.load_zone ?? "",
         unload_zone: header.unload_zone ?? "",
         unload_tags: unloadTags,
@@ -376,6 +379,7 @@ export default function AdminTariffs() {
       capacity: selectedTransport.capacity || 0,
       tag: selectedTransport.tag || "",
       is_active: selectedTransport.is_active !== false,
+      unloading_included: !!selectedTransport.unloading_included,
       load_zone: selectedTransport.load_zone || "",
       unload_zone: selectedTransport.unload_zone || "",
       unload_tags: Array.isArray(selectedTransport.unload_tags) ? selectedTransport.unload_tags : [],
@@ -487,6 +491,7 @@ export default function AdminTariffs() {
         unload_zone: draft.unload_zone || null,
         unload_tags: isContainer ? ["crane"] : unload,
         is_active: !!draft.is_active,
+        unloading_included: isContainer ? false : !!draft.unloading_included,
         description: draft.description || null,
         notes: draft.notes || null,
         enable_delivery: isContainer ? true : !!draft.enable_delivery,
@@ -665,6 +670,15 @@ export default function AdminTariffs() {
                     className="w-4 h-4 accent-indigo-600"
                   />
                   Разгрузка
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={!!draft.unloading_included}
+                    onChange={(e) => setDraft((s) => ({ ...s, unloading_included: e.target.checked }))}
+                    className="w-4 h-4 accent-indigo-600"
+                  />
+                  Разгрузка включена в стоимость доставки
                 </label>
               </div>
             )}
