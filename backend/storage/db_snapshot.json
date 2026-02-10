@@ -1,6 +1,6 @@
 {
   "meta": {
-    "exported_at": "2026-02-10T14:15:56.035635Z",
+    "exported_at": "2026-02-10T15:11:29.588181Z",
     "tables": [
       {
         "name": "categories",
@@ -8,7 +8,7 @@
       },
       {
         "name": "factories",
-        "rows": 18
+        "rows": 19
       },
       {
         "name": "organizations",
@@ -20,7 +20,7 @@
       },
       {
         "name": "orders",
-        "rows": 5
+        "rows": 7
       },
       {
         "name": "organization_invites",
@@ -32,19 +32,19 @@
       },
       {
         "name": "products",
-        "rows": 165
+        "rows": 169
       },
       {
         "name": "tariff_change_logs",
-        "rows": 42
+        "rows": 45
       },
       {
         "name": "tariffs",
-        "rows": 60
+        "rows": 58
       },
       {
         "name": "order_events",
-        "rows": 10
+        "rows": 12
       }
     ]
   },
@@ -138,28 +138,6 @@
         "updated_at": "2026-02-06T13:00:38.696995+00:00"
       },
       {
-        "id": 2,
-        "name": "бетон-авто",
-        "lat": 55.736267,
-        "lon": 38.226321,
-        "contact": "7 926 877-00-17",
-        "update_date": null,
-        "is_active": true,
-        "created_at": "2026-01-31T12:12:47.354392+00:00",
-        "updated_at": null
-      },
-      {
-        "id": 3,
-        "name": "ооо  СК",
-        "lat": 55.833496,
-        "lon": 37.412909,
-        "contact": "7 926 103-67-81",
-        "update_date": null,
-        "is_active": true,
-        "created_at": "2026-01-31T12:12:47.354392+00:00",
-        "updated_at": null
-      },
-      {
         "id": 13,
         "name": "ооо Интрес",
         "lat": 55.8836,
@@ -248,6 +226,28 @@
         "updated_at": "2026-02-06T13:00:38.696995+00:00"
       },
       {
+        "id": 2,
+        "name": "бетон-авто",
+        "lat": 55.736267,
+        "lon": 38.226321,
+        "contact": "7 926 877-00-17",
+        "update_date": null,
+        "is_active": true,
+        "created_at": "2026-01-31T12:12:47.354392+00:00",
+        "updated_at": "2026-02-10T14:16:10.472262+00:00"
+      },
+      {
+        "id": 3,
+        "name": "ооо  СК",
+        "lat": 55.833496,
+        "lon": 37.412909,
+        "contact": "7 926 103-67-81",
+        "update_date": null,
+        "is_active": true,
+        "created_at": "2026-01-31T12:12:47.354392+00:00",
+        "updated_at": "2026-02-10T14:16:10.472262+00:00"
+      },
+      {
         "id": 16,
         "name": "стройтехпск",
         "lat": 55.993756,
@@ -278,6 +278,17 @@
         "update_date": null,
         "is_active": true,
         "created_at": "2026-01-31T12:12:47.354392+00:00",
+        "updated_at": null
+      },
+      {
+        "id": 19,
+        "name": "автоматорная 5",
+        "lat": 55.848766,
+        "lon": 37.536113,
+        "contact": "7 9161186866",
+        "update_date": "04.02",
+        "is_active": true,
+        "created_at": "2026-02-10T14:16:10.472262+00:00",
         "updated_at": null
       }
     ],
@@ -321,11 +332,11 @@
         "email": null,
         "first_name": null,
         "last_name": null,
-        "hashed_password": "$2b$12$Pe7dqOicBEHC2doNfcWGXOmDOjmsTUHer7zGM8tMbBfjjYjy7isWe",
+        "hashed_password": "$2b$12$365sQUU917ZtuISJPaS50eqLvjbqJmMQJBVQV38VwMzK/DuAtw2Ly",
         "role": "admin",
         "is_active": true,
         "created_at": "2026-01-31T12:12:42.926328+00:00",
-        "updated_at": "2026-02-06T13:37:05.715571+00:00"
+        "updated_at": "2026-02-10T14:55:20.976971+00:00"
       }
     ],
     "orders": [
@@ -2407,6 +2418,846 @@
         "created_by_user_id": 1,
         "created_at": "2026-02-06T14:08:03.292149+00:00",
         "updated_at": null
+      },
+      {
+        "id": 6,
+        "status": "confirmed_auto",
+        "request_payload": {
+          "upload_lat": 55.113056,
+          "upload_lon": 36.62172,
+          "transport_type": "auto",
+          "deliveryTransportTag": "auto",
+          "unloadingTransportTag": "auto",
+          "allowedDeliveryTags": [],
+          "allowedUnloadingTags": [],
+          "forbiddenDeliveryTags": [],
+          "forbiddenUnloadingTags": [],
+          "items": [
+            {
+              "category": "Дорожные ПЛИТЫ/ПАГИ",
+              "subtype": "2п30.18.30 ТУ",
+              "quantity": 12
+            }
+          ]
+        },
+        "variants_snapshot": [
+          {
+            "totalCost": 155100,
+            "materialCost": 99600,
+            "deliveryCost": 31500,
+            "unloadingCost": 24000,
+            "totalWeight": 26.4,
+            "transportName": "Длинномер (до 44т)",
+            "tripCount": 1,
+            "isSingleFactory": true,
+            "singleFactoryName": "тубетон",
+            "unloading": {
+              "service_type": "unloading",
+              "tag": "manipulator",
+              "tariff_name": "Манипулятор (8 т)",
+              "tariff_label": "0км+ 24000р",
+              "cost": 24000
+            },
+            "transportDetails": [
+              {
+                "factory_name": "тубетон",
+                "distance_km": 72.5338,
+                "transport_cost": 31500,
+                "trips": [
+                  {
+                    "tag": "long_haul",
+                    "tariff_name": "Длинномер (до 44т)",
+                    "tariff_label": "60-80км 31500р",
+                    "trip_cost": 31500,
+                    "load_ton": 26.4,
+                    "capacity_ton": 44,
+                    "distance_km": 72.5338,
+                    "unloading_included": false,
+                    "items": [
+                      "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 12 шт"
+                    ]
+                  }
+                ],
+                "material_cost": 99600
+              }
+            ],
+            "details": [
+              {
+                "завод": "тубетон",
+                "контакт": "7 903 005-07-77",
+                "товар": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ × 12",
+                "машина": "Длинномер (до 44т) — 1 рейс(ов)",
+                "разгрузка": "Манипулятор (8 т): 24000₽",
+                "расстояние_км": 72.53,
+                "стоимость_материала": 99600,
+                "стоимость_доставки": 31500,
+                "итого": 131100
+              }
+            ],
+            "tripItems": [
+              {
+                "завод": "тубетон",
+                "машина": "Длинномер (до 44т)",
+                "тариф": "60-80км 31500р",
+                "разгрузка": "Манипулятор (8 т): 24000₽",
+                "расстояние_км": 72.53,
+                "загрузка_т": 26.4,
+                "товары": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 12 шт",
+                "стоимость_доставки": 31500
+              }
+            ]
+          },
+          {
+            "totalCost": 159900,
+            "materialCost": 104400,
+            "deliveryCost": 31500,
+            "unloadingCost": 24000,
+            "totalWeight": 26.4,
+            "transportName": "Длинномер (до 44т)",
+            "tripCount": 1,
+            "isSingleFactory": true,
+            "singleFactoryName": "Лина",
+            "unloading": {
+              "service_type": "unloading",
+              "tag": "manipulator",
+              "tariff_name": "Манипулятор (8 т)",
+              "tariff_label": "0км+ 24000р",
+              "cost": 24000
+            },
+            "transportDetails": [
+              {
+                "factory_name": "Лина",
+                "distance_km": 76.32260000000001,
+                "transport_cost": 31500,
+                "trips": [
+                  {
+                    "tag": "long_haul",
+                    "tariff_name": "Длинномер (до 44т)",
+                    "tariff_label": "60-80км 31500р",
+                    "trip_cost": 31500,
+                    "load_ton": 26.4,
+                    "capacity_ton": 44,
+                    "distance_km": 76.32260000000001,
+                    "unloading_included": false,
+                    "items": [
+                      "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 12 шт"
+                    ]
+                  }
+                ],
+                "material_cost": 104400
+              }
+            ],
+            "details": [
+              {
+                "завод": "Лина",
+                "контакт": "7 925 545-99-86",
+                "товар": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ × 12",
+                "машина": "Длинномер (до 44т) — 1 рейс(ов)",
+                "разгрузка": "Манипулятор (8 т): 24000₽",
+                "расстояние_км": 76.32,
+                "стоимость_материала": 104400,
+                "стоимость_доставки": 31500,
+                "итого": 135900
+              }
+            ],
+            "tripItems": [
+              {
+                "завод": "Лина",
+                "машина": "Длинномер (до 44т)",
+                "тариф": "60-80км 31500р",
+                "разгрузка": "Манипулятор (8 т): 24000₽",
+                "расстояние_км": 76.32,
+                "загрузка_т": 26.4,
+                "товары": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 12 шт",
+                "стоимость_доставки": 31500
+              }
+            ]
+          },
+          {
+            "totalCost": 163900,
+            "materialCost": 104400,
+            "deliveryCost": 35500,
+            "unloadingCost": 24000,
+            "totalWeight": 26.4,
+            "transportName": "Длинномер (до 44т)",
+            "tripCount": 1,
+            "isSingleFactory": true,
+            "singleFactoryName": "bear бетон",
+            "unloading": {
+              "service_type": "unloading",
+              "tag": "manipulator",
+              "tariff_name": "Манипулятор (8 т)",
+              "tariff_label": "0км+ 24000р",
+              "cost": 24000
+            },
+            "transportDetails": [
+              {
+                "factory_name": "bear бетон",
+                "distance_km": 103.7722,
+                "transport_cost": 35500,
+                "trips": [
+                  {
+                    "tag": "long_haul",
+                    "tariff_name": "Длинномер (до 44т)",
+                    "tariff_label": "100-120км 35500р",
+                    "trip_cost": 35500,
+                    "load_ton": 26.4,
+                    "capacity_ton": 44,
+                    "distance_km": 103.7722,
+                    "unloading_included": false,
+                    "items": [
+                      "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 12 шт"
+                    ]
+                  }
+                ],
+                "material_cost": 104400
+              }
+            ],
+            "details": [
+              {
+                "завод": "bear бетон",
+                "контакт": "7 985 016-21-27",
+                "товар": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ × 12",
+                "машина": "Длинномер (до 44т) — 1 рейс(ов)",
+                "разгрузка": "Манипулятор (8 т): 24000₽",
+                "расстояние_км": 103.77,
+                "стоимость_материала": 104400,
+                "стоимость_доставки": 35500,
+                "итого": 139900
+              }
+            ],
+            "tripItems": [
+              {
+                "завод": "bear бетон",
+                "машина": "Длинномер (до 44т)",
+                "тариф": "100-120км 35500р",
+                "разгрузка": "Манипулятор (8 т): 24000₽",
+                "расстояние_км": 103.77,
+                "загрузка_т": 26.4,
+                "товары": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 12 шт",
+                "стоимость_доставки": 35500
+              }
+            ]
+          },
+          {
+            "totalCost": 163900,
+            "materialCost": 110400,
+            "deliveryCost": 29500,
+            "unloadingCost": 24000,
+            "totalWeight": 26.4,
+            "transportName": "Длинномер (до 44т)",
+            "tripCount": 1,
+            "isSingleFactory": true,
+            "singleFactoryName": "ооо стройиндустрия",
+            "unloading": {
+              "service_type": "unloading",
+              "tag": "manipulator",
+              "tariff_name": "Манипулятор (8 т)",
+              "tariff_label": "0км+ 24000р",
+              "cost": 24000
+            },
+            "transportDetails": [
+              {
+                "factory_name": "ооо стройиндустрия",
+                "distance_km": 54.1079,
+                "transport_cost": 29500,
+                "trips": [
+                  {
+                    "tag": "long_haul",
+                    "tariff_name": "Длинномер (до 44т)",
+                    "tariff_label": "30-60км 29500р",
+                    "trip_cost": 29500,
+                    "load_ton": 26.4,
+                    "capacity_ton": 44,
+                    "distance_km": 54.1079,
+                    "unloading_included": false,
+                    "items": [
+                      "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 12 шт"
+                    ]
+                  }
+                ],
+                "material_cost": 110400
+              }
+            ],
+            "details": [
+              {
+                "завод": "ооо стройиндустрия",
+                "контакт": "7 926 481-02-78",
+                "товар": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ × 12",
+                "машина": "Длинномер (до 44т) — 1 рейс(ов)",
+                "разгрузка": "Манипулятор (8 т): 24000₽",
+                "расстояние_км": 54.11,
+                "стоимость_материала": 110400,
+                "стоимость_доставки": 29500,
+                "итого": 139900
+              }
+            ],
+            "tripItems": [
+              {
+                "завод": "ооо стройиндустрия",
+                "машина": "Длинномер (до 44т)",
+                "тариф": "30-60км 29500р",
+                "разгрузка": "Манипулятор (8 т): 24000₽",
+                "расстояние_км": 54.11,
+                "загрузка_т": 26.4,
+                "товары": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 12 шт",
+                "стоимость_доставки": 29500
+              }
+            ]
+          },
+          {
+            "totalCost": 165100,
+            "materialCost": 105600,
+            "deliveryCost": 35500,
+            "unloadingCost": 24000,
+            "totalWeight": 26.4,
+            "transportName": "Длинномер (до 44т)",
+            "tripCount": 1,
+            "isSingleFactory": true,
+            "singleFactoryName": "ооо дорожные плиты",
+            "unloading": {
+              "service_type": "unloading",
+              "tag": "manipulator",
+              "tariff_name": "Манипулятор (8 т)",
+              "tariff_label": "0км+ 24000р",
+              "cost": 24000
+            },
+            "transportDetails": [
+              {
+                "factory_name": "ооо дорожные плиты",
+                "distance_km": 105.45439999999999,
+                "transport_cost": 35500,
+                "trips": [
+                  {
+                    "tag": "long_haul",
+                    "tariff_name": "Длинномер (до 44т)",
+                    "tariff_label": "100-120км 35500р",
+                    "trip_cost": 35500,
+                    "load_ton": 26.4,
+                    "capacity_ton": 44,
+                    "distance_km": 105.45439999999999,
+                    "unloading_included": false,
+                    "items": [
+                      "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 12 шт"
+                    ]
+                  }
+                ],
+                "material_cost": 105600
+              }
+            ],
+            "details": [
+              {
+                "завод": "ооо дорожные плиты",
+                "контакт": "7 917 555-10-04",
+                "товар": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ × 12",
+                "машина": "Длинномер (до 44т) — 1 рейс(ов)",
+                "разгрузка": "Манипулятор (8 т): 24000₽",
+                "расстояние_км": 105.45,
+                "стоимость_материала": 105600,
+                "стоимость_доставки": 35500,
+                "итого": 141100
+              }
+            ],
+            "tripItems": [
+              {
+                "завод": "ооо дорожные плиты",
+                "машина": "Длинномер (до 44т)",
+                "тариф": "100-120км 35500р",
+                "разгрузка": "Манипулятор (8 т): 24000₽",
+                "расстояние_км": 105.45,
+                "загрузка_т": 26.4,
+                "товары": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 12 шт",
+                "стоимость_доставки": 35500
+              }
+            ]
+          }
+        ],
+        "selected_variant": 0,
+        "selected_variant_snapshot": {
+          "totalCost": 155100,
+          "materialCost": 99600,
+          "deliveryCost": 31500,
+          "unloadingCost": 24000,
+          "totalWeight": 26.4,
+          "transportName": "Длинномер (до 44т)",
+          "tripCount": 1,
+          "isSingleFactory": true,
+          "singleFactoryName": "тубетон",
+          "unloading": {
+            "service_type": "unloading",
+            "tag": "manipulator",
+            "tariff_name": "Манипулятор (8 т)",
+            "tariff_label": "0км+ 24000р",
+            "cost": 24000
+          },
+          "transportDetails": [
+            {
+              "factory_name": "тубетон",
+              "distance_km": 72.5338,
+              "transport_cost": 31500,
+              "trips": [
+                {
+                  "tag": "long_haul",
+                  "tariff_name": "Длинномер (до 44т)",
+                  "tariff_label": "60-80км 31500р",
+                  "trip_cost": 31500,
+                  "load_ton": 26.4,
+                  "capacity_ton": 44,
+                  "distance_km": 72.5338,
+                  "unloading_included": false,
+                  "items": [
+                    "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 12 шт"
+                  ]
+                }
+              ],
+              "material_cost": 99600
+            }
+          ],
+          "details": [
+            {
+              "завод": "тубетон",
+              "контакт": "7 903 005-07-77",
+              "товар": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ × 12",
+              "машина": "Длинномер (до 44т) — 1 рейс(ов)",
+              "разгрузка": "Манипулятор (8 т): 24000₽",
+              "расстояние_км": 72.53,
+              "стоимость_материала": 99600,
+              "стоимость_доставки": 31500,
+              "итого": 131100
+            }
+          ],
+          "tripItems": [
+            {
+              "завод": "тубетон",
+              "машина": "Длинномер (до 44т)",
+              "тариф": "60-80км 31500р",
+              "разгрузка": "Манипулятор (8 т): 24000₽",
+              "расстояние_км": 72.53,
+              "загрузка_т": 26.4,
+              "товары": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 12 шт",
+              "стоимость_доставки": 31500
+            }
+          ]
+        },
+        "needs_logistics_check": false,
+        "warning_text": null,
+        "manual_payload": null,
+        "manual_transport_name": null,
+        "manual_notes": null,
+        "created_by_user_id": 1,
+        "created_at": "2026-02-10T15:04:57.367254+00:00",
+        "updated_at": null
+      },
+      {
+        "id": 7,
+        "status": "confirmed_auto",
+        "request_payload": {
+          "upload_lat": 55.797867,
+          "upload_lon": 37.308642,
+          "transport_type": "auto",
+          "deliveryTransportTag": "auto",
+          "unloadingTransportTag": "auto",
+          "allowedDeliveryTags": [],
+          "allowedUnloadingTags": [],
+          "forbiddenDeliveryTags": [],
+          "forbiddenUnloadingTags": [],
+          "items": [
+            {
+              "category": "Дорожные ПЛИТЫ/ПАГИ",
+              "subtype": "2п30.18.30 ТУ",
+              "quantity": 11
+            }
+          ]
+        },
+        "variants_snapshot": [
+          {
+            "totalCost": 133900,
+            "materialCost": 97900,
+            "deliveryCost": 36000,
+            "unloadingCost": 0,
+            "totalWeight": 24.2,
+            "transportName": "Манипулятор S(26 т)S",
+            "tripCount": 1,
+            "isSingleFactory": true,
+            "singleFactoryName": "ооо  СК",
+            "unloading": null,
+            "transportDetails": [
+              {
+                "factory_name": "ооо  СК",
+                "distance_km": 10.0519,
+                "transport_cost": 36000,
+                "trips": [
+                  {
+                    "tag": "manipulator",
+                    "tariff_name": "Манипулятор S(26 т)S",
+                    "tariff_label": "0-30км 36000р",
+                    "trip_cost": 36000,
+                    "load_ton": 24.2,
+                    "capacity_ton": 26,
+                    "distance_km": 10.0519,
+                    "unloading_included": true,
+                    "items": [
+                      "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 11 шт"
+                    ]
+                  }
+                ],
+                "material_cost": 97900
+              }
+            ],
+            "details": [
+              {
+                "завод": "ооо  СК",
+                "контакт": "7 926 103-67-81",
+                "товар": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ × 11",
+                "машина": "Манипулятор S(26 т)S — 1 рейс(ов)",
+                "разгрузка": "—",
+                "расстояние_км": 10.05,
+                "стоимость_материала": 97900,
+                "стоимость_доставки": 36000,
+                "итого": 133900
+              }
+            ],
+            "tripItems": [
+              {
+                "завод": "ооо  СК",
+                "машина": "Манипулятор S(26 т)S",
+                "тариф": "0-30км 36000р",
+                "разгрузка": "—",
+                "расстояние_км": 10.05,
+                "загрузка_т": 24.2,
+                "товары": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 11 шт",
+                "стоимость_доставки": 36000
+              }
+            ]
+          },
+          {
+            "totalCost": 137200,
+            "materialCost": 101200,
+            "deliveryCost": 36000,
+            "unloadingCost": 0,
+            "totalWeight": 24.2,
+            "transportName": "Манипулятор S(26 т)S",
+            "tripCount": 1,
+            "isSingleFactory": true,
+            "singleFactoryName": "автоматорная 5",
+            "unloading": null,
+            "transportDetails": [
+              {
+                "factory_name": "автоматорная 5",
+                "distance_km": 26.0888,
+                "transport_cost": 36000,
+                "trips": [
+                  {
+                    "tag": "manipulator",
+                    "tariff_name": "Манипулятор S(26 т)S",
+                    "tariff_label": "0-30км 36000р",
+                    "trip_cost": 36000,
+                    "load_ton": 24.2,
+                    "capacity_ton": 26,
+                    "distance_km": 26.0888,
+                    "unloading_included": true,
+                    "items": [
+                      "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 11 шт"
+                    ]
+                  }
+                ],
+                "material_cost": 101200
+              }
+            ],
+            "details": [
+              {
+                "завод": "автоматорная 5",
+                "контакт": "7 9161186866",
+                "товар": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ × 11",
+                "машина": "Манипулятор S(26 т)S — 1 рейс(ов)",
+                "разгрузка": "—",
+                "расстояние_км": 26.09,
+                "стоимость_материала": 101200,
+                "стоимость_доставки": 36000,
+                "итого": 137200
+              }
+            ],
+            "tripItems": [
+              {
+                "завод": "автоматорная 5",
+                "машина": "Манипулятор S(26 т)S",
+                "тариф": "0-30км 36000р",
+                "разгрузка": "—",
+                "расстояние_км": 26.09,
+                "загрузка_т": 24.2,
+                "товары": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 11 шт",
+                "стоимость_доставки": 36000
+              }
+            ]
+          },
+          {
+            "totalCost": 146800,
+            "materialCost": 91300,
+            "deliveryCost": 31500,
+            "unloadingCost": 24000,
+            "totalWeight": 24.2,
+            "transportName": "Длинномер (до 44т)",
+            "tripCount": 1,
+            "isSingleFactory": true,
+            "singleFactoryName": "тубетон",
+            "unloading": {
+              "service_type": "unloading",
+              "tag": "manipulator",
+              "tariff_name": "Манипулятор (8 т)",
+              "tariff_label": "0км+ 24000р",
+              "cost": 24000
+            },
+            "transportDetails": [
+              {
+                "factory_name": "тубетон",
+                "distance_km": 78.4073,
+                "transport_cost": 31500,
+                "trips": [
+                  {
+                    "tag": "long_haul",
+                    "tariff_name": "Длинномер (до 44т)",
+                    "tariff_label": "60-80км 31500р",
+                    "trip_cost": 31500,
+                    "load_ton": 24.2,
+                    "capacity_ton": 44,
+                    "distance_km": 78.4073,
+                    "unloading_included": false,
+                    "items": [
+                      "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 11 шт"
+                    ]
+                  }
+                ],
+                "material_cost": 91300
+              }
+            ],
+            "details": [
+              {
+                "завод": "тубетон",
+                "контакт": "7 903 005-07-77",
+                "товар": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ × 11",
+                "машина": "Длинномер (до 44т) — 1 рейс(ов)",
+                "разгрузка": "Манипулятор (8 т): 24000₽",
+                "расстояние_км": 78.41,
+                "стоимость_материала": 91300,
+                "стоимость_доставки": 31500,
+                "итого": 122800
+              }
+            ],
+            "tripItems": [
+              {
+                "завод": "тубетон",
+                "машина": "Длинномер (до 44т)",
+                "тариф": "60-80км 31500р",
+                "разгрузка": "Манипулятор (8 т): 24000₽",
+                "расстояние_км": 78.41,
+                "загрузка_т": 24.2,
+                "товары": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 11 шт",
+                "стоимость_доставки": 31500
+              }
+            ]
+          },
+          {
+            "totalCost": 150100,
+            "materialCost": 94600,
+            "deliveryCost": 31500,
+            "unloadingCost": 24000,
+            "totalWeight": 24.2,
+            "transportName": "Длинномер (до 44т)",
+            "tripCount": 1,
+            "isSingleFactory": true,
+            "singleFactoryName": "ооо стройсити",
+            "unloading": {
+              "service_type": "unloading",
+              "tag": "manipulator",
+              "tariff_name": "Манипулятор (8 т)",
+              "tariff_label": "0км+ 24000р",
+              "cost": 24000
+            },
+            "transportDetails": [
+              {
+                "factory_name": "ооо стройсити",
+                "distance_km": 62.66,
+                "transport_cost": 31500,
+                "trips": [
+                  {
+                    "tag": "long_haul",
+                    "tariff_name": "Длинномер (до 44т)",
+                    "tariff_label": "60-80км 31500р",
+                    "trip_cost": 31500,
+                    "load_ton": 24.2,
+                    "capacity_ton": 44,
+                    "distance_km": 62.66,
+                    "unloading_included": false,
+                    "items": [
+                      "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 11 шт"
+                    ]
+                  }
+                ],
+                "material_cost": 94600
+              }
+            ],
+            "details": [
+              {
+                "завод": "ооо стройсити",
+                "контакт": "7 965 397 16 30",
+                "товар": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ × 11",
+                "машина": "Длинномер (до 44т) — 1 рейс(ов)",
+                "разгрузка": "Манипулятор (8 т): 24000₽",
+                "расстояние_км": 62.66,
+                "стоимость_материала": 94600,
+                "стоимость_доставки": 31500,
+                "итого": 126100
+              }
+            ],
+            "tripItems": [
+              {
+                "завод": "ооо стройсити",
+                "машина": "Длинномер (до 44т)",
+                "тариф": "60-80км 31500р",
+                "разгрузка": "Манипулятор (8 т): 24000₽",
+                "расстояние_км": 62.66,
+                "загрузка_т": 24.2,
+                "товары": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 11 шт",
+                "стоимость_доставки": 31500
+              }
+            ]
+          },
+          {
+            "totalCost": 150300,
+            "materialCost": 96800,
+            "deliveryCost": 29500,
+            "unloadingCost": 24000,
+            "totalWeight": 24.2,
+            "transportName": "Длинномер (до 44т)",
+            "tripCount": 1,
+            "isSingleFactory": true,
+            "singleFactoryName": "ооо дорожные плиты",
+            "unloading": {
+              "service_type": "unloading",
+              "tag": "manipulator",
+              "tariff_name": "Манипулятор (8 т)",
+              "tariff_label": "0км+ 24000р",
+              "cost": 24000
+            },
+            "transportDetails": [
+              {
+                "factory_name": "ооо дорожные плиты",
+                "distance_km": 57.3272,
+                "transport_cost": 29500,
+                "trips": [
+                  {
+                    "tag": "long_haul",
+                    "tariff_name": "Длинномер (до 44т)",
+                    "tariff_label": "30-60км 29500р",
+                    "trip_cost": 29500,
+                    "load_ton": 24.2,
+                    "capacity_ton": 44,
+                    "distance_km": 57.3272,
+                    "unloading_included": false,
+                    "items": [
+                      "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 11 шт"
+                    ]
+                  }
+                ],
+                "material_cost": 96800
+              }
+            ],
+            "details": [
+              {
+                "завод": "ооо дорожные плиты",
+                "контакт": "7 917 555-10-04",
+                "товар": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ × 11",
+                "машина": "Длинномер (до 44т) — 1 рейс(ов)",
+                "разгрузка": "Манипулятор (8 т): 24000₽",
+                "расстояние_км": 57.33,
+                "стоимость_материала": 96800,
+                "стоимость_доставки": 29500,
+                "итого": 126300
+              }
+            ],
+            "tripItems": [
+              {
+                "завод": "ооо дорожные плиты",
+                "машина": "Длинномер (до 44т)",
+                "тариф": "30-60км 29500р",
+                "разгрузка": "Манипулятор (8 т): 24000₽",
+                "расстояние_км": 57.33,
+                "загрузка_т": 24.2,
+                "товары": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 11 шт",
+                "стоимость_доставки": 29500
+              }
+            ]
+          }
+        ],
+        "selected_variant": 0,
+        "selected_variant_snapshot": {
+          "totalCost": 133900,
+          "materialCost": 97900,
+          "deliveryCost": 36000,
+          "unloadingCost": 0,
+          "totalWeight": 24.2,
+          "transportName": "Манипулятор S(26 т)S",
+          "tripCount": 1,
+          "isSingleFactory": true,
+          "singleFactoryName": "ооо  СК",
+          "unloading": null,
+          "transportDetails": [
+            {
+              "factory_name": "ооо  СК",
+              "distance_km": 10.0519,
+              "transport_cost": 36000,
+              "trips": [
+                {
+                  "tag": "manipulator",
+                  "tariff_name": "Манипулятор S(26 т)S",
+                  "tariff_label": "0-30км 36000р",
+                  "trip_cost": 36000,
+                  "load_ton": 24.2,
+                  "capacity_ton": 26,
+                  "distance_km": 10.0519,
+                  "unloading_included": true,
+                  "items": [
+                    "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 11 шт"
+                  ]
+                }
+              ],
+              "material_cost": 97900
+            }
+          ],
+          "details": [
+            {
+              "завод": "ооо  СК",
+              "контакт": "7 926 103-67-81",
+              "товар": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ × 11",
+              "машина": "Манипулятор S(26 т)S — 1 рейс(ов)",
+              "разгрузка": "—",
+              "расстояние_км": 10.05,
+              "стоимость_материала": 97900,
+              "стоимость_доставки": 36000,
+              "итого": 133900
+            }
+          ],
+          "tripItems": [
+            {
+              "завод": "ооо  СК",
+              "машина": "Манипулятор S(26 т)S",
+              "тариф": "0-30км 36000р",
+              "разгрузка": "—",
+              "расстояние_км": 10.05,
+              "загрузка_т": 24.2,
+              "товары": "Дорожные ПЛИТЫ/ПАГИ 2п30.18.30 ТУ: 11 шт",
+              "стоимость_доставки": 36000
+            }
+          ]
+        },
+        "needs_logistics_check": false,
+        "warning_text": null,
+        "manual_payload": null,
+        "manual_transport_name": null,
+        "manual_notes": null,
+        "created_by_user_id": 1,
+        "created_at": "2026-02-10T15:06:08.805664+00:00",
+        "updated_at": null
       }
     ],
     "organization_invites": [
@@ -2468,18 +3319,74 @@
     ],
     "products": [
       {
+        "id": 166,
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 14 ТУ",
+        "weight_per_item": 4.2,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "price": 24000.0,
+        "is_active": true,
+        "factory_id": 12,
+        "category_id": 1,
+        "created_at": "2026-02-10T14:16:10.472262+00:00",
+        "updated_at": null
+      },
+      {
+        "id": 167,
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 14 ГОСТ",
+        "weight_per_item": 4.2,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "price": 25000.0,
+        "is_active": true,
+        "factory_id": 12,
+        "category_id": 1,
+        "created_at": "2026-02-10T14:16:10.472262+00:00",
+        "updated_at": null
+      },
+      {
+        "id": 168,
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "ПАГ 18 ГОСТ",
+        "weight_per_item": 5.2,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "price": 31000.0,
+        "is_active": true,
+        "factory_id": 12,
+        "category_id": 1,
+        "created_at": "2026-02-10T14:16:10.472262+00:00",
+        "updated_at": null
+      },
+      {
+        "id": 169,
+        "category": "Дорожные ПЛИТЫ/ПАГИ",
+        "subtype": "2п30.18.30 ТУ",
+        "weight_per_item": 2.2,
+        "special_threshold": 0.0,
+        "max_per_trip": 0.0,
+        "price": 9200.0,
+        "is_active": true,
+        "factory_id": 19,
+        "category_id": 1,
+        "created_at": "2026-02-10T14:16:10.472262+00:00",
+        "updated_at": null
+      },
+      {
         "id": 1,
         "category": "Дорожные ПЛИТЫ/ПАГИ",
         "subtype": "2п30.18.30 ТУ",
         "weight_per_item": 2.2,
         "special_threshold": 0.0,
         "max_per_trip": 0.0,
-        "price": 8100.0,
+        "price": 8300.0,
         "is_active": true,
         "factory_id": 1,
         "category_id": 1,
         "created_at": "2026-01-31T12:12:47.354392+00:00",
-        "updated_at": null
+        "updated_at": "2026-02-10T14:16:10.472262+00:00"
       },
       {
         "id": 2,
@@ -2488,12 +3395,12 @@
         "weight_per_item": 2.2,
         "special_threshold": 0.0,
         "max_per_trip": 0.0,
-        "price": 11000.0,
+        "price": 12000.0,
         "is_active": true,
         "factory_id": 1,
         "category_id": 1,
         "created_at": "2026-01-31T12:12:47.354392+00:00",
-        "updated_at": null
+        "updated_at": "2026-02-10T14:16:10.472262+00:00"
       },
       {
         "id": 3,
@@ -5450,6 +6357,1198 @@
         ],
         "user_id": 1,
         "created_at": "2026-02-06T13:11:58.883449+00:00"
+      },
+      {
+        "id": 43,
+        "tariff_id": null,
+        "tariff_name": "Манипулятор S(26 т)S",
+        "action": "bulk_upsert",
+        "before": [
+          {
+            "id": 224,
+            "name": "Манипулятор S(26 т)S",
+            "capacity": 26.0,
+            "tag": "manipulator",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "any",
+            "weight_threshold": null,
+            "min_distance": 0.0,
+            "max_distance": 30.0,
+            "base": 36000.0,
+            "per_km": 230.0,
+            "load_zone": "MKAD",
+            "unload_zone": "MOSCOW_MO",
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "self",
+            "unload_tags": [
+              "self",
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": null,
+            "notes": null
+          },
+          {
+            "id": 225,
+            "name": "Манипулятор S(26 т)S",
+            "capacity": 26.0,
+            "tag": "manipulator",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "any",
+            "weight_threshold": null,
+            "min_distance": 30.0,
+            "max_distance": 60.0,
+            "base": 38000.0,
+            "per_km": 230.0,
+            "load_zone": "MKAD",
+            "unload_zone": "MOSCOW_MO",
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "self",
+            "unload_tags": [
+              "self",
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": null,
+            "notes": null
+          },
+          {
+            "id": 226,
+            "name": "Манипулятор S(26 т)S",
+            "capacity": 26.0,
+            "tag": "manipulator",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "any",
+            "weight_threshold": null,
+            "min_distance": 60.0,
+            "max_distance": 80.0,
+            "base": 40000.0,
+            "per_km": 230.0,
+            "load_zone": "MKAD",
+            "unload_zone": "MOSCOW_MO",
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "self",
+            "unload_tags": [
+              "self",
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": null,
+            "notes": null
+          },
+          {
+            "id": 227,
+            "name": "Манипулятор S(26 т)S",
+            "capacity": 26.0,
+            "tag": "manipulator",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "any",
+            "weight_threshold": null,
+            "min_distance": 80.0,
+            "max_distance": 100.0,
+            "base": 42000.0,
+            "per_km": 230.0,
+            "load_zone": "MKAD",
+            "unload_zone": "MOSCOW_MO",
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "self",
+            "unload_tags": [
+              "self",
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": null,
+            "notes": null
+          },
+          {
+            "id": 228,
+            "name": "Манипулятор S(26 т)S",
+            "capacity": 26.0,
+            "tag": "manipulator",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "any",
+            "weight_threshold": null,
+            "min_distance": 100.0,
+            "max_distance": 120.0,
+            "base": 44000.0,
+            "per_km": 230.0,
+            "load_zone": "MKAD",
+            "unload_zone": "MOSCOW_MO",
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "self",
+            "unload_tags": [
+              "self",
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": null,
+            "notes": null
+          },
+          {
+            "id": 229,
+            "name": "Манипулятор S(26 т)S",
+            "capacity": 26.0,
+            "tag": "manipulator",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "any",
+            "weight_threshold": null,
+            "min_distance": 0.0,
+            "max_distance": 0.0,
+            "base": 24000.0,
+            "per_km": 0.0,
+            "load_zone": "MKAD",
+            "unload_zone": "MOSCOW_MO",
+            "service_type": "unloading",
+            "self_loading": false,
+            "unload_capability": "self",
+            "unload_tags": [
+              "self",
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": null,
+            "notes": null
+          }
+        ],
+        "after": [
+          {
+            "id": 236,
+            "name": "Манипулятор S(26 т)S",
+            "capacity": 26.0,
+            "tag": "manipulator",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "any",
+            "weight_threshold": null,
+            "min_distance": 0.0,
+            "max_distance": 30.0,
+            "base": 36000.0,
+            "per_km": 230.0,
+            "load_zone": "MKAD",
+            "unload_zone": "MOSCOW_MO",
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "self",
+            "unload_tags": [
+              "self",
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": true,
+            "description": null,
+            "notes": null
+          },
+          {
+            "id": 237,
+            "name": "Манипулятор S(26 т)S",
+            "capacity": 26.0,
+            "tag": "manipulator",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "any",
+            "weight_threshold": null,
+            "min_distance": 30.0,
+            "max_distance": 60.0,
+            "base": 38000.0,
+            "per_km": 230.0,
+            "load_zone": "MKAD",
+            "unload_zone": "MOSCOW_MO",
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "self",
+            "unload_tags": [
+              "self",
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": true,
+            "description": null,
+            "notes": null
+          },
+          {
+            "id": 238,
+            "name": "Манипулятор S(26 т)S",
+            "capacity": 26.0,
+            "tag": "manipulator",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "any",
+            "weight_threshold": null,
+            "min_distance": 60.0,
+            "max_distance": 80.0,
+            "base": 40000.0,
+            "per_km": 230.0,
+            "load_zone": "MKAD",
+            "unload_zone": "MOSCOW_MO",
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "self",
+            "unload_tags": [
+              "self",
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": true,
+            "description": null,
+            "notes": null
+          },
+          {
+            "id": 239,
+            "name": "Манипулятор S(26 т)S",
+            "capacity": 26.0,
+            "tag": "manipulator",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "any",
+            "weight_threshold": null,
+            "min_distance": 80.0,
+            "max_distance": 100.0,
+            "base": 42000.0,
+            "per_km": 230.0,
+            "load_zone": "MKAD",
+            "unload_zone": "MOSCOW_MO",
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "self",
+            "unload_tags": [
+              "self",
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": true,
+            "description": null,
+            "notes": null
+          },
+          {
+            "id": 240,
+            "name": "Манипулятор S(26 т)S",
+            "capacity": 26.0,
+            "tag": "manipulator",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "any",
+            "weight_threshold": null,
+            "min_distance": 100.0,
+            "max_distance": 120.0,
+            "base": 44000.0,
+            "per_km": 230.0,
+            "load_zone": "MKAD",
+            "unload_zone": "MOSCOW_MO",
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "self",
+            "unload_tags": [
+              "self",
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": true,
+            "description": null,
+            "notes": null
+          }
+        ],
+        "user_id": 1,
+        "created_at": "2026-02-10T14:56:38.005610+00:00"
+      },
+      {
+        "id": 44,
+        "tariff_id": null,
+        "tariff_name": "Манипулятор S(35 т)S",
+        "action": "bulk_upsert",
+        "before": [
+          {
+            "id": 230,
+            "name": "Манипулятор S(35 т)S",
+            "capacity": 35.0,
+            "tag": "manipulator",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "any",
+            "weight_threshold": null,
+            "min_distance": 0.0,
+            "max_distance": 30.0,
+            "base": 40000.0,
+            "per_km": 240.0,
+            "load_zone": "MKAD",
+            "unload_zone": "MOSCOW_MO",
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "self",
+            "unload_tags": [
+              "self",
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": null,
+            "notes": null
+          },
+          {
+            "id": 231,
+            "name": "Манипулятор S(35 т)S",
+            "capacity": 35.0,
+            "tag": "manipulator",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "any",
+            "weight_threshold": null,
+            "min_distance": 30.0,
+            "max_distance": 60.0,
+            "base": 42000.0,
+            "per_km": 240.0,
+            "load_zone": "MKAD",
+            "unload_zone": "MOSCOW_MO",
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "self",
+            "unload_tags": [
+              "self",
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": null,
+            "notes": null
+          },
+          {
+            "id": 232,
+            "name": "Манипулятор S(35 т)S",
+            "capacity": 35.0,
+            "tag": "manipulator",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "any",
+            "weight_threshold": null,
+            "min_distance": 60.0,
+            "max_distance": 80.0,
+            "base": 44000.0,
+            "per_km": 240.0,
+            "load_zone": "MKAD",
+            "unload_zone": "MOSCOW_MO",
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "self",
+            "unload_tags": [
+              "self",
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": null,
+            "notes": null
+          },
+          {
+            "id": 233,
+            "name": "Манипулятор S(35 т)S",
+            "capacity": 35.0,
+            "tag": "manipulator",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "any",
+            "weight_threshold": null,
+            "min_distance": 80.0,
+            "max_distance": 100.0,
+            "base": 46000.0,
+            "per_km": 240.0,
+            "load_zone": "MKAD",
+            "unload_zone": "MOSCOW_MO",
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "self",
+            "unload_tags": [
+              "self",
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": null,
+            "notes": null
+          },
+          {
+            "id": 234,
+            "name": "Манипулятор S(35 т)S",
+            "capacity": 35.0,
+            "tag": "manipulator",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "any",
+            "weight_threshold": null,
+            "min_distance": 100.0,
+            "max_distance": 120.0,
+            "base": 55000.0,
+            "per_km": 240.0,
+            "load_zone": "MKAD",
+            "unload_zone": "MOSCOW_MO",
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "self",
+            "unload_tags": [
+              "self",
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": null,
+            "notes": null
+          },
+          {
+            "id": 235,
+            "name": "Манипулятор S(35 т)S",
+            "capacity": 35.0,
+            "tag": "manipulator",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "any",
+            "weight_threshold": null,
+            "min_distance": 0.0,
+            "max_distance": 0.0,
+            "base": 24000.0,
+            "per_km": 0.0,
+            "load_zone": "MKAD",
+            "unload_zone": "MOSCOW_MO",
+            "service_type": "unloading",
+            "self_loading": false,
+            "unload_capability": "self",
+            "unload_tags": [
+              "self",
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": null,
+            "notes": null
+          }
+        ],
+        "after": [
+          {
+            "id": 241,
+            "name": "Манипулятор S(35 т)S",
+            "capacity": 35.0,
+            "tag": "manipulator",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "any",
+            "weight_threshold": null,
+            "min_distance": 0.0,
+            "max_distance": 30.0,
+            "base": 40000.0,
+            "per_km": 240.0,
+            "load_zone": "MKAD",
+            "unload_zone": "MOSCOW_MO",
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "self",
+            "unload_tags": [
+              "self",
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": true,
+            "description": null,
+            "notes": null
+          },
+          {
+            "id": 242,
+            "name": "Манипулятор S(35 т)S",
+            "capacity": 35.0,
+            "tag": "manipulator",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "any",
+            "weight_threshold": null,
+            "min_distance": 30.0,
+            "max_distance": 60.0,
+            "base": 42000.0,
+            "per_km": 240.0,
+            "load_zone": "MKAD",
+            "unload_zone": "MOSCOW_MO",
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "self",
+            "unload_tags": [
+              "self",
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": true,
+            "description": null,
+            "notes": null
+          },
+          {
+            "id": 243,
+            "name": "Манипулятор S(35 т)S",
+            "capacity": 35.0,
+            "tag": "manipulator",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "any",
+            "weight_threshold": null,
+            "min_distance": 60.0,
+            "max_distance": 80.0,
+            "base": 44000.0,
+            "per_km": 240.0,
+            "load_zone": "MKAD",
+            "unload_zone": "MOSCOW_MO",
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "self",
+            "unload_tags": [
+              "self",
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": true,
+            "description": null,
+            "notes": null
+          },
+          {
+            "id": 244,
+            "name": "Манипулятор S(35 т)S",
+            "capacity": 35.0,
+            "tag": "manipulator",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "any",
+            "weight_threshold": null,
+            "min_distance": 80.0,
+            "max_distance": 100.0,
+            "base": 46000.0,
+            "per_km": 240.0,
+            "load_zone": "MKAD",
+            "unload_zone": "MOSCOW_MO",
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "self",
+            "unload_tags": [
+              "self",
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": true,
+            "description": null,
+            "notes": null
+          },
+          {
+            "id": 245,
+            "name": "Манипулятор S(35 т)S",
+            "capacity": 35.0,
+            "tag": "manipulator",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "any",
+            "weight_threshold": null,
+            "min_distance": 100.0,
+            "max_distance": 120.0,
+            "base": 55000.0,
+            "per_km": 240.0,
+            "load_zone": "MKAD",
+            "unload_zone": "MOSCOW_MO",
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "self",
+            "unload_tags": [
+              "self",
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": true,
+            "description": null,
+            "notes": null
+          }
+        ],
+        "user_id": 1,
+        "created_at": "2026-02-10T14:56:45.349920+00:00"
+      },
+      {
+        "id": 45,
+        "tariff_id": null,
+        "tariff_name": "Длинномер (до 44т)",
+        "action": "bulk_upsert",
+        "before": [
+          {
+            "id": 131,
+            "name": "Длинномер (до 44т)",
+            "capacity": 44.0,
+            "tag": "long_haul",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "gt",
+            "weight_threshold": 22.0,
+            "min_distance": 0.0,
+            "max_distance": 30.0,
+            "base": 27500.0,
+            "per_km": 300.0,
+            "load_zone": null,
+            "unload_zone": null,
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "crane",
+            "unload_tags": [
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": "Тяжеловесный длинномер",
+            "notes": "Длинномер без специальных цен"
+          },
+          {
+            "id": 132,
+            "name": "Длинномер (до 44т)",
+            "capacity": 44.0,
+            "tag": "long_haul",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "gt",
+            "weight_threshold": 22.0,
+            "min_distance": 30.0,
+            "max_distance": 60.0,
+            "base": 29500.0,
+            "per_km": 300.0,
+            "load_zone": null,
+            "unload_zone": null,
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "crane",
+            "unload_tags": [
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": "Тяжеловесный длинномер",
+            "notes": "Длинномер без специальных цен"
+          },
+          {
+            "id": 133,
+            "name": "Длинномер (до 44т)",
+            "capacity": 44.0,
+            "tag": "long_haul",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "gt",
+            "weight_threshold": 22.0,
+            "min_distance": 60.0,
+            "max_distance": 80.0,
+            "base": 31500.0,
+            "per_km": 300.0,
+            "load_zone": null,
+            "unload_zone": null,
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "crane",
+            "unload_tags": [
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": "Тяжеловесный длинномер",
+            "notes": "Длинномер без специальных цен"
+          },
+          {
+            "id": 134,
+            "name": "Длинномер (до 44т)",
+            "capacity": 44.0,
+            "tag": "long_haul",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "gt",
+            "weight_threshold": 22.0,
+            "min_distance": 80.0,
+            "max_distance": 100.0,
+            "base": 33500.0,
+            "per_km": 300.0,
+            "load_zone": null,
+            "unload_zone": null,
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "crane",
+            "unload_tags": [
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": "Тяжеловесный длинномер",
+            "notes": "Длинномер без специальных цен"
+          },
+          {
+            "id": 135,
+            "name": "Длинномер (до 44т)",
+            "capacity": 44.0,
+            "tag": "long_haul",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "gt",
+            "weight_threshold": 22.0,
+            "min_distance": 100.0,
+            "max_distance": 120.0,
+            "base": 35500.0,
+            "per_km": 300.0,
+            "load_zone": null,
+            "unload_zone": null,
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "crane",
+            "unload_tags": [
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": "Тяжеловесный длинномер",
+            "notes": "Длинномер без специальных цен"
+          },
+          {
+            "id": 136,
+            "name": "Длинномер (до 44т)",
+            "capacity": 44.0,
+            "tag": "long_haul",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "le",
+            "weight_threshold": 44.0,
+            "min_distance": 0.0,
+            "max_distance": 30.0,
+            "base": 27500.0,
+            "per_km": 300.0,
+            "load_zone": null,
+            "unload_zone": null,
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "crane",
+            "unload_tags": [
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": "Тяжеловесный длинномер",
+            "notes": "Длинномер без специальных цен"
+          },
+          {
+            "id": 137,
+            "name": "Длинномер (до 44т)",
+            "capacity": 44.0,
+            "tag": "long_haul",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "le",
+            "weight_threshold": 44.0,
+            "min_distance": 30.0,
+            "max_distance": 60.0,
+            "base": 29500.0,
+            "per_km": 300.0,
+            "load_zone": null,
+            "unload_zone": null,
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "crane",
+            "unload_tags": [
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": "Тяжеловесный длинномер",
+            "notes": "Длинномер без специальных цен"
+          },
+          {
+            "id": 138,
+            "name": "Длинномер (до 44т)",
+            "capacity": 44.0,
+            "tag": "long_haul",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "le",
+            "weight_threshold": 44.0,
+            "min_distance": 60.0,
+            "max_distance": 80.0,
+            "base": 31500.0,
+            "per_km": 300.0,
+            "load_zone": null,
+            "unload_zone": null,
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "crane",
+            "unload_tags": [
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": "Тяжеловесный длинномер",
+            "notes": "Длинномер без специальных цен"
+          },
+          {
+            "id": 139,
+            "name": "Длинномер (до 44т)",
+            "capacity": 44.0,
+            "tag": "long_haul",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "le",
+            "weight_threshold": 44.0,
+            "min_distance": 80.0,
+            "max_distance": 100.0,
+            "base": 33500.0,
+            "per_km": 300.0,
+            "load_zone": null,
+            "unload_zone": null,
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "crane",
+            "unload_tags": [
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": "Тяжеловесный длинномер",
+            "notes": "Длинномер без специальных цен"
+          },
+          {
+            "id": 140,
+            "name": "Длинномер (до 44т)",
+            "capacity": 44.0,
+            "tag": "long_haul",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "le",
+            "weight_threshold": 44.0,
+            "min_distance": 100.0,
+            "max_distance": 120.0,
+            "base": 35500.0,
+            "per_km": 300.0,
+            "load_zone": null,
+            "unload_zone": null,
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "crane",
+            "unload_tags": [
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": "Тяжеловесный длинномер",
+            "notes": "Длинномер без специальных цен"
+          }
+        ],
+        "after": [
+          {
+            "id": 246,
+            "name": "Длинномер (до 44т)",
+            "capacity": 44.0,
+            "tag": "long_haul",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "le",
+            "weight_threshold": 22.0,
+            "min_distance": 0.0,
+            "max_distance": 30.0,
+            "base": 22000.0,
+            "per_km": 200.0,
+            "load_zone": null,
+            "unload_zone": null,
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "crane",
+            "unload_tags": [
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": "Тяжеловесный длинномер",
+            "notes": "Длинномер без специальных цен"
+          },
+          {
+            "id": 247,
+            "name": "Длинномер (до 44т)",
+            "capacity": 44.0,
+            "tag": "long_haul",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "le",
+            "weight_threshold": 22.0,
+            "min_distance": 30.0,
+            "max_distance": 60.0,
+            "base": 24000.0,
+            "per_km": 200.0,
+            "load_zone": null,
+            "unload_zone": null,
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "crane",
+            "unload_tags": [
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": "Тяжеловесный длинномер",
+            "notes": "Длинномер без специальных цен"
+          },
+          {
+            "id": 248,
+            "name": "Длинномер (до 44т)",
+            "capacity": 44.0,
+            "tag": "long_haul",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "le",
+            "weight_threshold": 22.0,
+            "min_distance": 60.0,
+            "max_distance": 80.0,
+            "base": 26000.0,
+            "per_km": 200.0,
+            "load_zone": null,
+            "unload_zone": null,
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "crane",
+            "unload_tags": [
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": "Тяжеловесный длинномер",
+            "notes": "Длинномер без специальных цен"
+          },
+          {
+            "id": 249,
+            "name": "Длинномер (до 44т)",
+            "capacity": 44.0,
+            "tag": "long_haul",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "le",
+            "weight_threshold": 22.0,
+            "min_distance": 80.0,
+            "max_distance": 100.0,
+            "base": 28000.0,
+            "per_km": 200.0,
+            "load_zone": null,
+            "unload_zone": null,
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "crane",
+            "unload_tags": [
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": "Тяжеловесный длинномер",
+            "notes": "Длинномер без специальных цен"
+          },
+          {
+            "id": 250,
+            "name": "Длинномер (до 44т)",
+            "capacity": 44.0,
+            "tag": "long_haul",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "le",
+            "weight_threshold": 22.0,
+            "min_distance": 100.0,
+            "max_distance": 120.0,
+            "base": 30000.0,
+            "per_km": 200.0,
+            "load_zone": null,
+            "unload_zone": null,
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "crane",
+            "unload_tags": [
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": "Тяжеловесный длинномер",
+            "notes": "Длинномер без специальных цен"
+          },
+          {
+            "id": 251,
+            "name": "Длинномер (до 44т)",
+            "capacity": 44.0,
+            "tag": "long_haul",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "gt",
+            "weight_threshold": 22.0,
+            "min_distance": 0.0,
+            "max_distance": 30.0,
+            "base": 27500.0,
+            "per_km": 300.0,
+            "load_zone": null,
+            "unload_zone": null,
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "crane",
+            "unload_tags": [
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": "Тяжеловесный длинномер",
+            "notes": "Длинномер без специальных цен"
+          },
+          {
+            "id": 252,
+            "name": "Длинномер (до 44т)",
+            "capacity": 44.0,
+            "tag": "long_haul",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "gt",
+            "weight_threshold": 22.0,
+            "min_distance": 30.0,
+            "max_distance": 60.0,
+            "base": 29500.0,
+            "per_km": 300.0,
+            "load_zone": null,
+            "unload_zone": null,
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "crane",
+            "unload_tags": [
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": "Тяжеловесный длинномер",
+            "notes": "Длинномер без специальных цен"
+          },
+          {
+            "id": 253,
+            "name": "Длинномер (до 44т)",
+            "capacity": 44.0,
+            "tag": "long_haul",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "gt",
+            "weight_threshold": 22.0,
+            "min_distance": 60.0,
+            "max_distance": 80.0,
+            "base": 31500.0,
+            "per_km": 300.0,
+            "load_zone": null,
+            "unload_zone": null,
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "crane",
+            "unload_tags": [
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": "Тяжеловесный длинномер",
+            "notes": "Длинномер без специальных цен"
+          },
+          {
+            "id": 254,
+            "name": "Длинномер (до 44т)",
+            "capacity": 44.0,
+            "tag": "long_haul",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "gt",
+            "weight_threshold": 22.0,
+            "min_distance": 80.0,
+            "max_distance": 100.0,
+            "base": 33500.0,
+            "per_km": 300.0,
+            "load_zone": null,
+            "unload_zone": null,
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "crane",
+            "unload_tags": [
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": "Тяжеловесный длинномер",
+            "notes": "Длинномер без специальных цен"
+          },
+          {
+            "id": 255,
+            "name": "Длинномер (до 44т)",
+            "capacity": 44.0,
+            "tag": "long_haul",
+            "base_transport_name": null,
+            "base_transport_tag": null,
+            "weight_condition": "gt",
+            "weight_threshold": 22.0,
+            "min_distance": 100.0,
+            "max_distance": 120.0,
+            "base": 35500.0,
+            "per_km": 300.0,
+            "load_zone": null,
+            "unload_zone": null,
+            "service_type": "delivery",
+            "self_loading": false,
+            "unload_capability": "crane",
+            "unload_tags": [
+              "crane",
+              "manipulator"
+            ],
+            "is_active": true,
+            "unloading_included": false,
+            "description": "Тяжеловесный длинномер",
+            "notes": "Длинномер без специальных цен"
+          }
+        ],
+        "user_id": 1,
+        "created_at": "2026-02-10T14:58:18.770802+00:00"
       },
       {
         "id": 8,
@@ -15057,7 +17156,7 @@
     ],
     "tariffs": [
       {
-        "id": 224,
+        "id": 236,
         "name": "Манипулятор S(26 т)S",
         "capacity": 26.0,
         "tag": "manipulator",
@@ -15079,17 +17178,18 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": true,
         "description": null,
         "notes": null,
         "base_transport_name": null,
         "base_transport_tag": null,
         "created_by_user_id": 1,
         "updated_by_user_id": 1,
-        "created_at": "2026-02-06T13:11:51.461738+00:00",
+        "created_at": "2026-02-10T14:56:37.982723+00:00",
         "updated_at": null
       },
       {
-        "id": 225,
+        "id": 237,
         "name": "Манипулятор S(26 т)S",
         "capacity": 26.0,
         "tag": "manipulator",
@@ -15111,17 +17211,18 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": true,
         "description": null,
         "notes": null,
         "base_transport_name": null,
         "base_transport_tag": null,
         "created_by_user_id": 1,
         "updated_by_user_id": 1,
-        "created_at": "2026-02-06T13:11:51.461738+00:00",
+        "created_at": "2026-02-10T14:56:37.982723+00:00",
         "updated_at": null
       },
       {
-        "id": 226,
+        "id": 238,
         "name": "Манипулятор S(26 т)S",
         "capacity": 26.0,
         "tag": "manipulator",
@@ -15143,17 +17244,18 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": true,
         "description": null,
         "notes": null,
         "base_transport_name": null,
         "base_transport_tag": null,
         "created_by_user_id": 1,
         "updated_by_user_id": 1,
-        "created_at": "2026-02-06T13:11:51.461738+00:00",
+        "created_at": "2026-02-10T14:56:37.982723+00:00",
         "updated_at": null
       },
       {
-        "id": 227,
+        "id": 239,
         "name": "Манипулятор S(26 т)S",
         "capacity": 26.0,
         "tag": "manipulator",
@@ -15175,17 +17277,18 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": true,
         "description": null,
         "notes": null,
         "base_transport_name": null,
         "base_transport_tag": null,
         "created_by_user_id": 1,
         "updated_by_user_id": 1,
-        "created_at": "2026-02-06T13:11:51.461738+00:00",
+        "created_at": "2026-02-10T14:56:37.982723+00:00",
         "updated_at": null
       },
       {
-        "id": 228,
+        "id": 240,
         "name": "Манипулятор S(26 т)S",
         "capacity": 26.0,
         "tag": "manipulator",
@@ -15207,235 +17310,18 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": true,
         "description": null,
         "notes": null,
         "base_transport_name": null,
         "base_transport_tag": null,
         "created_by_user_id": 1,
         "updated_by_user_id": 1,
-        "created_at": "2026-02-06T13:11:51.461738+00:00",
+        "created_at": "2026-02-10T14:56:37.982723+00:00",
         "updated_at": null
       },
       {
-        "id": 229,
-        "name": "Манипулятор S(26 т)S",
-        "capacity": 26.0,
-        "tag": "manipulator",
-        "weight_if": "any",
-        "weight_condition": "any",
-        "weight_threshold": null,
-        "min_distance": 0.0,
-        "max_distance": 0.0,
-        "base": 24000.0,
-        "per_km": 0.0,
-        "load_zone": "MKAD",
-        "unload_zone": "MOSCOW_MO",
-        "service_type": "unloading",
-        "self_loading": false,
-        "unload_capability": "self",
-        "unload_tags": [
-          "self",
-          "crane",
-          "manipulator"
-        ],
-        "is_active": true,
-        "description": null,
-        "notes": null,
-        "base_transport_name": null,
-        "base_transport_tag": null,
-        "created_by_user_id": 1,
-        "updated_by_user_id": 1,
-        "created_at": "2026-02-06T13:11:51.461738+00:00",
-        "updated_at": null
-      },
-      {
-        "id": 131,
-        "name": "Длинномер (до 44т)",
-        "capacity": 44.0,
-        "tag": "long_haul",
-        "weight_if": ">22.0",
-        "weight_condition": "gt",
-        "weight_threshold": 22.0,
-        "min_distance": 0.0,
-        "max_distance": 30.0,
-        "base": 27500.0,
-        "per_km": 300.0,
-        "load_zone": null,
-        "unload_zone": null,
-        "service_type": "delivery",
-        "self_loading": false,
-        "unload_capability": "crane",
-        "unload_tags": [
-          "crane",
-          "manipulator"
-        ],
-        "is_active": true,
-        "description": "Тяжеловесный длинномер",
-        "notes": "Длинномер без специальных цен",
-        "base_transport_name": null,
-        "base_transport_tag": null,
-        "created_by_user_id": 2,
-        "updated_by_user_id": 2,
-        "created_at": "2026-02-03T12:32:15.446079+00:00",
-        "updated_at": null
-      },
-      {
-        "id": 132,
-        "name": "Длинномер (до 44т)",
-        "capacity": 44.0,
-        "tag": "long_haul",
-        "weight_if": ">22.0",
-        "weight_condition": "gt",
-        "weight_threshold": 22.0,
-        "min_distance": 30.0,
-        "max_distance": 60.0,
-        "base": 29500.0,
-        "per_km": 300.0,
-        "load_zone": null,
-        "unload_zone": null,
-        "service_type": "delivery",
-        "self_loading": false,
-        "unload_capability": "crane",
-        "unload_tags": [
-          "crane",
-          "manipulator"
-        ],
-        "is_active": true,
-        "description": "Тяжеловесный длинномер",
-        "notes": "Длинномер без специальных цен",
-        "base_transport_name": null,
-        "base_transport_tag": null,
-        "created_by_user_id": 2,
-        "updated_by_user_id": 2,
-        "created_at": "2026-02-03T12:32:15.446079+00:00",
-        "updated_at": null
-      },
-      {
-        "id": 133,
-        "name": "Длинномер (до 44т)",
-        "capacity": 44.0,
-        "tag": "long_haul",
-        "weight_if": ">22.0",
-        "weight_condition": "gt",
-        "weight_threshold": 22.0,
-        "min_distance": 60.0,
-        "max_distance": 80.0,
-        "base": 31500.0,
-        "per_km": 300.0,
-        "load_zone": null,
-        "unload_zone": null,
-        "service_type": "delivery",
-        "self_loading": false,
-        "unload_capability": "crane",
-        "unload_tags": [
-          "crane",
-          "manipulator"
-        ],
-        "is_active": true,
-        "description": "Тяжеловесный длинномер",
-        "notes": "Длинномер без специальных цен",
-        "base_transport_name": null,
-        "base_transport_tag": null,
-        "created_by_user_id": 2,
-        "updated_by_user_id": 2,
-        "created_at": "2026-02-03T12:32:15.446079+00:00",
-        "updated_at": null
-      },
-      {
-        "id": 134,
-        "name": "Длинномер (до 44т)",
-        "capacity": 44.0,
-        "tag": "long_haul",
-        "weight_if": ">22.0",
-        "weight_condition": "gt",
-        "weight_threshold": 22.0,
-        "min_distance": 80.0,
-        "max_distance": 100.0,
-        "base": 33500.0,
-        "per_km": 300.0,
-        "load_zone": null,
-        "unload_zone": null,
-        "service_type": "delivery",
-        "self_loading": false,
-        "unload_capability": "crane",
-        "unload_tags": [
-          "crane",
-          "manipulator"
-        ],
-        "is_active": true,
-        "description": "Тяжеловесный длинномер",
-        "notes": "Длинномер без специальных цен",
-        "base_transport_name": null,
-        "base_transport_tag": null,
-        "created_by_user_id": 2,
-        "updated_by_user_id": 2,
-        "created_at": "2026-02-03T12:32:15.446079+00:00",
-        "updated_at": null
-      },
-      {
-        "id": 135,
-        "name": "Длинномер (до 44т)",
-        "capacity": 44.0,
-        "tag": "long_haul",
-        "weight_if": ">22.0",
-        "weight_condition": "gt",
-        "weight_threshold": 22.0,
-        "min_distance": 100.0,
-        "max_distance": 120.0,
-        "base": 35500.0,
-        "per_km": 300.0,
-        "load_zone": null,
-        "unload_zone": null,
-        "service_type": "delivery",
-        "self_loading": false,
-        "unload_capability": "crane",
-        "unload_tags": [
-          "crane",
-          "manipulator"
-        ],
-        "is_active": true,
-        "description": "Тяжеловесный длинномер",
-        "notes": "Длинномер без специальных цен",
-        "base_transport_name": null,
-        "base_transport_tag": null,
-        "created_by_user_id": 2,
-        "updated_by_user_id": 2,
-        "created_at": "2026-02-03T12:32:15.446079+00:00",
-        "updated_at": null
-      },
-      {
-        "id": 136,
-        "name": "Длинномер (до 44т)",
-        "capacity": 44.0,
-        "tag": "long_haul",
-        "weight_if": "≤44.0",
-        "weight_condition": "le",
-        "weight_threshold": 44.0,
-        "min_distance": 0.0,
-        "max_distance": 30.0,
-        "base": 27500.0,
-        "per_km": 300.0,
-        "load_zone": null,
-        "unload_zone": null,
-        "service_type": "delivery",
-        "self_loading": false,
-        "unload_capability": "crane",
-        "unload_tags": [
-          "crane",
-          "manipulator"
-        ],
-        "is_active": true,
-        "description": "Тяжеловесный длинномер",
-        "notes": "Длинномер без специальных цен",
-        "base_transport_name": null,
-        "base_transport_tag": null,
-        "created_by_user_id": 2,
-        "updated_by_user_id": 2,
-        "created_at": "2026-02-03T12:32:15.446079+00:00",
-        "updated_at": null
-      },
-      {
-        "id": 230,
+        "id": 241,
         "name": "Манипулятор S(35 т)S",
         "capacity": 35.0,
         "tag": "manipulator",
@@ -15457,17 +17343,18 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": true,
         "description": null,
         "notes": null,
         "base_transport_name": null,
         "base_transport_tag": null,
         "created_by_user_id": 1,
         "updated_by_user_id": 1,
-        "created_at": "2026-02-06T13:11:58.876538+00:00",
+        "created_at": "2026-02-10T14:56:45.340714+00:00",
         "updated_at": null
       },
       {
-        "id": 231,
+        "id": 242,
         "name": "Манипулятор S(35 т)S",
         "capacity": 35.0,
         "tag": "manipulator",
@@ -15489,17 +17376,18 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": true,
         "description": null,
         "notes": null,
         "base_transport_name": null,
         "base_transport_tag": null,
         "created_by_user_id": 1,
         "updated_by_user_id": 1,
-        "created_at": "2026-02-06T13:11:58.876538+00:00",
+        "created_at": "2026-02-10T14:56:45.340714+00:00",
         "updated_at": null
       },
       {
-        "id": 232,
+        "id": 243,
         "name": "Манипулятор S(35 т)S",
         "capacity": 35.0,
         "tag": "manipulator",
@@ -15521,17 +17409,18 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": true,
         "description": null,
         "notes": null,
         "base_transport_name": null,
         "base_transport_tag": null,
         "created_by_user_id": 1,
         "updated_by_user_id": 1,
-        "created_at": "2026-02-06T13:11:58.876538+00:00",
+        "created_at": "2026-02-10T14:56:45.340714+00:00",
         "updated_at": null
       },
       {
-        "id": 233,
+        "id": 244,
         "name": "Манипулятор S(35 т)S",
         "capacity": 35.0,
         "tag": "manipulator",
@@ -15553,17 +17442,18 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": true,
         "description": null,
         "notes": null,
         "base_transport_name": null,
         "base_transport_tag": null,
         "created_by_user_id": 1,
         "updated_by_user_id": 1,
-        "created_at": "2026-02-06T13:11:58.876538+00:00",
+        "created_at": "2026-02-10T14:56:45.340714+00:00",
         "updated_at": null
       },
       {
-        "id": 234,
+        "id": 245,
         "name": "Манипулятор S(35 т)S",
         "capacity": 35.0,
         "tag": "manipulator",
@@ -15585,55 +17475,216 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": true,
         "description": null,
         "notes": null,
         "base_transport_name": null,
         "base_transport_tag": null,
         "created_by_user_id": 1,
         "updated_by_user_id": 1,
-        "created_at": "2026-02-06T13:11:58.876538+00:00",
+        "created_at": "2026-02-10T14:56:45.340714+00:00",
         "updated_at": null
       },
       {
-        "id": 235,
-        "name": "Манипулятор S(35 т)S",
-        "capacity": 35.0,
-        "tag": "manipulator",
-        "weight_if": "any",
-        "weight_condition": "any",
-        "weight_threshold": null,
+        "id": 246,
+        "name": "Длинномер (до 44т)",
+        "capacity": 44.0,
+        "tag": "long_haul",
+        "weight_if": "≤22.0",
+        "weight_condition": "le",
+        "weight_threshold": 22.0,
         "min_distance": 0.0,
-        "max_distance": 0.0,
-        "base": 24000.0,
-        "per_km": 0.0,
-        "load_zone": "MKAD",
-        "unload_zone": "MOSCOW_MO",
-        "service_type": "unloading",
+        "max_distance": 30.0,
+        "base": 22000.0,
+        "per_km": 200.0,
+        "load_zone": null,
+        "unload_zone": null,
+        "service_type": "delivery",
         "self_loading": false,
-        "unload_capability": "self",
+        "unload_capability": "crane",
         "unload_tags": [
-          "self",
           "crane",
           "manipulator"
         ],
         "is_active": true,
-        "description": null,
-        "notes": null,
+        "unloading_included": false,
+        "description": "Тяжеловесный длинномер",
+        "notes": "Длинномер без специальных цен",
         "base_transport_name": null,
         "base_transport_tag": null,
         "created_by_user_id": 1,
         "updated_by_user_id": 1,
-        "created_at": "2026-02-06T13:11:58.876538+00:00",
+        "created_at": "2026-02-10T14:58:18.760194+00:00",
         "updated_at": null
       },
       {
-        "id": 137,
+        "id": 247,
         "name": "Длинномер (до 44т)",
         "capacity": 44.0,
         "tag": "long_haul",
-        "weight_if": "≤44.0",
+        "weight_if": "≤22.0",
         "weight_condition": "le",
-        "weight_threshold": 44.0,
+        "weight_threshold": 22.0,
+        "min_distance": 30.0,
+        "max_distance": 60.0,
+        "base": 24000.0,
+        "per_km": 200.0,
+        "load_zone": null,
+        "unload_zone": null,
+        "service_type": "delivery",
+        "self_loading": false,
+        "unload_capability": "crane",
+        "unload_tags": [
+          "crane",
+          "manipulator"
+        ],
+        "is_active": true,
+        "unloading_included": false,
+        "description": "Тяжеловесный длинномер",
+        "notes": "Длинномер без специальных цен",
+        "base_transport_name": null,
+        "base_transport_tag": null,
+        "created_by_user_id": 1,
+        "updated_by_user_id": 1,
+        "created_at": "2026-02-10T14:58:18.760194+00:00",
+        "updated_at": null
+      },
+      {
+        "id": 248,
+        "name": "Длинномер (до 44т)",
+        "capacity": 44.0,
+        "tag": "long_haul",
+        "weight_if": "≤22.0",
+        "weight_condition": "le",
+        "weight_threshold": 22.0,
+        "min_distance": 60.0,
+        "max_distance": 80.0,
+        "base": 26000.0,
+        "per_km": 200.0,
+        "load_zone": null,
+        "unload_zone": null,
+        "service_type": "delivery",
+        "self_loading": false,
+        "unload_capability": "crane",
+        "unload_tags": [
+          "crane",
+          "manipulator"
+        ],
+        "is_active": true,
+        "unloading_included": false,
+        "description": "Тяжеловесный длинномер",
+        "notes": "Длинномер без специальных цен",
+        "base_transport_name": null,
+        "base_transport_tag": null,
+        "created_by_user_id": 1,
+        "updated_by_user_id": 1,
+        "created_at": "2026-02-10T14:58:18.760194+00:00",
+        "updated_at": null
+      },
+      {
+        "id": 249,
+        "name": "Длинномер (до 44т)",
+        "capacity": 44.0,
+        "tag": "long_haul",
+        "weight_if": "≤22.0",
+        "weight_condition": "le",
+        "weight_threshold": 22.0,
+        "min_distance": 80.0,
+        "max_distance": 100.0,
+        "base": 28000.0,
+        "per_km": 200.0,
+        "load_zone": null,
+        "unload_zone": null,
+        "service_type": "delivery",
+        "self_loading": false,
+        "unload_capability": "crane",
+        "unload_tags": [
+          "crane",
+          "manipulator"
+        ],
+        "is_active": true,
+        "unloading_included": false,
+        "description": "Тяжеловесный длинномер",
+        "notes": "Длинномер без специальных цен",
+        "base_transport_name": null,
+        "base_transport_tag": null,
+        "created_by_user_id": 1,
+        "updated_by_user_id": 1,
+        "created_at": "2026-02-10T14:58:18.760194+00:00",
+        "updated_at": null
+      },
+      {
+        "id": 250,
+        "name": "Длинномер (до 44т)",
+        "capacity": 44.0,
+        "tag": "long_haul",
+        "weight_if": "≤22.0",
+        "weight_condition": "le",
+        "weight_threshold": 22.0,
+        "min_distance": 100.0,
+        "max_distance": 120.0,
+        "base": 30000.0,
+        "per_km": 200.0,
+        "load_zone": null,
+        "unload_zone": null,
+        "service_type": "delivery",
+        "self_loading": false,
+        "unload_capability": "crane",
+        "unload_tags": [
+          "crane",
+          "manipulator"
+        ],
+        "is_active": true,
+        "unloading_included": false,
+        "description": "Тяжеловесный длинномер",
+        "notes": "Длинномер без специальных цен",
+        "base_transport_name": null,
+        "base_transport_tag": null,
+        "created_by_user_id": 1,
+        "updated_by_user_id": 1,
+        "created_at": "2026-02-10T14:58:18.760194+00:00",
+        "updated_at": null
+      },
+      {
+        "id": 251,
+        "name": "Длинномер (до 44т)",
+        "capacity": 44.0,
+        "tag": "long_haul",
+        "weight_if": ">22.0",
+        "weight_condition": "gt",
+        "weight_threshold": 22.0,
+        "min_distance": 0.0,
+        "max_distance": 30.0,
+        "base": 27500.0,
+        "per_km": 300.0,
+        "load_zone": null,
+        "unload_zone": null,
+        "service_type": "delivery",
+        "self_loading": false,
+        "unload_capability": "crane",
+        "unload_tags": [
+          "crane",
+          "manipulator"
+        ],
+        "is_active": true,
+        "unloading_included": false,
+        "description": "Тяжеловесный длинномер",
+        "notes": "Длинномер без специальных цен",
+        "base_transport_name": null,
+        "base_transport_tag": null,
+        "created_by_user_id": 1,
+        "updated_by_user_id": 1,
+        "created_at": "2026-02-10T14:58:18.760194+00:00",
+        "updated_at": null
+      },
+      {
+        "id": 252,
+        "name": "Длинномер (до 44т)",
+        "capacity": 44.0,
+        "tag": "long_haul",
+        "weight_if": ">22.0",
+        "weight_condition": "gt",
+        "weight_threshold": 22.0,
         "min_distance": 30.0,
         "max_distance": 60.0,
         "base": 29500.0,
@@ -15648,23 +17699,24 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Тяжеловесный длинномер",
         "notes": "Длинномер без специальных цен",
         "base_transport_name": null,
         "base_transport_tag": null,
-        "created_by_user_id": 2,
-        "updated_by_user_id": 2,
-        "created_at": "2026-02-03T12:32:15.446079+00:00",
+        "created_by_user_id": 1,
+        "updated_by_user_id": 1,
+        "created_at": "2026-02-10T14:58:18.760194+00:00",
         "updated_at": null
       },
       {
-        "id": 138,
+        "id": 253,
         "name": "Длинномер (до 44т)",
         "capacity": 44.0,
         "tag": "long_haul",
-        "weight_if": "≤44.0",
-        "weight_condition": "le",
-        "weight_threshold": 44.0,
+        "weight_if": ">22.0",
+        "weight_condition": "gt",
+        "weight_threshold": 22.0,
         "min_distance": 60.0,
         "max_distance": 80.0,
         "base": 31500.0,
@@ -15679,23 +17731,24 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Тяжеловесный длинномер",
         "notes": "Длинномер без специальных цен",
         "base_transport_name": null,
         "base_transport_tag": null,
-        "created_by_user_id": 2,
-        "updated_by_user_id": 2,
-        "created_at": "2026-02-03T12:32:15.446079+00:00",
+        "created_by_user_id": 1,
+        "updated_by_user_id": 1,
+        "created_at": "2026-02-10T14:58:18.760194+00:00",
         "updated_at": null
       },
       {
-        "id": 139,
+        "id": 254,
         "name": "Длинномер (до 44т)",
         "capacity": 44.0,
         "tag": "long_haul",
-        "weight_if": "≤44.0",
-        "weight_condition": "le",
-        "weight_threshold": 44.0,
+        "weight_if": ">22.0",
+        "weight_condition": "gt",
+        "weight_threshold": 22.0,
         "min_distance": 80.0,
         "max_distance": 100.0,
         "base": 33500.0,
@@ -15710,23 +17763,24 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Тяжеловесный длинномер",
         "notes": "Длинномер без специальных цен",
         "base_transport_name": null,
         "base_transport_tag": null,
-        "created_by_user_id": 2,
-        "updated_by_user_id": 2,
-        "created_at": "2026-02-03T12:32:15.446079+00:00",
+        "created_by_user_id": 1,
+        "updated_by_user_id": 1,
+        "created_at": "2026-02-10T14:58:18.760194+00:00",
         "updated_at": null
       },
       {
-        "id": 140,
+        "id": 255,
         "name": "Длинномер (до 44т)",
         "capacity": 44.0,
         "tag": "long_haul",
-        "weight_if": "≤44.0",
-        "weight_condition": "le",
-        "weight_threshold": 44.0,
+        "weight_if": ">22.0",
+        "weight_condition": "gt",
+        "weight_threshold": 22.0,
         "min_distance": 100.0,
         "max_distance": 120.0,
         "base": 35500.0,
@@ -15741,13 +17795,14 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Тяжеловесный длинномер",
         "notes": "Длинномер без специальных цен",
         "base_transport_name": null,
         "base_transport_tag": null,
-        "created_by_user_id": 2,
-        "updated_by_user_id": 2,
-        "created_at": "2026-02-03T12:32:15.446079+00:00",
+        "created_by_user_id": 1,
+        "updated_by_user_id": 1,
+        "created_at": "2026-02-10T14:58:18.760194+00:00",
         "updated_at": null
       },
       {
@@ -15773,6 +17828,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -15805,6 +17861,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -15837,6 +17894,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -15869,6 +17927,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -15901,6 +17960,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -15933,6 +17993,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -15961,6 +18022,7 @@
         "unload_capability": "none",
         "unload_tags": null,
         "is_active": false,
+        "unloading_included": false,
         "description": "Первый тестовый кран",
         "notes": "7 часов работы",
         "base_transport_name": null,
@@ -15993,6 +18055,7 @@
           "manipulator"
         ],
         "is_active": false,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16025,6 +18088,7 @@
           "manipulator"
         ],
         "is_active": false,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16057,6 +18121,7 @@
           "manipulator"
         ],
         "is_active": false,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16089,6 +18154,7 @@
           "manipulator"
         ],
         "is_active": false,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16121,6 +18187,7 @@
           "manipulator"
         ],
         "is_active": false,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16153,6 +18220,7 @@
           "manipulator"
         ],
         "is_active": false,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16184,6 +18252,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "длинномер грузоподъёмностью до 20 тонн ( фактически 22)",
         "notes": "Можно разгрузить манипулятором и краном",
         "base_transport_name": null,
@@ -16215,6 +18284,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "длинномер грузоподъёмностью до 20 тонн ( фактически 22)",
         "notes": "Можно разгрузить манипулятором и краном",
         "base_transport_name": null,
@@ -16246,6 +18316,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "длинномер грузоподъёмностью до 20 тонн ( фактически 22)",
         "notes": "Можно разгрузить манипулятором и краном",
         "base_transport_name": null,
@@ -16277,6 +18348,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "длинномер грузоподъёмностью до 20 тонн ( фактически 22)",
         "notes": "Можно разгрузить манипулятором и краном",
         "base_transport_name": null,
@@ -16308,6 +18380,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "длинномер грузоподъёмностью до 20 тонн ( фактически 22)",
         "notes": "Можно разгрузить манипулятором и краном",
         "base_transport_name": null,
@@ -16340,6 +18413,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Первый манипулятор",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16372,6 +18446,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Первый манипулятор",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16404,6 +18479,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Первый манипулятор",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16436,6 +18512,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Первый манипулятор",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16468,6 +18545,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Первый манипулятор",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16500,6 +18578,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Первый манипулятор",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16528,6 +18607,7 @@
         "unload_capability": "none",
         "unload_tags": null,
         "is_active": true,
+        "unloading_included": false,
         "description": "Первый тестовый кран",
         "notes": "7 часов работы",
         "base_transport_name": null,
@@ -16558,6 +18638,7 @@
           "crane"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": null,
         "notes": null,
         "base_transport_name": "Длинномер (до 44т)",
@@ -16590,6 +18671,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16622,6 +18704,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16654,6 +18737,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16686,6 +18770,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16718,6 +18803,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16750,6 +18836,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16782,6 +18869,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16814,6 +18902,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16846,6 +18935,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16878,6 +18968,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16910,6 +19001,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16942,6 +19034,7 @@
           "manipulator"
         ],
         "is_active": true,
+        "unloading_included": false,
         "description": "Базовый манипуллятор, приравнен к манипулятору 10т",
         "notes": "смена 7 часов 24000",
         "base_transport_name": null,
@@ -16964,6 +19057,16 @@
         "created_at": "2026-02-06T13:13:48.013865+00:00"
       },
       {
+        "id": 11,
+        "order_id": 6,
+        "event_type": "confirmed_auto",
+        "payload": {
+          "selectedVariant": 0
+        },
+        "user_id": 1,
+        "created_at": "2026-02-10T15:04:57.367254+00:00"
+      },
+      {
         "id": 9,
         "order_id": 3,
         "event_type": "approved",
@@ -16972,6 +19075,16 @@
         },
         "user_id": 1,
         "created_at": "2026-02-06T13:16:31.547127+00:00"
+      },
+      {
+        "id": 12,
+        "order_id": 7,
+        "event_type": "confirmed_auto",
+        "payload": {
+          "selectedVariant": 0
+        },
+        "user_id": 1,
+        "created_at": "2026-02-10T15:06:08.805664+00:00"
       },
       {
         "id": 10,
