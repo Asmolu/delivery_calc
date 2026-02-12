@@ -41,13 +41,15 @@ def _save_tariffs(tariffs: list) -> None:
 
 def _save_factories_to_db(db: Session, factories_products: dict) -> None:
     """Сохранение заводов и товаров в БД"""
-    # ВАЖНО: не удаляем строки целиком, чтобы сохранить admin-активность (is_active).
-    # Делаем upsert по ключам:
-    # - Factory: name
-    # - Product: (factory_id, category_id, subtype)
+    # Синхронизация с первоисточником (Google Sheets):
+    # - upsert новых/изменённых строк
+    # - удаление из БД записей, которых больше нет в Google Sheets
 
     factory_map: dict[str, Factory] = {}
     category_map: dict[str, Category] = {}
+
+    seen_factory_names: set[str] = set()
+    seen_product_keys: set[tuple[str, str, str]] = set()
 
     # кешируем текущие сущности (для быстрого upsert)
     existing_factories = {f.name: f for f in db.query(Factory).all()}
@@ -74,6 +76,7 @@ def _save_factories_to_db(db: Session, factories_products: dict) -> None:
             factory_name = str(factory_data["name"]).strip()
             if not factory_name:
                 continue
+            seen_factory_names.add(factory_name)
 
             # upsert factory (preserve is_active)
             factory = factory_map.get(factory_name) or existing_factories.get(factory_name)
@@ -101,6 +104,8 @@ def _save_factories_to_db(db: Session, factories_products: dict) -> None:
             subtype = str(item.get("subtype", "") or "").strip()
             if not subtype:
                 continue
+
+            seen_product_keys.add((factory_name, category, subtype))
 
             # upsert product (preserve is_active)
             existing_product = (
@@ -133,11 +138,42 @@ def _save_factories_to_db(db: Session, factories_products: dict) -> None:
                 existing_product.price = factory_data.get("price", 0.0)
                 db.add(existing_product)
 
+    if not seen_factory_names and not seen_product_keys:
+        raise ValueError("Google Sheets вернул пустой набор заводов/товаров; синхронизация остановлена")
+
+    # Удаляем товары, отсутствующие в первоисточнике
+    removed_products = 0
+    existing_products = (
+        db.query(Product, Factory, Category)
+        .join(Factory, Product.factory_id == Factory.id)
+        .join(Category, Product.category_id == Category.id)
+        .all()
+    )
+    for p, f, c in existing_products:
+        key = (str(f.name or "").strip(), str(c.name or "").strip(), str(p.subtype or "").strip())
+        if key in seen_product_keys:
+            continue
+        db.delete(p)
+        removed_products += 1
+
+    db.flush()
+
+    # Удаляем заводы, которых больше нет в Google Sheets
+    removed_factories = 0
+    for f in db.query(Factory).all():
+        fname = str(f.name or "").strip()
+        if fname in seen_factory_names:
+            continue
+        db.delete(f)
+        removed_factories += 1
+
     db.commit()
     log.info(
-        "✅ Сохранено в БД (upsert): %s заводов, %s категорий",
+        "✅ Синхронизировано из Google Sheets: %s заводов, %s категорий, удалено товаров=%s, удалено заводов=%s",
         len(factory_map),
         len(category_map),
+        removed_products,
+        removed_factories,
     )
 
 

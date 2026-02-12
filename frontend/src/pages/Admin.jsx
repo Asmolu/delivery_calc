@@ -3,6 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { reloadAll, fetchFactories, adminListTariffs, logout, getCurrentUser } from "../api";
 import { motion } from "framer-motion";
 
+const ORG_RANK = { viewer: 10, manager: 20, logist: 30, admin: 40, owner: 50 };
+const orgRank = (r) => ORG_RANK[String(r || "").toLowerCase()] || 0;
+
 export default function Admin() {
   const MotionDiv = motion.div;
   const [loading, setLoading] = useState(false);
@@ -118,10 +121,12 @@ export default function Admin() {
     navigate("/login");
   };
 
+    const canSeeReport = orgRank(user?.orgRole) >= ORG_RANK.admin;
+
   const tiles = useMemo(
     () => [
       {
-        title: "🏭 Заводы и товары",
+        title: "🏭 Производства и товары",
         desc: "Просмотр товаров, веса, лимитов и цен по производствам.",
         to: "/admin/factories",
         meta:
@@ -150,8 +155,14 @@ export default function Admin() {
         to: "/admin/users",
         meta: "invite-only",
       },
+      ...(canSeeReport ? [{
+        title: "📊 Дашборд/отчёт",
+        desc: "Отдельный дашборд: от всех расчётов и от сохранённых заказов.",
+        to: "/admin/reports/variants",
+        meta: "admin/owner",
+      }] : []),
     ],
-    [factoriesCount, tariffsCount, transports]
+    [factoriesCount, tariffsCount, transports, canSeeReport]
   );
 
   const tagLabel = (tag) => {

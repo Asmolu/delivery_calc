@@ -122,9 +122,9 @@ def parse_google_sheet(ALLOWED_SHEETS=None, include_vehicles: bool = False):
 
         category_items = []
         for row in data_rows:
-            if not row or len(row) <= coord_idx:
+            if not row or len(row) <= name_idx:
                 continue
-            factory_name = row[name_idx].strip()
+            factory_name = (str(row[name_idx]).strip() if len(row) > name_idx else "")
             if not factory_name:
                 continue
             update_date = None
@@ -148,7 +148,7 @@ def parse_google_sheet(ALLOWED_SHEETS=None, include_vehicles: bool = False):
                 except Exception:
                     pass
 
-            contact = row[contact_idx].strip() if len(row) > contact_idx else ""
+            contact = str(row[contact_idx]).strip() if len(row) > contact_idx else ""
 
             for col, subtype in subtypes:
                 try:
@@ -186,7 +186,6 @@ def parse_google_sheet(ALLOWED_SHEETS=None, include_vehicles: bool = False):
 
 # === Вспомогательные функции ===
 
-import re  # если не было ранее
 
 def _parse_coord(value):
     """Безопасное извлечение координат из строки"""

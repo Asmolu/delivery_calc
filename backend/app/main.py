@@ -9,6 +9,10 @@ from backend.core.data_loader import (
 )
 from backend.core.logger import get_logger
 from backend.core.geo_zones import load_zones
+from backend.app.routes_admin import router as admin_router
+from backend.app.routes_fibonacci import router as fibonacci_router
+from backend.app.routes_quote import router as quote_router
+from backend.app.routes_auth import router as auth_router
 
 # === ЛОГГЕР ===
 log = get_logger("main")
@@ -40,7 +44,6 @@ async def startup_event():
 
     # Инициализация БД
     from backend.core.database import init_db, SessionLocal
-    from backend.models import db_models  # Импортируем модели для создания таблиц
     init_db()
     log.info("✅ Database initialized")
 
@@ -95,10 +98,6 @@ async def startup_event():
 
 
 # === РОУТЫ ===
-from backend.app.routes_admin import router as admin_router
-from backend.app.routes_fibonacci import router as fibonacci_router
-from backend.app.routes_quote import router as quote_router
-from backend.app.routes_auth import router as auth_router
 app.include_router(quote_router, prefix="/api")
 app.include_router(fibonacci_router, prefix="/api")
 app.include_router(admin_router)

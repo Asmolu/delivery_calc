@@ -14,6 +14,12 @@ import {
 } from "../api";
 import { useNavigate } from "react-router-dom";
 
+const ORG_RANK = { viewer: 10, manager: 20, logist: 30, admin: 40, owner: 50 };
+
+function orgRank(role) {
+  return ORG_RANK[String(role || "").toLowerCase()] || 0;
+}
+
 function statusLabel(s) {
   if (s === "confirmed_auto") return "Подтверждён (сценарий)";
   if (s === "rejected_for_manual") return "Отклонён (нужно вручную)";
@@ -70,8 +76,6 @@ export default function Orders() {
   const MotionDiv = motion.div;
   const navigate = useNavigate();
   const normStr = (x) => String(x ?? "").trim();
-  const ORG_RANK = { viewer: 10, manager: 20, logist: 30, admin: 40, owner: 50 };
-  const orgRank = (r) => ORG_RANK[String(r || "").toLowerCase()] || 0;
   const [user, setUser] = useState(null);
   const [forbidden, setForbidden] = useState(false);
   const [orders, setOrders] = useState([]);

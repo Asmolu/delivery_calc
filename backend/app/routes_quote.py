@@ -6,7 +6,7 @@ from backend.core.logger import get_logger
 from backend.core.database import get_db
 from backend.core.auth import get_current_user_optional
 from backend.core.rbac import get_user_org_role, org_role_rank
-from backend.models.db_models import OrgRole, User
+from backend.models.db_models import OrgRole, User, QuoteSession, QuoteSessionStatus
 from backend.models.dto import QuoteRequest
 from backend.core.data_loader import load_factories_and_tariffs
 from backend.service.osrm_client import OSRMUnavailableError
@@ -323,6 +323,18 @@ async def make_quote(
         print(f"{i}) {v['transportName']}: {v['totalCost']}₽ ({v['deliveryCost']} доставка{unload_txt})")
     print("==================================\n")
 
+    quote_session = QuoteSession(
+        status=QuoteSessionStatus.GENERATED,
+        request_payload=req.dict(),
+        variants_count=len(variants),
+        needs_logistics_check=bool(needs_logistics_check),
+        warning_reasons=warning_reasons,
+        created_by_user_id=(current_user.id if current_user else None),
+    )
+    db.add(quote_session)
+    db.commit()
+    db.refresh(quote_session)
+
     return JSONResponse(
         {
             "success": True,
@@ -330,6 +342,7 @@ async def make_quote(
             "needsLogisticsCheck": needs_logistics_check,
             "warningText": logistics_warning_text,
             "warningReasons": warning_reasons,
+            "quoteSessionId": quote_session.id,
         }
     )
 

@@ -246,6 +246,15 @@ export async function deleteOrder(orderId, password) {
 }
 
 
+export async function adminGetVariantsSummary(params = {}) {
+  const qs = new URLSearchParams();
+  if (params?.from) qs.set("from_ts", String(params.from));
+  if (params?.to) qs.set("to_ts", String(params.to));
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return request("GET", `/admin/reports/variants-summary${suffix}`, undefined, true);
+}
+
+
 // === Совместимость со старым фронтом ===
 // (чтобы Admin.jsx и прочие старые страницы не падали)
 export const reloadFactories = reloadAll;

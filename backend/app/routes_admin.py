@@ -1,4 +1,3 @@
-import json
 import hashlib
 import os
 import secrets
@@ -21,6 +20,8 @@ from ..models.db_models import (
     Order,
     OrderEvent,
     OrderStatus,
+    QuoteSession,
+    QuoteSessionStatus,
     OrgRole,
     Organization,
     OrganizationInvite,
@@ -480,7 +481,7 @@ class OrderCreateFromQuote(BaseModel):
     selectedVariant: int = Field(..., ge=0)
     warningText: str | None = None
     needsLogisticsCheck: bool = False
-
+    quoteSessionId: int | None = None
 
 class ManualDecision(BaseModel):
     transportName: str = Field(..., min_length=1, max_length=255)
@@ -1503,6 +1504,151 @@ async def admin_delete_transport(
     return {"status": "ok", "deleted": deleted}
 
 
+def _parse_iso_dt(v: str | None) -> datetime | None:
+    if not v:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    except Exception:
+        return None
+
+
+@router.get("/admin/reports/variants-summary")
+async def admin_variants_summary(
+    from_ts: str | None = None,
+    to_ts: str | None = None,
+    current_user: User = Depends(require_org_min(OrgRole.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    from_dt = _parse_iso_dt(from_ts)
+    to_dt = _parse_iso_dt(to_ts)
+
+    orders_q = db.query(Order)
+    if from_dt is not None:
+        orders_q = orders_q.filter(Order.created_at >= from_dt)
+    if to_dt is not None:
+        orders_q = orders_q.filter(Order.created_at <= to_dt)
+
+    orders = orders_q.all()
+    total_orders = len(orders)
+    order_ids = [o.id for o in orders]
+
+    events_agg = {}
+    if order_ids:
+        rows = (
+            db.query(OrderEvent.order_id, OrderEvent.event_type)
+            .filter(OrderEvent.order_id.in_(order_ids))
+            .order_by(OrderEvent.order_id.asc(), OrderEvent.created_at.asc(), OrderEvent.id.asc())
+            .all()
+        )
+        for oid, et in rows:
+            rec = events_agg.setdefault(
+                int(oid),
+                {
+                    "has_manual_path_event": False,
+                    "last_decision": None,  # approved | declined | None
+                },
+            )
+            if et in ("manual_recalc", "rejected_for_manual", "confirmed_manual"):
+                rec["has_manual_path_event"] = True
+            if et in ("approved", "declined"):
+                rec["last_decision"] = et
+
+    confirmed_auto = 0
+    fully_declined = 0
+    manual_recalc_approved = 0
+    manual_recalc_declined = 0
+    stuck_no_decision = 0
+
+    for o in orders:
+        status_value = o.status.value if hasattr(o.status, "value") else o.status
+        ev = events_agg.get(
+            o.id,
+            {
+                "has_manual_path_event": False,
+                "last_decision": None,
+            },
+        )
+
+        has_manual_path = bool(
+            ev["has_manual_path_event"]
+            or status_value in ("rejected_for_manual", "confirmed_manual")
+        )
+        last_decision = ev["last_decision"]
+
+        # Критично: один заказ должен попадать максимум в один финальный KPI-бакет.
+        if last_decision is None:
+            # Без финального решения относим к "застряли".
+            stuck_no_decision += 1
+            continue
+
+        if has_manual_path:
+            if last_decision == "approved":
+                manual_recalc_approved += 1
+            elif last_decision == "declined":
+                manual_recalc_declined += 1
+            continue
+
+        # Auto path (без ручной ветки)
+        if last_decision == "approved":
+            confirmed_auto += 1
+        elif last_decision == "declined":
+            fully_declined += 1
+
+    quote_q = db.query(QuoteSession)
+    if from_dt is not None:
+        quote_q = quote_q.filter(QuoteSession.created_at >= from_dt)
+    if to_dt is not None:
+        quote_q = quote_q.filter(QuoteSession.created_at <= to_dt)
+    quote_sessions = quote_q.all()
+
+    total_quote_sessions = len(quote_sessions)
+    saved_quote_sessions = sum(1 for q in quote_sessions if q.saved_order_id is not None)
+    not_saved_quote_sessions = total_quote_sessions - saved_quote_sessions
+
+    def _pct(v: int, d: int) -> float:
+        if d <= 0:
+            return 0.0
+        return round((float(v) / float(d)) * 100.0, 2)
+
+    return {
+        "period": {"from": from_dt.isoformat() if from_dt else None, "to": to_dt.isoformat() if to_dt else None},
+        "totals": {
+            "orders": total_orders,
+            "quoteSessions": total_quote_sessions,
+            "savedQuoteSessions": saved_quote_sessions,
+            "notSavedQuoteSessions": not_saved_quote_sessions,
+        },
+        "fromOrdersPercent": {
+            "autoAccepted": _pct(confirmed_auto, total_orders),
+            "fullyDeclined": _pct(fully_declined, total_orders),
+            "manualRecalcAccepted": _pct(manual_recalc_approved, total_orders),
+            "manualRecalcDeclined": _pct(manual_recalc_declined, total_orders),
+            "stuckNoDecision": _pct(stuck_no_decision, total_orders),
+        },
+        "fromOrdersCount": {
+            "autoAccepted": confirmed_auto,
+            "fullyDeclined": fully_declined,
+            "manualRecalcAccepted": manual_recalc_approved,
+            "manualRecalcDeclined": manual_recalc_declined,
+            "stuckNoDecision": stuck_no_decision,
+        },
+        "fromQuoteSessionsPercent": {
+            "savedToOrder": _pct(saved_quote_sessions, total_quote_sessions),
+            "notSavedToOrder": _pct(not_saved_quote_sessions, total_quote_sessions),
+        },
+        "fromQuoteSessionsCount": {
+            "savedToOrder": saved_quote_sessions,
+            "notSavedToOrder": not_saved_quote_sessions,
+        },
+        "updatedAt": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 # === Заказы (admin-only) =====================================================
 
 @router.get("/admin/orders")
@@ -1633,6 +1779,13 @@ async def admin_confirm_order_from_quote(
         )
     )
 
+    if payload.quoteSessionId:
+        qs = db.query(QuoteSession).filter(QuoteSession.id == payload.quoteSessionId).first()
+        if qs:
+            qs.status = QuoteSessionStatus.SAVED_TO_ORDER
+            qs.saved_order_id = order.id
+            db.add(qs)
+
     _enforce_orders_limit(db, MAX_ORDERS_TO_KEEP)
     db.commit()
     db.refresh(order)
@@ -1670,6 +1823,13 @@ async def admin_reject_order_for_manual(
             user_id=current_user.id,
         )
     )
+
+    if payload.quoteSessionId:
+        qs = db.query(QuoteSession).filter(QuoteSession.id == payload.quoteSessionId).first()
+        if qs:
+            qs.status = QuoteSessionStatus.SAVED_TO_ORDER
+            qs.saved_order_id = order.id
+            db.add(qs)
 
     _enforce_orders_limit(db, MAX_ORDERS_TO_KEEP)
     db.commit()

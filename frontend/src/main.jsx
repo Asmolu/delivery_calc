@@ -10,6 +10,7 @@ import Orders from "./pages/Orders";
 import AdminFactories from "./pages/AdminFactories";
 import AdminTariffs from "./pages/AdminTariffs";
 import AdminUsers from "./pages/AdminUsers";
+import AdminVariantReport from "./pages/AdminVariantReport";
 import InviteAccept from "./pages/InviteAccept";
 import Layout from "./layouts/Layout";
 import { isAuthenticated } from "./api";
@@ -66,6 +67,38 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           element={
             <ProtectedRoute>
               <AdminUsers />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/reports/variants"
+          element={
+            <ProtectedRoute>
+              <AdminVariantReport />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/reports/variants/"
+          element={
+            <ProtectedRoute>
+              <AdminVariantReport />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/reports"
+          element={
+            <ProtectedRoute>
+              <AdminVariantReport />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/reports/*"
+          element={
+            <ProtectedRoute>
+              <AdminVariantReport />
             </ProtectedRoute>
           }
         />

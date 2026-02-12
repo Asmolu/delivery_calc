@@ -291,3 +291,34 @@ class OrderEvent(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     order = relationship("Order", back_populates="events")
+
+
+class QuoteSessionStatus(str, enum.Enum):
+    GENERATED = "generated"
+    SAVED_TO_ORDER = "saved_to_order"
+    EXPIRED = "expired"
+
+
+class QuoteSession(Base):
+    __tablename__ = "quote_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    status = Column(SQLEnum(QuoteSessionStatus), nullable=False, index=True, default=QuoteSessionStatus.GENERATED)
+
+    request_payload = Column(JSON, nullable=False)
+    variants_count = Column(Integer, nullable=False, default=0)
+    needs_logistics_check = Column(Boolean, default=False, nullable=False)
+    warning_reasons = Column(JSON, nullable=True)
+
+    saved_order_id = Column(Integer, ForeignKey("orders.id"), nullable=True, index=True)
+    saved_order = relationship("Order")
+
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    created_by = relationship("User", foreign_keys=[created_by_user_id])
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    __table_args__ = (
+        Index("ix_quote_sessions_status_created_at", "status", "created_at"),
+    )

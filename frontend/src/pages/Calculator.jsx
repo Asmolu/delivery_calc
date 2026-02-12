@@ -16,7 +16,7 @@ function MultiSelectDropdown({ options, value, onChange, placeholder = "Нет" 
   const [open, setOpen] = React.useState(false);
   const rootRef = React.useRef(null);
 
-  const selected = Array.isArray(value) ? value : [];
+  const selected = React.useMemo(() => (Array.isArray(value) ? value : []), [value]);
   const selectedSet = React.useMemo(() => new Set(selected), [selected]);
   const available = React.useMemo(
     () => (options || []).filter((o) => !selectedSet.has(o.value)),
@@ -126,7 +126,6 @@ export default function Calculator() {
   const ORG_RANK = { viewer: 10, manager: 20, logist: 30, admin: 40, owner: 50 };
   const orgRank = (r) => ORG_RANK[String(r || "").toLowerCase()] || 0;
   const canLogist = orgRank(currentUser?.orgRole) >= ORG_RANK.logist;
-  const canAdmin = orgRank(currentUser?.orgRole) >= ORG_RANK.admin;
   const isAuthed = isAuthenticated();
 
   const [actionsOpen, setActionsOpen] = useState(false);
@@ -158,8 +157,8 @@ export default function Calculator() {
     []
   );
 
-  const normStr = (x) => String(x ?? "").trim();
-  const normKey = (x) => normStr(x).toLowerCase();
+  const normStr = React.useCallback((x) => String(x ?? "").trim(), []);
+  const normKey = React.useCallback((x) => normStr(x).toLowerCase(), [normStr]);
 
   const forbiddenTransportOptions = React.useMemo(() => {
     return (TRANSPORT_TAGS || [])
@@ -176,13 +175,13 @@ export default function Calculator() {
     const v = (allowedDeliveryTags || []).map((x) => normStr(x).toLowerCase()).filter(Boolean);
     if (v.length === 1) return v[0];
     return "auto";
-  }, [allowedDeliveryTags]);
+  }, [allowedDeliveryTags, normStr]);
 
   const unloadingTransportTag = React.useMemo(() => {
     const v = (allowedUnloadingTags || []).map((x) => normStr(x).toLowerCase()).filter(Boolean);
     if (v.length === 1) return v[0];
     return "auto";
-  }, [allowedUnloadingTags]);
+  }, [allowedUnloadingTags, normStr]);
 
   const factoryUpdateDateByName = React.useMemo(() => {
     const map = new Map();
@@ -194,15 +193,15 @@ export default function Calculator() {
       if (!map.has(name)) map.set(name, date);
     }
     return map;
-  }, [factoriesFlat]);
+  }, [factoriesFlat, normKey, normStr]);
 
   const allowedDeliverySet = React.useMemo(() => {
     return new Set((allowedDeliveryTags || []).map((x) => normStr(x).toLowerCase()).filter(Boolean));
-  }, [allowedDeliveryTags]);
+  }, [allowedDeliveryTags, normStr]);
 
   const allowedUnloadingSet = React.useMemo(() => {
     return new Set((allowedUnloadingTags || []).map((x) => normStr(x).toLowerCase()).filter(Boolean));
-  }, [allowedUnloadingTags]);
+  }, [allowedUnloadingTags, normStr]);
 
   const unloadingDisabled = React.useMemo(() => {
     return unloadingTransportTag === "none" || allowedUnloadingSet.has("none");
@@ -211,7 +210,7 @@ export default function Calculator() {
   const manualUnloadingDisabled = React.useMemo(() => {
     const hasManualNone = (manualUnloadingMachines || []).some((x) => normStr(x).toLowerCase() === "none");
     return unloadingDisabled || hasManualNone;
-  }, [manualUnloadingMachines, unloadingDisabled]);
+  }, [manualUnloadingMachines, unloadingDisabled, normStr]);
 
   const getTariffName = (t) => t?.name || t?.["название"] || "";
   const getTariffTag = (t) => t?.tag || t?.["тег"] || "";
@@ -238,7 +237,7 @@ export default function Calculator() {
       }
     }
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [tariffs]);
+  }, [tariffs, normStr]);
 
   const deliveryMachineOptions = React.useMemo(() => {
     return transportCards.filter(
@@ -292,7 +291,7 @@ export default function Calculator() {
         console.error("Ошибка загрузки /api/factories:", e);
         setFactoriesFlat([]);
       });
-    }, [factoriesFlat]);
+    }, [factoriesFlat, normKey, normStr]);
 
   const uniqueTransportNames = React.useMemo(() => {
     const names = new Set();
@@ -310,6 +309,7 @@ export default function Calculator() {
       selectedVariant: result?.selectedVariant ?? 0,
       warningText: result?.warningText || null,
       needsLogisticsCheck: !!result?.needsLogisticsCheck,
+      quoteSessionId: result?.quoteSessionId ?? null,
     };
   };
 
@@ -484,7 +484,7 @@ export default function Calculator() {
         normStr(a?.name || a?.["название"]).localeCompare(normStr(b?.name || b?.["название"]))
       );
     });
-  }, [manualItemsSnapshot, factoriesFlat]);
+  }, [manualItemsSnapshot, factoriesFlat, normStr]);
 
   const handleManualConfirm = async () => {
     if (!manualOrderId) {
