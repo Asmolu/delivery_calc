@@ -862,9 +862,11 @@ export default function Calculator() {
                       : "bg-white border-slate-200 hover:border-indigo-200"
                   }`}
                 >
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <div className="text-sm text-slate-500">Вариант #{idx + 1}</div>
-                    {variant?.isSingleFactory ? (
+	                  <div className="flex items-center justify-between gap-2 mb-1">
+	                    <div className="text-sm text-slate-500">
+	                      ({String(variant?.scenarioMarker || "S").toUpperCase() === "A" ? "A" : "S"}) Вариант #{idx + 1}
+	                    </div>
+	                    {variant?.isSingleFactory ? (
                       <div className="text-[11px] font-semibold px-2 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
                         1 завод{variant?.singleFactoryName ? `: ${variant.singleFactoryName}` : ""}
                       </div>

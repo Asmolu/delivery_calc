@@ -10,9 +10,9 @@
         "name": "тубетон",
         "lat": 55.577505,
         "lon": 36.498658,
-        "price": 8300.0,
+        "price": 8200.0,
         "contact": "7 903 005-07-77",
-        "update_date": "03.02"
+        "update_date": "30.03"
       }
     },
     {
@@ -27,7 +27,7 @@
         "lon": 36.498658,
         "price": 12000.0,
         "contact": "7 903 005-07-77",
-        "update_date": "03.02"
+        "update_date": "30.03"
       }
     },
     {
@@ -42,7 +42,7 @@
         "lon": 36.498658,
         "price": 14500.0,
         "contact": "7 903 005-07-77",
-        "update_date": "03.02"
+        "update_date": "30.03"
       }
     },
     {
@@ -57,13 +57,13 @@
         "lon": 36.498658,
         "price": 16500.0,
         "contact": "7 903 005-07-77",
-        "update_date": "03.02"
+        "update_date": "30.03"
       }
     },
     {
       "category": "Дорожные ПЛИТЫ/ПАГИ",
       "subtype": "некондиция 2п.30.18",
-      "weight_per_item": 0.0,
+      "weight_per_item": 2.2,
       "special_threshold": 0.0,
       "max_per_trip": 0.0,
       "factory": {
@@ -72,7 +72,7 @@
         "lon": 36.498658,
         "price": 7500.0,
         "contact": "7 903 005-07-77",
-        "update_date": "03.02"
+        "update_date": "30.03"
       }
     },
     {
@@ -85,9 +85,9 @@
         "name": "тубетон",
         "lat": 55.577505,
         "lon": 36.498658,
-        "price": 24500.0,
+        "price": 24000.0,
         "contact": "7 903 005-07-77",
-        "update_date": "03.02"
+        "update_date": "30.03"
       }
     },
     {
@@ -100,9 +100,9 @@
         "name": "тубетон",
         "lat": 55.577505,
         "lon": 36.498658,
-        "price": 27500.0,
+        "price": 27000.0,
         "contact": "7 903 005-07-77",
-        "update_date": "03.02"
+        "update_date": "30.03"
       }
     },
     {
@@ -117,7 +117,7 @@
         "lon": 36.498658,
         "price": 20000.0,
         "contact": "7 903 005-07-77",
-        "update_date": "03.02"
+        "update_date": "30.03"
       }
     },
     {
@@ -130,9 +130,9 @@
         "name": "тубетон",
         "lat": 55.577505,
         "lon": 36.498658,
-        "price": 29500.0,
+        "price": 30000.0,
         "contact": "7 903 005-07-77",
-        "update_date": "03.02"
+        "update_date": "30.03"
       }
     },
     {
@@ -145,9 +145,9 @@
         "name": "тубетон",
         "lat": 55.577505,
         "lon": 36.498658,
-        "price": 33500.0,
+        "price": 32500.0,
         "contact": "7 903 005-07-77",
-        "update_date": "03.02"
+        "update_date": "30.03"
       }
     },
     {
@@ -162,7 +162,7 @@
         "lon": 36.498658,
         "price": 51000.0,
         "contact": "7 903 005-07-77",
-        "update_date": "03.02"
+        "update_date": "30.03"
       }
     },
     {
@@ -183,7 +183,7 @@
     {
       "category": "Дорожные ПЛИТЫ/ПАГИ",
       "subtype": "некондиция 2п.30.18",
-      "weight_per_item": 0.0,
+      "weight_per_item": 2.2,
       "special_threshold": 0.0,
       "max_per_trip": 0.0,
       "factory": {
@@ -363,7 +363,7 @@
     {
       "category": "Дорожные ПЛИТЫ/ПАГИ",
       "subtype": "некондиция 2п.30.18",
-      "weight_per_item": 0.0,
+      "weight_per_item": 2.2,
       "special_threshold": 0.0,
       "max_per_trip": 0.0,
       "factory": {
@@ -477,7 +477,7 @@
         "lon": 37.906803,
         "price": 8700.0,
         "contact": "7 985 016-21-27",
-        "update_date": "03.02"
+        "update_date": "16.02"
       }
     },
     {
@@ -492,13 +492,13 @@
         "lon": 37.906803,
         "price": 9800.0,
         "contact": "7 985 016-21-27",
-        "update_date": "03.02"
+        "update_date": "16.02"
       }
     },
     {
       "category": "Дорожные ПЛИТЫ/ПАГИ",
       "subtype": "некондиция 2п.30.18",
-      "weight_per_item": 0.0,
+      "weight_per_item": 2.2,
       "special_threshold": 0.0,
       "max_per_trip": 0.0,
       "factory": {
@@ -507,7 +507,7 @@
         "lon": 37.906803,
         "price": 7800.0,
         "contact": "7 985 016-21-27",
-        "update_date": "03.02"
+        "update_date": "16.02"
       }
     },
     {
@@ -520,9 +520,9 @@
         "name": "bear бетон",
         "lat": 55.312486,
         "lon": 37.906803,
-        "price": 25900.0,
+        "price": 22500.0,
         "contact": "7 985 016-21-27",
-        "update_date": "03.02"
+        "update_date": "16.02"
       }
     },
     {
@@ -535,9 +535,39 @@
         "name": "bear бетон",
         "lat": 55.312486,
         "lon": 37.906803,
-        "price": 27000.0,
+        "price": 23500.0,
         "contact": "7 985 016-21-27",
-        "update_date": "03.02"
+        "update_date": "16.02"
+      }
+    },
+    {
+      "category": "Дорожные ПЛИТЫ/ПАГИ",
+      "subtype": "ПАГ 18 ТУ",
+      "weight_per_item": 5.2,
+      "special_threshold": 0.0,
+      "max_per_trip": 0.0,
+      "factory": {
+        "name": "bear бетон",
+        "lat": 55.312486,
+        "lon": 37.906803,
+        "price": 29000.0,
+        "contact": "7 985 016-21-27",
+        "update_date": "16.02"
+      }
+    },
+    {
+      "category": "Дорожные ПЛИТЫ/ПАГИ",
+      "subtype": "ПАГ 18 ГОСТ",
+      "weight_per_item": 5.2,
+      "special_threshold": 0.0,
+      "max_per_trip": 0.0,
+      "factory": {
+        "name": "bear бетон",
+        "lat": 55.312486,
+        "lon": 37.906803,
+        "price": 30000.0,
+        "contact": "7 985 016-21-27",
+        "update_date": "16.02"
       }
     },
     {
@@ -573,7 +603,7 @@
     {
       "category": "Дорожные ПЛИТЫ/ПАГИ",
       "subtype": "некондиция 2п.30.18",
-      "weight_per_item": 0.0,
+      "weight_per_item": 2.2,
       "special_threshold": 0.0,
       "max_per_trip": 0.0,
       "factory": {

@@ -30,6 +30,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         <Route path="/calculator" element={<Calculator />} />
         <Route path="/login" element={<Login />} />
         <Route path="/invite/:token" element={<InviteAccept />} />
+        <Route path="/:token" element={<InviteAccept />} />
         <Route
           path="/admin"
           element={

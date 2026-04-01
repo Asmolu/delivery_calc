@@ -111,12 +111,18 @@ async def make_quote(
     all_sorted_full = sorted(valid_results, key=lambda x: x["total_cost"])
 
 
-    def _has_container(r: dict) -> bool:
+    def _delivery_tags(r: dict) -> set[str]:
+        tags: set[str] = set()
         for fp in (r or {}).get("factory_plans") or []:
             for tr in (fp or {}).get("trips", []) or []:
-                if str(tr.get("tag") or "").strip().lower() == "container_carrier":
-                    return True
-        return False
+                tag = str(tr.get("tag") or "").strip().lower()
+                if tag:
+                    tags.add(tag)
+        return tags
+
+    def _unloading_tag(r: dict) -> str:
+        unloading = (r or {}).get("unloading") or {}
+        return str(unloading.get("tag") or "none").strip().lower() or "none"
 
     def _scenario_id(r: dict) -> int | None:
         sc = (r or {}).get("scenario") or {}
@@ -155,6 +161,29 @@ async def make_quote(
         keys = {k for k in keys if k}
         return tuple(sorted(keys))
 
+    def _trip_count_key(r: dict) -> int:
+        try:
+            return int((r or {}).get("trip_count") or 0)
+        except Exception:
+            return 0
+
+    def _delivery_profile_key(r: dict) -> tuple[str, ...]:
+        return tuple(sorted(_delivery_tags(r)))
+
+    def _scenario_signature_key(r: dict) -> tuple[tuple[str, ...], tuple[str, ...], str, int]:
+        return (
+            _production_combo_key(r),
+            _delivery_profile_key(r),
+            _unloading_tag(r),
+            _trip_count_key(r),
+        )
+
+    def _is_alternative(r: dict) -> bool:
+        d_tags = _delivery_tags(r)
+        if "container_carrier" in d_tags or "crane" in d_tags:
+            return True
+        return _unloading_tag(r) == "crane"
+
     def _unique_by_scenario(items: list[dict]) -> list[dict]:
         seen: set[int | str] = set()
         unique: list[dict] = []
@@ -169,19 +198,23 @@ async def make_quote(
     all_sorted = _unique_by_scenario(all_sorted_full)
 
 
-    # Топ-3 самых дешёвых вариантов без контейнеровоза (уникальные комбинации производств).
-    top3: list[dict] = []
-    seen_combos: set[tuple[str, ...]] = set()
-    for candidate in all_sorted_full:
-        if _has_container(candidate):
-            continue
-        combo = _production_combo_key(candidate)
-        if combo in seen_combos:
-            continue
-        seen_combos.add(combo)
-        top3.append(candidate)
-        if len(top3) >= 3:
-            break
+    def _pick_unique_by_signature(
+        candidates: list[dict],
+        limit: int,
+        seen_signatures: set[tuple[tuple[str, ...], tuple[str, ...], str, int]],
+    ) -> list[dict]:
+        picked: list[dict] = []
+        if limit <= 0:
+            return picked
+        for c in candidates:
+            signature = _scenario_signature_key(c)
+            if signature in seen_signatures:
+                continue
+            seen_signatures.add(signature)
+            picked.append(c)
+            if len(picked) >= limit:
+                break
+        return picked
 
     def _is_single_factory(r: dict) -> bool:
         return len(_production_combo_key(r)) == 1
@@ -202,12 +235,8 @@ async def make_quote(
     single_factory_results = [r for r in all_sorted_full if isinstance(r, dict) and _is_single_factory(r)]
     best_single_factory = single_factory_results[0] if single_factory_results else None
 
-    container_sorted = [r for r in all_sorted_full if _has_container(r)]
-    best_container = container_sorted[0] if container_sorted else None
-
-    # Итоговый список результатов для отображения:
-    # - всегда топ-3
-    # - + отдельный вариант "один завод", если он есть и не попал в топ-3
+    standard_pool = [r for r in all_sorted_full if not _is_alternative(r)]
+    alternative_pool = [r for r in all_sorted_full if _is_alternative(r)]
 
     def _in_results(candidate: dict, current: list[dict]) -> bool:
         if candidate is None:
@@ -221,24 +250,30 @@ async def make_quote(
                 return c
         return None
 
-    results: list[dict] = list(top3)
-    # 4-й вариант: все позиции из одного производства (если есть).
+    seen_signatures: set[tuple[tuple[str, ...], tuple[str, ...], str, int]] = set()
+    top_standard = _pick_unique_by_signature(standard_pool, 3, seen_signatures)
+    alt_variants = _pick_unique_by_signature(alternative_pool, 2, seen_signatures)
+
+    results: list[dict] = top_standard + alt_variants
+
+    # Дополнительный single-factory вариант (если есть место и он уникален по сигнатуре).
     single_factory_candidate = _pick_unique(single_factory_results, results) or best_single_factory
-    if single_factory_candidate:
-        results.append(single_factory_candidate)
+    if single_factory_candidate and len(results) < 5:
+        signature = _scenario_signature_key(single_factory_candidate)
+        if signature not in seen_signatures:
+            seen_signatures.add(signature)
+            results.append(single_factory_candidate)
 
-    # 5-й вариант: самый дешёвый вариант с контейнеровозом (если есть).
-    container_candidate = _pick_unique(container_sorted, results) or best_container
-    if container_candidate and len(results) < 5:
-        results.append(container_candidate)
-
-    # добираем до 5 уникальными вариантами, если получилось меньше
+    # Добираем до 5 по цене, сохраняя уникальность по сигнатуре.
     if len(results) < 5:
         for r in all_sorted_full:
             if len(results) >= 5:
                 break
-            if not _in_results(r, results):
-                results.append(r)
+            signature = _scenario_signature_key(r)
+            if signature in seen_signatures:
+                continue
+            seen_signatures.add(signature)
+            results.append(r)
 
     # Дополнительные правила "нужна проверка логистом" — по лучшему (самому дешёвому) сценарию.
     # Эти причины не меняют расчёт, только маркируют потенциально сложные кейсы.
@@ -302,6 +337,7 @@ async def make_quote(
             "totalWeight": round(scenario_weight, 2),
             "transportName": transport_title,
             "tripCount": r.get("trip_count", 0),
+            "scenarioMarker": ("A" if _is_alternative(r) else "S"),
             "isSingleFactory": _is_single_factory(r),
             # Название завода — только логисту и выше (иначе это “конкретика”).
             "singleFactoryName": (_single_factory_name(r) if (can_view_details and _is_single_factory(r)) else None),

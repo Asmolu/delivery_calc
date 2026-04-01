@@ -50,7 +50,7 @@ from ..service.transport_calc import (
 router = APIRouter()
 log = get_logger("routes.admin")
 
-MAX_ORDERS_TO_KEEP = 100
+MAX_ORDERS_TO_KEEP = 2000
 
 
 def _default_org(db: Session) -> Organization:
@@ -72,8 +72,8 @@ def _hash_invite_token(raw_token: str) -> str:
 
 
 def _invite_url(raw_token: str) -> str:
-    public_base = os.getenv("PUBLIC_APP_BASE_URL", "http://localhost:5173").rstrip("/")
-    return f"{public_base}/invite/{raw_token}"
+    public_base = os.getenv("PUBLIC_APP_BASE_URL", "http://85.198.102.119:5173").rstrip("/")
+    return f"{public_base}/{raw_token}"
 
 
 # === Users / Invites (org-scoped RBAC) =======================================
@@ -529,8 +529,12 @@ def _derive_order_meta(events: list[OrderEvent]) -> dict:
 def _enforce_orders_limit(db: Session, limit: int = MAX_ORDERS_TO_KEEP) -> None:
     """Храним не больше N последних заказов.
 
-    Важно: у OrderEvent нет ON DELETE CASCADE, поэтому удаляем события вручную,
-    затем сами заказы.
+    Важно:
+    - у OrderEvent нет ON DELETE CASCADE, поэтому удаляем события вручную,
+      затем сами заказы;
+    - на Order также ссылается QuoteSession.saved_order_id, поэтому перед
+      удалением старых заказов нужно снять эту ссылку, иначе получим
+      ForeignKeyViolation на DELETE.
     """
     extra_ids = [
         oid
@@ -543,6 +547,14 @@ def _enforce_orders_limit(db: Session, limit: int = MAX_ORDERS_TO_KEEP) -> None:
     ]
     if not extra_ids:
         return
+
+    # сначала снимаем FK-ссылку из quote_sessions, потом события и заказы.
+    # saved_order_id nullable=True, поэтому связь можно корректно очистить.
+    (
+        db.query(QuoteSession)
+        .filter(QuoteSession.saved_order_id.in_(extra_ids))
+        .update({QuoteSession.saved_order_id: None}, synchronize_session=False)
+    )
 
     # сначала события, потом заказы (иначе FK запретит удаление)
     db.query(OrderEvent).filter(OrderEvent.order_id.in_(extra_ids)).delete(synchronize_session=False)
