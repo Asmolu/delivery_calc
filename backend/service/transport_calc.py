@@ -13,11 +13,11 @@ logger = get_logger(__name__)
 
 # Бизнес-правило: контейнеровоз участвует только при достаточной загрузке (тонны).
 CONTAINER_CARRIER_MIN_LOAD_TON = 44.0
-MAX_PLANS = int(os.getenv("MAX_PLANS", "50"))
+MAX_PLANS = int(os.getenv("MAX_PLANS", "300"))
 MAX_VEHICLE_COMBOS_PER_PLAN = int(os.getenv("MAX_VEHICLE_COMBOS_PER_PLAN", "8"))
-MAX_VARIANTS = int(os.getenv("MAX_VARIANTS", "200"))
+MAX_VARIANTS = int(os.getenv("MAX_VARIANTS", "500"))
 MAX_UNLOAD_CANDIDATES_PER_DELIVERY = int(os.getenv("MAX_UNLOAD_CANDIDATES_PER_DELIVERY", "7"))
-TOP_N_VARIANTS = int(os.getenv("TOP_N_VARIANTS", "150"))
+TOP_N_VARIANTS = int(os.getenv("TOP_N_VARIANTS", "500"))
 K_PER_DELIVERY_TAG = int(os.getenv("K_PER_DELIVERY_TAG", "3"))
 K_PER_TARIFF_GROUP = int(os.getenv("K_PER_TARIFF_GROUP", "1"))
 
@@ -1712,12 +1712,8 @@ def evaluate_scenario_transport_variants(
         for it in (its or [])
     )
 
-    def _delivery_has_unloading_included(factory_plans: List[Dict[str, Any]]) -> bool:
-        for plan in factory_plans or []:
-            for trip in plan.get("trips", []) or []:
-                if bool(trip.get("unloading_included", False)):
-                    return True
-        return False
+    def _flatten_trips(factory_plans: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return [trip for plan in (factory_plans or []) for trip in (plan.get("trips", []) or [])]
 
     plan_options_counts = {p["factory_name"]: len(p["plan_options"]) for p in plans_by_factory}
     num_vehicle_combos_generated = math.prod(plan_options_counts.values()) if plan_options_counts else 0
@@ -1792,9 +1788,47 @@ def evaluate_scenario_transport_variants(
             for unload_candidate in unload_candidates:
                 unloading_info = unload_candidate.get("unloading")
                 unloading_cost_total = float(unload_candidate.get("cost") or 0.0)
-                if _delivery_has_unloading_included(factory_plans):
-                    unloading_cost_total = 0.0
-                    unloading_info = None
+                trips_all = _flatten_trips(factory_plans)
+                included_trips = [t for t in trips_all if bool(t.get("unloading_included", False))]
+                if included_trips:
+                    # Бизнес-правило:
+                    # манипулятор с unloading_included разгружает бесплатно только себя.
+                    # Все остальные машины в этом же варианте разгружаются ОДНИМ
+                    # фиксированным тарифом манипулятора (не за каждую машину отдельно).
+                    other_trips = [t for t in trips_all if not bool(t.get("unloading_included", False))]
+                    if not other_trips:
+                        unloading_cost_total = 0.0
+                        unloading_info = None
+                    else:
+                        per_other_trip_cost = float(unload_candidate.get("cost") or 0.0)
+                        has_mani_delivery = any(_norm_str(t.get("tag")) == "manipulator" for t in trips_all)
+                        if has_mani_delivery:
+                            mani = _plan_best_mani(trips_all)
+                            mani_name = _norm_str((mani or {}).get("tariff_name") or "")
+                            if mani_name:
+                                non_included_weight = sum(_to_float(t.get("load_ton") or 0.0) for t in other_trips)
+                                mani_unload_tariff = _select_tariff_by_name_tag(
+                                    calc_tariffs or [],
+                                    name=mani_name,
+                                    tag="manipulator",
+                                    service_type="unloading",
+                                    distance_km=0.0,
+                                    load_ton=non_included_weight if non_included_weight > 0 else scenario_total_weight,
+                                    group_max_distance=group_max_distance,
+                                    pickup_points=pickup_points_all,
+                                    dropoff_point=dropoff_point,
+                                    ignore_capacity=True,
+                                )
+                                if mani_unload_tariff:
+                                    per_other_trip_cost = _to_float(mani_unload_tariff.get("base"))
+                                    unloading_info = {
+                                        "service_type": "unloading",
+                                        "tag": "manipulator",
+                                        "tariff_name": mani_unload_tariff.get("название") or mani_unload_tariff.get("name") or "manipulator",
+                                        "tariff_label": _tariff_label(mani_unload_tariff, distance_km=0.0),
+                                        "cost": per_other_trip_cost,
+                                    }
+                        unloading_cost_total = per_other_trip_cost
 
                 total_cost = total_material + total_delivery + float(unloading_cost_total or 0.0)
                 variant_counter += 1

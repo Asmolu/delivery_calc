@@ -307,12 +307,12 @@
       "special_threshold": 0.0,
       "max_per_trip": 0.0,
       "factory": {
-        "name": "дзжбк",
+        "name": "дзжбк барыбино",
         "lat": 55.28382,
         "lon": 37.865804,
-        "price": 8890.0,
+        "price": 8500.0,
         "contact": "7 953 438-37-69",
-        "update_date": "03.02"
+        "update_date": "07.04"
       }
     },
     {
@@ -322,12 +322,12 @@
       "special_threshold": 0.0,
       "max_per_trip": 0.0,
       "factory": {
-        "name": "дзжбк",
+        "name": "дзжбк барыбино",
         "lat": 55.28382,
         "lon": 37.865804,
-        "price": 11750.0,
+        "price": 11300.0,
         "contact": "7 953 438-37-69",
-        "update_date": "03.02"
+        "update_date": "07.04"
       }
     },
     {
@@ -337,12 +337,12 @@
       "special_threshold": 0.0,
       "max_per_trip": 0.0,
       "factory": {
-        "name": "дзжбк",
+        "name": "дзжбк барыбино",
         "lat": 55.28382,
         "lon": 37.865804,
-        "price": 14300.0,
+        "price": 15000.0,
         "contact": "7 953 438-37-69",
-        "update_date": "03.02"
+        "update_date": "07.04"
       }
     },
     {
@@ -352,27 +352,12 @@
       "special_threshold": 0.0,
       "max_per_trip": 0.0,
       "factory": {
-        "name": "дзжбк",
+        "name": "дзжбк барыбино",
         "lat": 55.28382,
         "lon": 37.865804,
-        "price": 15300.0,
+        "price": 16000.0,
         "contact": "7 953 438-37-69",
-        "update_date": "03.02"
-      }
-    },
-    {
-      "category": "Дорожные ПЛИТЫ/ПАГИ",
-      "subtype": "некондиция 2п.30.18",
-      "weight_per_item": 2.2,
-      "special_threshold": 0.0,
-      "max_per_trip": 0.0,
-      "factory": {
-        "name": "дзжбк",
-        "lat": 55.28382,
-        "lon": 37.865804,
-        "price": 7650.0,
-        "contact": "7 953 438-37-69",
-        "update_date": "03.02"
+        "update_date": "07.04"
       }
     },
     {
@@ -475,9 +460,9 @@
         "name": "bear бетон",
         "lat": 55.312486,
         "lon": 37.906803,
-        "price": 8700.0,
+        "price": 8800.0,
         "contact": "7 985 016-21-27",
-        "update_date": "16.02"
+        "update_date": "07.04"
       }
     },
     {
@@ -490,9 +475,9 @@
         "name": "bear бетон",
         "lat": 55.312486,
         "lon": 37.906803,
-        "price": 9800.0,
+        "price": 10500.0,
         "contact": "7 985 016-21-27",
-        "update_date": "16.02"
+        "update_date": "07.04"
       }
     },
     {
@@ -505,9 +490,9 @@
         "name": "bear бетон",
         "lat": 55.312486,
         "lon": 37.906803,
-        "price": 7800.0,
+        "price": 8000.0,
         "contact": "7 985 016-21-27",
-        "update_date": "16.02"
+        "update_date": "07.04"
       }
     },
     {
@@ -520,9 +505,9 @@
         "name": "bear бетон",
         "lat": 55.312486,
         "lon": 37.906803,
-        "price": 22500.0,
+        "price": 23000.0,
         "contact": "7 985 016-21-27",
-        "update_date": "16.02"
+        "update_date": "07.04"
       }
     },
     {
@@ -535,9 +520,9 @@
         "name": "bear бетон",
         "lat": 55.312486,
         "lon": 37.906803,
-        "price": 23500.0,
+        "price": 24000.0,
         "contact": "7 985 016-21-27",
-        "update_date": "16.02"
+        "update_date": "07.04"
       }
     },
     {
@@ -550,9 +535,9 @@
         "name": "bear бетон",
         "lat": 55.312486,
         "lon": 37.906803,
-        "price": 29000.0,
+        "price": 30000.0,
         "contact": "7 985 016-21-27",
-        "update_date": "16.02"
+        "update_date": "07.04"
       }
     },
     {
@@ -565,9 +550,9 @@
         "name": "bear бетон",
         "lat": 55.312486,
         "lon": 37.906803,
-        "price": 30000.0,
+        "price": 31000.0,
         "contact": "7 985 016-21-27",
-        "update_date": "16.02"
+        "update_date": "07.04"
       }
     },
     {
@@ -580,7 +565,7 @@
         "name": "Лина",
         "lat": 55.59267,
         "lon": 36.468627,
-        "price": 8700.0,
+        "price": 8500.0,
         "contact": "7 925 545-99-86",
         "update_date": "03.02"
       }
@@ -655,9 +640,9 @@
         "name": "ооо стройсити",
         "lat": 55.913303,
         "lon": 38.06055,
-        "price": 8600.0,
+        "price": 9500.0,
         "contact": "7 965 397 16 30",
-        "update_date": "03.02"
+        "update_date": "07.04"
       }
     },
     {
@@ -672,7 +657,7 @@
         "lon": 38.06055,
         "price": 10600.0,
         "contact": "7 965 397 16 30",
-        "update_date": "03.02"
+        "update_date": "07.04"
       }
     },
     {
@@ -687,7 +672,7 @@
         "lon": 38.06055,
         "price": 13700.0,
         "contact": "7 965 397 16 30",
-        "update_date": "03.02"
+        "update_date": "07.04"
       }
     },
     {
@@ -702,7 +687,22 @@
         "lon": 38.06055,
         "price": 14500.0,
         "contact": "7 965 397 16 30",
-        "update_date": "03.02"
+        "update_date": "07.04"
+      }
+    },
+    {
+      "category": "Дорожные ПЛИТЫ/ПАГИ",
+      "subtype": "некондиция 2п.30.18",
+      "weight_per_item": 2.2,
+      "special_threshold": 0.0,
+      "max_per_trip": 0.0,
+      "factory": {
+        "name": "ооо стройсити",
+        "lat": 55.913303,
+        "lon": 38.06055,
+        "price": 8900.0,
+        "contact": "7 965 397 16 30",
+        "update_date": "07.04"
       }
     },
     {
@@ -715,9 +715,24 @@
         "name": "мосжелезобетон",
         "lat": 55.99585,
         "lon": 37.261563,
-        "price": 9000.0,
+        "price": 9500.0,
         "contact": "7 977 647 9878",
-        "update_date": "03.02"
+        "update_date": "12.03"
+      }
+    },
+    {
+      "category": "Дорожные ПЛИТЫ/ПАГИ",
+      "subtype": "2п30.18.30 ГОСТ",
+      "weight_per_item": 2.2,
+      "special_threshold": 0.0,
+      "max_per_trip": 0.0,
+      "factory": {
+        "name": "мосжелезобетон",
+        "lat": 55.99585,
+        "lon": 37.261563,
+        "price": 11500.0,
+        "contact": "7 977 647 9878",
+        "update_date": "12.03"
       }
     },
     {
@@ -732,7 +747,7 @@
         "lon": 37.261563,
         "price": 24000.0,
         "contact": "7 977 647 9878",
-        "update_date": "03.02"
+        "update_date": "12.03"
       }
     },
     {
@@ -745,9 +760,24 @@
         "name": "мосжелезобетон",
         "lat": 55.99585,
         "lon": 37.261563,
-        "price": 25000.0,
+        "price": 26600.0,
         "contact": "7 977 647 9878",
-        "update_date": "03.02"
+        "update_date": "12.03"
+      }
+    },
+    {
+      "category": "Дорожные ПЛИТЫ/ПАГИ",
+      "subtype": "ПАГ 18 ТУ",
+      "weight_per_item": 5.2,
+      "special_threshold": 0.0,
+      "max_per_trip": 0.0,
+      "factory": {
+        "name": "мосжелезобетон",
+        "lat": 55.99585,
+        "lon": 37.261563,
+        "price": 29000.0,
+        "contact": "7 977 647 9878",
+        "update_date": "12.03"
       }
     },
     {
@@ -762,7 +792,7 @@
         "lon": 37.261563,
         "price": 31000.0,
         "contact": "7 977 647 9878",
-        "update_date": "03.02"
+        "update_date": "12.03"
       }
     },
     {
@@ -778,6 +808,111 @@
         "price": 9200.0,
         "contact": "7 9161186866",
         "update_date": "04.02"
+      }
+    },
+    {
+      "category": "Дорожные ПЛИТЫ/ПАГИ",
+      "subtype": "2п30.18.30 ТУ",
+      "weight_per_item": 2.2,
+      "special_threshold": 0.0,
+      "max_per_trip": 0.0,
+      "factory": {
+        "name": "очаково",
+        "lat": 55.964776,
+        "lon": 37.890651,
+        "price": 9000.0,
+        "contact": "7 967 059 09 19",
+        "update_date": "07.04"
+      }
+    },
+    {
+      "category": "Дорожные ПЛИТЫ/ПАГИ",
+      "subtype": "2п30.18.30 ГОСТ",
+      "weight_per_item": 2.2,
+      "special_threshold": 0.0,
+      "max_per_trip": 0.0,
+      "factory": {
+        "name": "очаково",
+        "lat": 55.964776,
+        "lon": 37.890651,
+        "price": 10800.0,
+        "contact": "7 967 059 09 19",
+        "update_date": "07.04"
+      }
+    },
+    {
+      "category": "Дорожные ПЛИТЫ/ПАГИ",
+      "subtype": "1п.30.18.30 Гравий",
+      "weight_per_item": 2.2,
+      "special_threshold": 0.0,
+      "max_per_trip": 0.0,
+      "factory": {
+        "name": "очаково",
+        "lat": 55.964776,
+        "lon": 37.890651,
+        "price": 13500.0,
+        "contact": "7 967 059 09 19",
+        "update_date": "07.04"
+      }
+    },
+    {
+      "category": "Дорожные ПЛИТЫ/ПАГИ",
+      "subtype": "ПАГ 14 ТУ",
+      "weight_per_item": 4.2,
+      "special_threshold": 0.0,
+      "max_per_trip": 0.0,
+      "factory": {
+        "name": "очаково",
+        "lat": 55.964776,
+        "lon": 37.890651,
+        "price": 24000.0,
+        "contact": "7 967 059 09 19",
+        "update_date": "07.04"
+      }
+    },
+    {
+      "category": "Дорожные ПЛИТЫ/ПАГИ",
+      "subtype": "ПАГ 14 ГОСТ",
+      "weight_per_item": 4.2,
+      "special_threshold": 0.0,
+      "max_per_trip": 0.0,
+      "factory": {
+        "name": "очаково",
+        "lat": 55.964776,
+        "lon": 37.890651,
+        "price": 27000.0,
+        "contact": "7 967 059 09 19",
+        "update_date": "07.04"
+      }
+    },
+    {
+      "category": "Дорожные ПЛИТЫ/ПАГИ",
+      "subtype": "ПАГ 18 ТУ",
+      "weight_per_item": 5.2,
+      "special_threshold": 0.0,
+      "max_per_trip": 0.0,
+      "factory": {
+        "name": "очаково",
+        "lat": 55.964776,
+        "lon": 37.890651,
+        "price": 29500.0,
+        "contact": "7 967 059 09 19",
+        "update_date": "07.04"
+      }
+    },
+    {
+      "category": "Дорожные ПЛИТЫ/ПАГИ",
+      "subtype": "ПАГ 18 ГОСТ",
+      "weight_per_item": 5.2,
+      "special_threshold": 0.0,
+      "max_per_trip": 0.0,
+      "factory": {
+        "name": "очаково",
+        "lat": 55.964776,
+        "lon": 37.890651,
+        "price": 32500.0,
+        "contact": "7 967 059 09 19",
+        "update_date": "07.04"
       }
     }
   ],

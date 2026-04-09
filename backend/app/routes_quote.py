@@ -27,6 +27,33 @@ router = APIRouter(tags=["quote"])
 log = get_logger("routes.quote")
 
 
+def _is_single_factory_scenario(scenario: dict) -> bool:
+    factories_map = (scenario or {}).get("factories") or {}
+    return isinstance(factories_map, dict) and len(factories_map) == 1
+
+
+def _limit_scenarios_preserving_single_factory(scenarios: list[dict], limit: int) -> list[dict]:
+    """Ограничивает сценарии по лимиту, но гарантирует присутствие 1 single-factory сценария.
+
+    Это нужно, чтобы при большом количестве комбинаций (особенно 4+ товаров)
+    дешёвые multi-factory сценарии не вытесняли полностью сценарии "один завод".
+    """
+    if limit <= 0 or len(scenarios) <= limit:
+        return scenarios
+
+    limited = list(scenarios[:limit])
+    if any(_is_single_factory_scenario(sc) for sc in limited):
+        return limited
+
+    best_single = next((sc for sc in scenarios if _is_single_factory_scenario(sc)), None)
+    if not best_single:
+        return limited
+
+    # Сохраняем размер выборки и добавляем хотя бы один сценарий "один завод".
+    limited[-1] = best_single
+    return limited
+
+
 @router.post("/quote")
 async def make_quote(
     req: QuoteRequest,
@@ -71,8 +98,9 @@ async def make_quote(
 
     scenarios = build_factory_scenarios_v2(factories_list, items_data)
     if len(scenarios) > MAX_PLANS:
-        log.info("⚠️ Сценариев больше лимита: %s -> %s", len(scenarios), MAX_PLANS)
-        scenarios = scenarios[:MAX_PLANS]
+        before = len(scenarios)
+        scenarios = _limit_scenarios_preserving_single_factory(scenarios, MAX_PLANS)
+        log.info("⚠️ Сценариев больше лимита: %s -> %s (single-factory preserved)", before, len(scenarios))
     log.info("📊 num_plans_generated=%s", len(scenarios))
 
     if not scenarios:
